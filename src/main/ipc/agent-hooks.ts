@@ -14,6 +14,7 @@ import {
   getMigrationUnsupportedPtySnapshot
 } from '../agent-hooks/migration-unsupported-pty-state'
 import { claudeHookService } from '../claude/hook-service'
+import { codeagentHookService } from '../codeagent/hook-service'
 import { codexHookService } from '../codex/hook-service'
 import { geminiHookService } from '../gemini/hook-service'
 import { antigravityHookService } from '../antigravity/hook-service'
@@ -314,6 +315,19 @@ export function registerAgentHookHandlers(
     } catch (err) {
       return {
         agent: 'kimi',
+        state: 'error',
+        configPath: '',
+        managedHooksPresent: false,
+        detail: err instanceof Error ? err.message : String(err)
+      }
+    }
+  })
+  ipcMain.handle('agentHooks:codeagentStatus', (): AgentHookInstallStatus => {
+    try {
+      return codeagentHookService.getStatus()
+    } catch (err) {
+      return {
+        agent: 'codeagent',
         state: 'error',
         configPath: '',
         managedHooksPresent: false,
