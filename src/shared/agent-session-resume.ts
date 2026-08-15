@@ -4,6 +4,7 @@ import type { TuiAgent } from './types'
 
 export const RESUMABLE_TUI_AGENTS = [
   'claude',
+  'codeagent',
   'codex',
   'gemini',
   'antigravity',
@@ -248,6 +249,9 @@ export function getAgentResumeArgv(
   switch (agent) {
     case 'claude':
       return providerSession.key === 'session_id' ? ['claude', '--resume', id] : null
+    // Why: claude-code fork; `--resume <session_id>` matches the upstream contract.
+    case 'codeagent':
+      return providerSession.key === 'session_id' ? ['codeagent', '--resume', id] : null
     case 'codex':
       return providerSession.key === 'session_id' ? ['codex', 'resume', id] : null
     case 'gemini':
