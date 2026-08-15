@@ -54,8 +54,8 @@ export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] =>
     id: 'codeagent',
     label: translate('auto.lib.agent.catalog.codeagent', 'Codeagent'),
     cmd: 'codeagent',
-    // Why: placeholder until the fork's real homepage is known.
-    homepageUrl: 'https://example.com/codeagent'
+    // Why: claude-code fork; reuse Claude Code docs until the fork's own homepage exists.
+    homepageUrl: 'https://docs.anthropic.com/claude/docs/claude-code'
   },
   {
     id: 'claude-agent-teams',
