@@ -44,7 +44,19 @@ describe('resolveExplicitTerminalTitleAgentType', () => {
     expect(resolveExplicitTerminalTitleAgentType('✦ Gemini CLI')).toBe('gemini')
     expect(resolveExplicitTerminalTitleAgentType('MiMo Code')).toBe('mimo-code')
     expect(resolveExplicitTerminalTitleAgentType('⠋ OpenClaude')).toBe('openclaude')
+    expect(resolveExplicitTerminalTitleAgentType('⠋ CodeAgent')).toBe('codeagent')
+    expect(resolveExplicitTerminalTitleAgentType('✳ CodeAgent')).toBe('codeagent')
+    expect(resolveExplicitTerminalTitleAgentType('. CodeAgent')).toBe('codeagent')
     expect(resolveExplicitTerminalTitleAgentType('OMP')).toBe('omp')
+  })
+
+  it('keeps Claude task text that merely mentions CodeAgent out of codeagent identity', () => {
+    expect(resolveExplicitTerminalTitleAgentType('✳ add codeagent support')).toBeNull()
+    expect(resolveExplicitTerminalTitleAgentType('. fix the CodeAgent bug')).toBeNull()
+    expect(isClaudeAgent('✳ add codeagent support')).toBe(true)
+    expect(isClaudeAgent('✳ CodeAgent')).toBe(false)
+    expect(getSharedAgentLabel('✳ add codeagent support')).toBe('Claude Code')
+    expect(getSharedAgentLabel('⠋ CodeAgent')).toBe('CodeAgent')
   })
 
   it('treats Claude generic status prefixes as activity-only, not identity', () => {

@@ -9,6 +9,8 @@
  * path separators (POSIX and Windows) and hyphenated compounds on both sides.
  */
 
+import { stripLeadingAgentTitleDecorationOrEmpty } from './agent-title-decoration'
+
 // Why: for OSC-title detection only. Intentionally narrower than the full set
 // of launchable agents because short names like "amp" would classify ordinary
 // shell titles like "timestamp ready" as agent activity. Product telemetry uses
@@ -16,6 +18,7 @@
 export const AGENT_NAMES = [
   'claude',
   'openclaude',
+  'codeagent',
   'codex',
   'copilot',
   'cursor',
@@ -67,3 +70,13 @@ export const DROID_AGENT_NAME_RE = /(?<![\w./\\-])droid(?![\w./\\-])/i
 // cwd/path titles like `~/hermes/working` would otherwise count as activity.
 export const HERMES_AGENT_NAME_RE = /(?<![\w./\\-])hermes(?![\w./\\-])/i
 export const AGY_AGENT_NAME_RE = /(?<![\w./\\-])agy(?![\w./\\-])/i
+
+// Why: the codeagent fork keeps Claude's status-glyph prefixes (✳, '. ', '* ',
+// braille spinners) but carries "CodeAgent" as the leading identity token, so a
+// bare token match would both miss glyph-prefixed titles and steal Claude task
+// text that merely mentions CodeAgent. Anchor to the post-decoration head.
+const CODEAGENT_IDENTITY_RE = /^codeagent(?:\.(?:exe|cmd|bat|ps1))?(?![\w./\\-])/i
+
+export function isCodeAgentTitle(title: string): boolean {
+  return CODEAGENT_IDENTITY_RE.test(stripLeadingAgentTitleDecorationOrEmpty(title))
+}

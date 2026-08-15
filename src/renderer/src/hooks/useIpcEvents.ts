@@ -152,7 +152,7 @@ import {
 import { shouldSuppressCodexAutoApprovalStatus } from '@/components/terminal-pane/codex-auto-approval-notification-suppression'
 import { showTerminalShortcutCaptureNotification } from '@/lib/terminal-shortcut-capture-notification'
 import { resolveAgentStatusTerminalTitle } from '@/lib/agent-status-terminal-title'
-import { titleHasAgentName } from '../../../shared/agent-detection'
+import { titleHasAgentName, isCodeAgentTitle } from '../../../shared/agent-detection'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { resolveTerminalWorktreeRoute } from '@/lib/terminal-worktree-route'
 import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
@@ -3843,13 +3843,16 @@ function resolveHookPayloadAgentType(
   payload: ParsedAgentStatusPayload,
   terminalTitle: string | undefined
 ): ParsedAgentStatusPayload {
-  if (
-    payload.agentType !== 'claude' ||
-    !terminalTitle ||
-    !titleHasAgentName(terminalTitle, 'openclaude')
-  ) {
+  if (payload.agentType !== 'claude' || !terminalTitle) {
     return payload
   }
   // Why: OpenClaude emits Claude-compatible hooks; the title is the last renderer signal to keep it out of Claude-only status paths.
-  return { ...payload, agentType: 'openclaude' }
+  if (titleHasAgentName(terminalTitle, 'openclaude')) {
+    return { ...payload, agentType: 'openclaude' }
+  }
+  // Why: the codeagent fork emits the same Claude-compatible hooks.
+  if (isCodeAgentTitle(terminalTitle)) {
+    return { ...payload, agentType: 'codeagent' }
+  }
+  return payload
 }

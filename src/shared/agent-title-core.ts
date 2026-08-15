@@ -2,12 +2,19 @@ import {
   AGY_AGENT_NAME_RE,
   DROID_AGENT_NAME_RE,
   HERMES_AGENT_NAME_RE,
+  isCodeAgentTitle,
   titleHasAgentName,
   titleHasAnyLegacyAgentName
 } from './agent-name-token-match'
 import { isLegacyPiCompatibleTitle } from './pi-compatible-synthetic-title'
 
-export { AGY_AGENT_NAME_RE, DROID_AGENT_NAME_RE, HERMES_AGENT_NAME_RE, titleHasAgentName }
+export {
+  AGY_AGENT_NAME_RE,
+  DROID_AGENT_NAME_RE,
+  HERMES_AGENT_NAME_RE,
+  isCodeAgentTitle,
+  titleHasAgentName
+}
 
 export type AgentStatus = 'working' | 'permission' | 'idle'
 

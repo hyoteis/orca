@@ -5,6 +5,7 @@ import {
   HERMES_AGENT_NAME_RE,
   containsAgentSpinnerGlyph,
   isClaudeManagementTitle,
+  isCodeAgentTitle,
   isCursorAgentTitle,
   isGeminiTerminalTitle,
   isPiAgentTitle,
@@ -18,7 +19,14 @@ import { getPiCompatibleSyntheticAgentLabel } from './pi-compatible-synthetic-ti
  * Used to scope prompt-cache-timer behavior to Claude sessions only.
  */
 export function isClaudeAgent(title: string): boolean {
-  if (!title || isClaudeManagementTitle(title) || isOpenCodeNativeTitle(title)) {
+  if (
+    !title ||
+    isClaudeManagementTitle(title) ||
+    isOpenCodeNativeTitle(title) ||
+    // Why: the codeagent fork reuses Claude's title prefixes; its own identity
+    // token must outrank them or every codeagent tab reads as Claude Code.
+    isCodeAgentTitle(title)
+  ) {
     return false
   }
   const lower = title.toLowerCase()
@@ -51,6 +59,11 @@ export function getAgentLabel(title: string): string | null {
   // include status glyphs from other agents without changing OpenCode identity.
   if (isOpenCodeNativeTitle(title)) {
     return 'OpenCode'
+  }
+  // Why: check before Claude's prefix branches — the codeagent fork pairs those
+  // prefixes with its own leading identity token.
+  if (isCodeAgentTitle(title)) {
+    return 'CodeAgent'
   }
   // Why: Claude task titles can mention another CLI; the prefix is the identity
   // signal, not arbitrary task text.
