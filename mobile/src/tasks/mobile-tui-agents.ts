@@ -5,6 +5,7 @@ import type { TuiAgent } from '../../../src/shared/types'
 // mirrored with src/shared/tui-agent-selection.ts and assert parity in tests.
 export const MOBILE_TUI_AGENT_AUTO_PICK_ORDER = [
   'claude',
+  'codeagent',
   'claude-agent-teams',
   'openclaude',
   'codex',
@@ -44,6 +45,7 @@ export const MOBILE_TUI_AGENT_AUTO_PICK_ORDER = [
 
 export const MOBILE_TUI_AGENT_LABELS: Record<TuiAgent, string> = {
   claude: 'Claude',
+  codeagent: 'Codeagent',
   'claude-agent-teams': 'Claude Agent Teams',
   openclaude: 'OpenClaude',
   codex: 'Codex',

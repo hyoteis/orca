@@ -187,7 +187,7 @@ describe('CommitMessageAiPane', () => {
     )
 
     expect(markup).toContain('Supported agents for this recipe:')
-    expect(markup).toContain('Claude, Codex')
+    expect(markup).toContain('Claude, Codeagent, Codex')
     expect(markup).toContain('Custom command')
   })
 

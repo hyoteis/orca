@@ -51,6 +51,13 @@ export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] =>
     homepageUrl: 'https://docs.anthropic.com/claude/docs/claude-code'
   },
   {
+    id: 'codeagent',
+    label: translate('auto.lib.agent.catalog.codeagent', 'Codeagent'),
+    cmd: 'codeagent',
+    // Why: placeholder until the fork's real homepage is known.
+    homepageUrl: 'https://example.com/codeagent'
+  },
+  {
     id: 'claude-agent-teams',
     label: translate('auto.lib.agent.catalog.bf53f09bf8', 'Claude Agent Teams'),
     cmd: getTuiAgentLaunchCommand(TUI_AGENT_CONFIG['claude-agent-teams'], getCatalogPlatform()),
@@ -331,6 +338,9 @@ export function AgentIcon({
     return <AgentLetterIcon letter="?" size={size} />
   }
   if (agent === 'claude' || agent === 'claude-agent-teams') {
+    return <ClaudeIcon size={size} />
+  }
+  if (agent === 'codeagent') {
     return <ClaudeIcon size={size} />
   }
   if (agent === 'codex') {

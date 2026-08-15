@@ -14,10 +14,18 @@ describe('pickQuickWorkspaceAgent', () => {
 
   it('uses the first enabled catalog agent while detection is pending', () => {
     expect(pickQuickWorkspaceAgent(null, null, [])).toBe('claude')
-    expect(pickQuickWorkspaceAgent(null, null, ['claude'])).toBe('claude-agent-teams')
-    expect(pickQuickWorkspaceAgent(null, null, ['claude', 'claude-agent-teams'])).toBe('openclaude')
+    expect(pickQuickWorkspaceAgent(null, null, ['claude'])).toBe('codeagent')
+    expect(pickQuickWorkspaceAgent(null, null, ['claude', 'codeagent'])).toBe('claude-agent-teams')
+    expect(pickQuickWorkspaceAgent(null, null, ['claude', 'codeagent', 'claude-agent-teams'])).toBe(
+      'openclaude'
+    )
     expect(
-      pickQuickWorkspaceAgent(null, null, ['claude', 'claude-agent-teams', 'openclaude'])
+      pickQuickWorkspaceAgent(null, null, [
+        'claude',
+        'codeagent',
+        'claude-agent-teams',
+        'openclaude'
+      ])
     ).toBe('codex')
   })
 
