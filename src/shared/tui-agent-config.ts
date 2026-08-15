@@ -55,6 +55,14 @@ export const TUI_AGENT_CONFIG: Record<TuiAgent, TuiAgentConfig> = {
     // Why: `claude --prefill <text>` seeds the input without submitting, avoiding the paste-after-ready race (PR https://github.com/stablyai/orca/pull/926).
     draftPromptFlag: '--prefill'
   },
+  codeagent: {
+    detectCmd: 'codeagent',
+    launchCmd: 'codeagent',
+    expectedProcess: 'codeagent',
+    promptInjectionMode: 'argv',
+    // Why: claude fork — `--prefill` seeds input without submitting, avoiding the paste-after-ready race.
+    draftPromptFlag: '--prefill'
+  },
   'claude-agent-teams': {
     // Why: an Orca-provided launch mode, not a separate binary; detection follows the Orca CLI.
     detectCmd: 'orca',
@@ -330,9 +338,8 @@ export const TUI_AGENT_CONFIG: Record<TuiAgent, TuiAgentConfig> = {
   }
 }
 
-export function isTuiAgent(value: unknown): value is TuiAgent {
-  return typeof value === 'string' && Object.hasOwn(TUI_AGENT_CONFIG, value)
-}
+export const isTuiAgent = (value: unknown): value is TuiAgent =>
+  typeof value === 'string' && Object.hasOwn(TUI_AGENT_CONFIG, value)
 
 export function getTuiAgentDetectCommands(config: TuiAgentConfig): string[] {
   return [config.detectCmd, ...(config.detectCmdAliases ?? [])]
@@ -344,8 +351,7 @@ export function getTuiAgentLaunchCommand(
   opts?: { isRemote?: boolean }
 ): string {
   // Why: local-only orca-ide rename (avoids GNOME Orca clash) must not leak to Linux remotes, whose relay shim is always `orca`.
-  if (opts?.isRemote && platform === 'linux') {
-    return config.launchCmd
-  }
-  return config.launchCmdByPlatform?.[platform] ?? config.launchCmd
+  return opts?.isRemote && platform === 'linux'
+    ? config.launchCmd
+    : (config.launchCmdByPlatform?.[platform] ?? config.launchCmd)
 }
