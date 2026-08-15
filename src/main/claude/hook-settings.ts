@@ -31,11 +31,13 @@ export const OPENCLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   supportsExecHookArgs: false
 }
 
-// Why: codeagent is a Claude Code fork reading ~/.cac/settings.json with the same hook-event protocol.
+// Why: codeagent is a Claude Code fork reading ~/.cac/settings.json, but its
+// hook executor joins command+args and shells through bash, which strips the
+// backslash paths of the Windows exec form — so it gets the shell form.
 export const CODEAGENT_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   configDirName: '.cac',
   scriptBaseName: 'codeagent-hook',
-  supportsExecHookArgs: true
+  supportsExecHookArgs: false
 }
 
 export const CLAUDE_EVENTS = [
