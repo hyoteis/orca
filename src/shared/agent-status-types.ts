@@ -20,6 +20,7 @@ export type AgentStatusState = (typeof AGENT_STATUS_STATES)[number]
 export type WellKnownAgentType =
   | 'claude'
   | 'openclaude'
+  | 'codeagent'
   | 'codex'
   | 'gemini'
   | 'antigravity'
