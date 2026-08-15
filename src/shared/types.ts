@@ -2670,6 +2670,7 @@ export type TuiAgent =
   | 'ante' // Ante (Antigma Labs)
   | 'trae' // Trae CLI
   | 'prime-agent' // Prime Agent (Prime Intellect)
+  | 'codeagent' // Codeagent (Claude Code fork)
 
 export type TaskViewPresetId = 'all' | 'issues' | 'review' | 'my-issues' | 'my-prs' | 'prs'
 
