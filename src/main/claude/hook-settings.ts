@@ -14,8 +14,8 @@ import {
 import { wrapRuntimeHomeHookCommand } from '../agent-hooks/runtime-home-hook-command'
 
 export type ClaudeCompatibleHookSettings = {
-  configDirName: '.claude' | '.openclaude'
-  scriptBaseName: 'claude-hook' | 'openclaude-hook'
+  configDirName: '.claude' | '.openclaude' | '.cac'
+  scriptBaseName: 'claude-hook' | 'openclaude-hook' | 'codeagent-hook'
   supportsExecHookArgs: boolean
 }
 
@@ -29,6 +29,13 @@ export const OPENCLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   configDirName: '.openclaude',
   scriptBaseName: 'openclaude-hook',
   supportsExecHookArgs: false
+}
+
+// Why: codeagent is a Claude Code fork reading ~/.cac/settings.json with the same hook-event protocol.
+export const CODEAGENT_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
+  configDirName: '.cac',
+  scriptBaseName: 'codeagent-hook',
+  supportsExecHookArgs: true
 }
 
 export const CLAUDE_EVENTS = [
