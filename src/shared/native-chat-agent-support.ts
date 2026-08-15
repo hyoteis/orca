@@ -4,6 +4,7 @@ export type NativeChatTranscriptAgent = 'claude' | 'codex' | 'grok' | 'omp'
 export const NATIVE_CHAT_SUPPORTED_AGENTS: ReadonlySet<string> = new Set([
   'claude',
   'openclaude',
+  'codeagent',
   'codex',
   'grok',
   'omp'
@@ -35,9 +36,10 @@ export function shouldStepNativeChatAskAnswer(agent: string | null | undefined):
 export function resolveNativeChatTranscriptAgent(
   agent: string | null | undefined
 ): NativeChatTranscriptAgent | null {
-  // Why: OpenClaude writes the Claude transcript format and layout even though
-  // Orca preserves its distinct agent identity for launch and UI behavior.
-  if (agent === 'claude' || agent === 'openclaude') {
+  // Why: OpenClaude and the codeagent fork write the Claude transcript format
+  // and layout even though Orca preserves their distinct agent identities for
+  // launch and UI behavior.
+  if (agent === 'claude' || agent === 'openclaude' || agent === 'codeagent') {
     return 'claude'
   }
   if (agent === 'codex' || agent === 'grok' || agent === 'omp') {
