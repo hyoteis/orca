@@ -371,6 +371,47 @@ export const COMMIT_MESSAGE_AGENT_SPECS: Partial<Record<TuiAgent, CommitMessageA
     ],
     defaultModelId: 'sonnet'
   },
+  codeagent: {
+    id: 'codeagent',
+    label: 'Codeagent',
+    binary: 'codeagent',
+    // Why: claude fork — `codeagent -p` reads from stdin natively when no positional prompt is given.
+    promptDelivery: 'stdin',
+    buildArgs: ({ model, thinkingLevel }) => [
+      '-p',
+      '--output-format',
+      'text',
+      '--model',
+      model,
+      '--permission-mode',
+      'plan',
+      ...(thinkingLevel ? ['--effort', thinkingLevel] : [])
+    ],
+    modelSource: 'dynamic',
+    // Why: the fork shares Claude's list_models control protocol over the --print stream.
+    modelDiscovery: {
+      binary: 'codeagent',
+      args: [...CLAUDE_MODEL_LIST_ARGS],
+      stdinPayload: CLAUDE_MODEL_LIST_STDIN,
+      parse: parseClaudeModels
+    },
+    models: [
+      { id: 'haiku', label: 'Haiku' },
+      {
+        id: 'sonnet',
+        label: 'Sonnet',
+        thinkingLevels: CLAUDE_THINKING_LEVELS,
+        defaultThinkingLevel: 'low'
+      },
+      {
+        id: 'opus',
+        label: 'Opus',
+        thinkingLevels: CLAUDE_THINKING_LEVELS,
+        defaultThinkingLevel: 'low'
+      }
+    ],
+    defaultModelId: 'sonnet'
+  },
   codex: {
     id: 'codex',
     label: 'Codex',

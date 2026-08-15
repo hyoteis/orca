@@ -31,6 +31,7 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
       'amp',
       'antigravity',
       'claude',
+      'codeagent',
       'codex',
       'copilot',
       'cursor',
@@ -151,6 +152,16 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
     expect(haiku).toBeDefined()
     expect(haiku?.thinkingLevels).toBeUndefined()
     expect(haiku?.defaultThinkingLevel).toBeUndefined()
+  })
+
+  it('clones the claude commit-message contract for codeagent', () => {
+    const spec = getCommitMessageAgentSpec('codeagent')
+    expect(spec).toBeDefined()
+    expect(spec!.binary).toBe('codeagent')
+    expect(spec!.promptDelivery).toBe('stdin')
+    expect(spec!.defaultModelId).toBe('sonnet')
+    const args = spec!.buildArgs({ prompt: '', model: 'sonnet', thinkingLevel: undefined })
+    expect(args).toEqual(expect.arrayContaining(['-p', '--model', 'sonnet']))
   })
 
   it('identifies the custom sentinel via isCustomAgentId', () => {

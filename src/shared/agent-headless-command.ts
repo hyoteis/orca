@@ -10,6 +10,7 @@ const HEADLESS_ONE_SHOT_MATCHERS: Partial<
   Record<TuiAgent, (tokens: readonly string[]) => boolean>
 > = {
   claude: isPrintModeHeadlessOneShotCommand,
+  codeagent: isPrintModeHeadlessOneShotCommand,
   trae: isPrintModeHeadlessOneShotCommand,
   'prime-agent': isPrimeAgentHeadlessOneShotCommand,
   ante: isAnteHeadlessOneShotCommand
