@@ -3217,6 +3217,14 @@ export function useIpcEvents(): void {
         return 'applied'
       }
       const resolvedPayload = resolveHookPayloadAgentType(payload, identityTitle ?? title, launchAgent)
+      // DIAG-codeagent-icon: remove after fix
+      console.log('[codeagent-diag] hook-resolve', {
+        paneKey,
+        orig: payload.agentType,
+        resolved: resolvedPayload.agentType,
+        launchAgent: launchAgent ?? null,
+        title: (identityTitle ?? title ?? '').slice(0, 60)
+      })
       const statusPayload = data.orchestration
         ? { ...resolvedPayload, orchestration: data.orchestration }
         : resolvedPayload

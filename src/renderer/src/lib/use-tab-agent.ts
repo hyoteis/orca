@@ -315,6 +315,17 @@ export function useTabAgent(tab: TerminalTab): TuiAgent | null {
       processShellForeground
     })
     if (launchedAgentExited) {
+      // DIAG-codeagent-icon: remove after fix
+      console.log('[codeagent-diag] clearTabLaunchAgent', {
+        tabId: tab.id,
+        launchAgent: tab.launchAgent ?? null,
+        title: tab.title.slice(0, 60),
+        hookAgent: focusedHookAgent,
+        processAgent: processAgent ?? null,
+        processShellForeground,
+        hasObservedAgentSignal: hasObservedAgentSignal && hasObservedAgentSignalRef.current,
+        hasCompletedHook: completedHookEvidence
+      })
       clearTabLaunchAgent(tab.id)
     }
   }, [
