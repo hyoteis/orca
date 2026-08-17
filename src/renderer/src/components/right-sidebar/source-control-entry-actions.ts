@@ -1,5 +1,5 @@
 import type { GitStatusEntry } from '../../../../shared/types'
-import { isStageableStatusEntry } from './discard-all-sequence'
+import { isStageableStatusEntry, isSubmoduleWorktreeOnlyChange } from './discard-all-sequence'
 
 /**
  * Per-row Source Control action eligibility, centralized so the stage/unstage/
@@ -24,4 +24,20 @@ export function canDiscardStatusEntry(entry: GitStatusEntry): boolean {
     !entry.submoduleRoot &&
     (entry.area === 'unstaged' || entry.area === 'untracked')
   )
+}
+
+// Why: the bulk stage/unstage flow routes each submoduleRoot group through its own
+// submodule context (buildSubmoduleContext), so submodule-internal rows ARE
+// eligible here — unlike the single-row gates above, which still target the parent
+// worktree. The conflict and worktree-only-submodule guards still apply.
+export function isBulkStageableStatusEntry(entry: GitStatusEntry): boolean {
+  return (
+    (entry.area === 'unstaged' || entry.area === 'untracked') &&
+    entry.conflictStatus !== 'unresolved' &&
+    !isSubmoduleWorktreeOnlyChange(entry)
+  )
+}
+
+export function isBulkUnstageableStatusEntry(entry: GitStatusEntry): boolean {
+  return entry.area === 'staged'
 }

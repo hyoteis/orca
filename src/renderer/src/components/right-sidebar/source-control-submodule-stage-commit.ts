@@ -6,7 +6,7 @@ import type { FlatEntry } from './useSourceControlSelection'
 // so each submoduleRoot forms its own group whose paths are relative to that submodule
 // root (buildSubmoduleChildEntry prefixes child paths with `${root}/`, stripped here).
 export function groupSelectedBySubmoduleRoot(
-  entries: ReadonlyArray<FlatEntry>
+  entries: readonly FlatEntry[]
 ): Map<string | null, string[]> {
   const groups = new Map<string | null, string[]>()
   for (const e of entries) {
@@ -34,4 +34,25 @@ export function buildSubmoduleContext(
     worktreePath: join(parent.worktreePath, submoduleRoot),
     worktreeId: null
   }
+}
+
+export type BulkStageCall = { context: RuntimeGitContext; paths: string[] }
+
+// Why: the parent repo's git can't stage paths inside a submodule, so bulk stage
+// splits the selection by submoduleRoot and pairs each group with the context that
+// can actually act on it (parent context for null-root entries, submodule context
+// for the rest). The caller still filters to stageable entries first.
+export function planBulkStageContexts(
+  selectedEntries: readonly FlatEntry[],
+  parent: RuntimeGitContext
+): BulkStageCall[] {
+  const groups = groupSelectedBySubmoduleRoot(selectedEntries)
+  const plan: BulkStageCall[] = []
+  for (const [root, paths] of groups) {
+    if (paths.length === 0) {
+      continue
+    }
+    plan.push({ context: root ? buildSubmoduleContext(parent, root) : parent, paths })
+  }
+  return plan
 }

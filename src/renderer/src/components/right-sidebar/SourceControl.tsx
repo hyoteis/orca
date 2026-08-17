@@ -84,7 +84,9 @@ import {
 import {
   canDiscardStatusEntry,
   canStageStatusEntry,
-  canUnstageStatusEntry
+  canUnstageStatusEntry,
+  isBulkStageableStatusEntry,
+  isBulkUnstageableStatusEntry
 } from './source-control-entry-actions'
 import { getFileTypeIcon } from '@/lib/file-type-icons'
 import {
@@ -108,6 +110,7 @@ import {
   type RenderableSubmoduleListItem
 } from './source-control-submodule-expansion'
 import { useSourceControlSubmoduleStatus } from './useSourceControlSubmoduleStatus'
+import { planBulkStageContexts } from './source-control-submodule-stage-commit'
 import {
   buildSourceControlDisplaySections,
   getSourceControlSectionViewAction,
@@ -4614,7 +4617,10 @@ function SourceControlInner(): React.JSX.Element {
   const bulkStagePaths = useMemo(
     () =>
       selectedEntries
-        .filter((entry) => isStageableStatusEntry(entry.entry))
+        // Why: unlike the single-row gate, submodule-internal rows ARE stageable
+        // here because the bulk flow routes each submoduleRoot group through its
+        // own submodule context (planBulkStageContexts).
+        .filter((entry) => isBulkStageableStatusEntry(entry.entry))
         .map((entry) => entry.entry.path),
     [selectedEntries]
   )
@@ -4622,8 +4628,7 @@ function SourceControlInner(): React.JSX.Element {
   const bulkUnstagePaths = useMemo(
     () =>
       selectedEntries
-        // Why: submodule-internal rows are read-only from the parent worktree.
-        .filter((entry) => entry.area === 'staged' && !entry.entry.submoduleRoot)
+        .filter((entry) => isBulkUnstageableStatusEntry(entry.entry))
         .map((entry) => entry.entry.path),
     [selectedEntries]
   )
@@ -4637,16 +4642,22 @@ function SourceControlInner(): React.JSX.Element {
     setIsExecutingBulk(true)
     try {
       const connectionId = getConnectionId(activeWorktreeId ?? null) ?? undefined
-      await bulkStageRuntimeGitPaths(
-        {
-          // Why: route staging by the repo OWNER host, not the focused runtime.
-          settings: activeRepoSettings,
-          worktreeId: activeWorktreeId,
-          worktreePath,
-          connectionId
-        },
-        bulkStagePaths
+      // Why: route staging by the repo OWNER host, not the focused runtime.
+      const gitContext: RuntimeGitContext = {
+        settings: activeRepoSettings,
+        worktreeId: activeWorktreeId,
+        worktreePath,
+        connectionId
+      }
+      const stageableEntries = selectedEntries.filter((e) =>
+        isBulkStageableStatusEntry(e.entry)
       )
+      // Why: parent git can't stage inside a submodule, so split the selection by
+      // submoduleRoot and stage each group against the context that owns it.
+      const plan = planBulkStageContexts(stageableEntries, gitContext)
+      for (const { context, paths } of plan) {
+        await bulkStageRuntimeGitPaths(context, paths)
+      }
       await refreshActiveGitStatusAfterMutation()
       clearSelection()
     } finally {
@@ -4656,6 +4667,7 @@ function SourceControlInner(): React.JSX.Element {
     activeRepoSettings,
     worktreePath,
     bulkStagePaths,
+    selectedEntries,
     clearSelection,
     activeWorktreeId,
     refreshActiveGitStatusAfterMutation
@@ -4668,16 +4680,22 @@ function SourceControlInner(): React.JSX.Element {
     setIsExecutingBulk(true)
     try {
       const connectionId = getConnectionId(activeWorktreeId ?? null) ?? undefined
-      await bulkUnstageRuntimeGitPaths(
-        {
-          // Why: route unstaging by the repo OWNER host, not the focused runtime.
-          settings: activeRepoSettings,
-          worktreeId: activeWorktreeId,
-          worktreePath,
-          connectionId
-        },
-        bulkUnstagePaths
+      // Why: route unstaging by the repo OWNER host, not the focused runtime.
+      const gitContext: RuntimeGitContext = {
+        settings: activeRepoSettings,
+        worktreeId: activeWorktreeId,
+        worktreePath,
+        connectionId
+      }
+      const unstagedEntries = selectedEntries.filter((e) =>
+        isBulkUnstageableStatusEntry(e.entry)
       )
+      // Why: parent git can't unstage inside a submodule; split per submoduleRoot
+      // and unstage each group against its own context.
+      const plan = planBulkStageContexts(unstagedEntries, gitContext)
+      for (const { context, paths } of plan) {
+        await bulkUnstageRuntimeGitPaths(context, paths)
+      }
       await refreshActiveGitStatusAfterMutation()
       clearSelection()
     } finally {
@@ -4687,6 +4705,7 @@ function SourceControlInner(): React.JSX.Element {
     activeRepoSettings,
     worktreePath,
     bulkUnstagePaths,
+    selectedEntries,
     clearSelection,
     activeWorktreeId,
     refreshActiveGitStatusAfterMutation
