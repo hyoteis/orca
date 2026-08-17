@@ -123,6 +123,28 @@ describe('commitSelectedAcrossSubmoduleRoots', () => {
     expect(failures[0].error).toBe('submodule hook failure')
   })
 
+  it('commits only the submodule root when selection is submodule-only (no spurious parent commit)', async () => {
+    const calls: { ctx: RuntimeGitContext; message: string }[] = []
+    const commit = vi.fn(async (ctx: RuntimeGitContext, message: string) => {
+      calls.push({ ctx, message })
+      return { success: true }
+    })
+
+    const { failures, success } = await commitSelectedAcrossSubmoduleRoots(
+      [stagedFe('sub/a.ts', 'sub')],
+      parentCtx,
+      commit,
+      'feat: x'
+    )
+
+    expect(success).toBe(true)
+    expect(failures).toEqual([])
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(calls[0].ctx.worktreeId).toBeNull()
+    expect(calls[0].ctx.worktreePath.replace(/\\/g, '/')).toBe('/repo/wt/sub')
+    expect(calls[0].message).toBe('feat: x')
+  })
+
   it('falls back to a single parent commit when nothing is selected', async () => {
     const commit = vi.fn(async () => ({ success: true }))
 

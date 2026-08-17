@@ -62,10 +62,11 @@ export type CommitFn = (context: RuntimeGitContext, message: string) => Promise<
 export type CommitGroupFailure = { root: string | null; error: string }
 
 // Why: like staging, a commit must run per submoduleRoot — parent git can't commit
-// inside a submodule. The parent (null-root) commit is unconditional (spec 父仓一次):
-// parent rows aren't UI-selectable, so without forcing the null-root group the
-// primary "type message + Commit" path would commit nothing. One group's failure
-// must not abort the others, so failures are collected, not thrown.
+// inside a submodule. Each present root forms its own group; empty groups are skipped
+// so a submodule-only selection doesn't spuriously fail an empty parent commit. When
+// no group has staged paths (no selection, or all were unstaged), fall back to a single
+// parent commit so the primary "type message + Commit" path still runs. One group's
+// failure must not abort the others, so failures are collected, not thrown.
 export async function commitSelectedAcrossSubmoduleRoots(
   selectedEntries: readonly FlatEntry[],
   parent: RuntimeGitContext,
@@ -74,15 +75,21 @@ export async function commitSelectedAcrossSubmoduleRoots(
 ): Promise<{ failures: CommitGroupFailure[]; success: boolean }> {
   const staged = selectedEntries.filter((e) => e.area === 'staged')
   const groups = groupSelectedBySubmoduleRoot(staged)
-  if (!groups.has(null)) {
-    groups.set(null, [])
-  }
   const failures: CommitGroupFailure[] = []
-  for (const [root] of groups) {
+  let committedAny = false
+  for (const [root, paths] of groups) {
+    if (paths.length === 0) continue
+    committedAny = true
     const ctx = root ? buildSubmoduleContext(parent, root) : parent
     const result = await commit(ctx, message)
     if (!result.success) {
       failures.push({ root, error: result.error ?? 'Commit failed' })
+    }
+  }
+  if (!committedAny) {
+    const result = await commit(parent, message)
+    if (!result.success) {
+      failures.push({ root: null, error: result.error ?? 'Commit failed' })
     }
   }
   return { failures, success: failures.length === 0 }
