@@ -4571,7 +4571,7 @@ function SourceControlInner(): React.JSX.Element {
     ]
   )
 
-  const { selectedKeys, handleSelect, handleContextMenu, clearSelection } =
+  const { selectedKeys, handleSelect, handleContextMenu, clearSelection, toggleSelected } =
     useSourceControlSelection({
       flatEntries: visibleSelectionEntries,
       onOpenDiff: handleOpenDiff,
@@ -6121,6 +6121,7 @@ function SourceControlInner(): React.JSX.Element {
                                 selected={selectedKeySet.has(node.key)}
                                 isOpenFile={activeOpenRowKeys.has(node.key)}
                                 onSelect={handleSelect}
+                                onToggleSelected={toggleSelected}
                                 onContextMenu={handleContextMenu}
                                 onRevealInExplorer={revealInExplorer}
                                 connectionId={activeConnectionId}
@@ -6176,6 +6177,7 @@ function SourceControlInner(): React.JSX.Element {
                                 selected={selectedKeySet.has(key)}
                                 isOpenFile={activeOpenRowKeys.has(key)}
                                 onSelect={handleSelect}
+                                onToggleSelected={toggleSelected}
                                 onContextMenu={handleContextMenu}
                                 onRevealInExplorer={revealInExplorer}
                                 connectionId={activeConnectionId}
@@ -7931,6 +7933,7 @@ const UncommittedEntryRow = React.memo(function UncommittedEntryRow({
   selected,
   isOpenFile = false,
   onSelect,
+  onToggleSelected,
   onContextMenu,
   onRevealInExplorer,
   connectionId,
@@ -7950,6 +7953,7 @@ const UncommittedEntryRow = React.memo(function UncommittedEntryRow({
   selected?: boolean
   isOpenFile?: boolean
   onSelect?: (e: React.MouseEvent, key: string, entry: GitStatusEntry) => void
+  onToggleSelected?: (key: string) => void
   onContextMenu?: (key: string) => void
   onRevealInExplorer: (worktreeId: string, absolutePath: string) => void
   connectionId?: string | null
@@ -8045,6 +8049,32 @@ const UncommittedEntryRow = React.memo(function UncommittedEntryRow({
               !submoduleExpansion.isExpanded && '-rotate-90'
             )}
           />
+        )}
+        {entry.submoduleRoot && onToggleSelected && (
+          // Why: submodule-internal rows are read-only from the parent worktree; a checkbox makes multi-select discoverable without a diff-opening click.
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={selected ? 'true' : 'false'}
+            aria-label={translate(
+              'auto.components.right.sidebar.SourceControl.submoduleRowSelect',
+              'Select {{value0}}',
+              { value0: entry.path }
+            )}
+            tabIndex={-1}
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleSelected(entryKey)
+            }}
+            className={cn(
+              'flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors',
+              selected
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-border hover:border-primary/60'
+            )}
+          >
+            {selected && <Check className="size-3" />}
+          </button>
         )}
         <FileIcon className="size-3.5 shrink-0" style={{ color: STATUS_COLORS[entry.status] }} />
         <div className="min-w-0 flex-1 text-xs">

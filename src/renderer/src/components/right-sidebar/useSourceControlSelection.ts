@@ -183,6 +183,19 @@ export function useSourceControlSelection({
     }
   }, [])
 
+  const toggleSelected = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+        setAnchorKey(key)
+      }
+      return next
+    })
+  }, [])
+
   const clearSelection = useCallback(() => {
     setSelectedKeys(new Set())
     setAnchorKey(null)
@@ -224,6 +237,7 @@ export function useSourceControlSelection({
     selectedKeys,
     handleSelect,
     handleContextMenu,
-    clearSelection
+    clearSelection,
+    toggleSelected
   }
 }
