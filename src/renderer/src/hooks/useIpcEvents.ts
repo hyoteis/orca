@@ -29,6 +29,7 @@ import { canConnectSshStatus } from '@/ssh/ssh-connection-recoverability'
 import type {
   TerminalLayoutSnapshot,
   TerminalPaneLayoutNode,
+  TuiAgent,
   UpdateStatus
 } from '../../../shared/types'
 import type { RateLimitState } from '../../../shared/rate-limit-types'
@@ -3118,6 +3119,7 @@ export function useIpcEvents(): void {
         exists,
         title,
         identityTitle,
+        launchAgent,
         repoConnectionId,
         repoConnectionResolved,
         owningWorktreeId
@@ -3214,7 +3216,7 @@ export function useIpcEvents(): void {
         )
         return 'applied'
       }
-      const resolvedPayload = resolveHookPayloadAgentType(payload, identityTitle ?? title)
+      const resolvedPayload = resolveHookPayloadAgentType(payload, identityTitle ?? title, launchAgent)
       const statusPayload = data.orchestration
         ? { ...resolvedPayload, orchestration: data.orchestration }
         : resolvedPayload
@@ -3731,6 +3733,7 @@ function resolvePaneKey(
   exists: boolean
   title: string | undefined
   identityTitle: string | undefined
+  launchAgent: TuiAgent | undefined
   repoConnectionId: string | null
   repoConnectionResolved: boolean
   owningWorktreeId: string | undefined
@@ -3741,6 +3744,7 @@ function resolvePaneKey(
       exists: false,
       title: undefined,
       identityTitle: undefined,
+      launchAgent: undefined,
       repoConnectionId: null,
       repoConnectionResolved: false,
       owningWorktreeId: undefined
@@ -3751,12 +3755,14 @@ function resolvePaneKey(
   let exists = false
   let tabTitle: string | undefined
   let unifiedTabLabel: string | undefined
+  let launchAgent: TuiAgent | undefined
   let owningWorktreeId: string | undefined
   for (const [worktreeId, tabs] of Object.entries(store.tabsByWorktree)) {
     for (const tab of tabs) {
       if (tab.id === tabId) {
         exists = true
         tabTitle = tab.title
+        launchAgent = tab.launchAgent
         owningWorktreeId = worktreeId
         const visibleTab = (store.unifiedTabsByWorktree?.[worktreeId] ?? []).find(
           (entry) => entry.contentType === 'terminal' && entry.entityId === tabId
@@ -3787,6 +3793,7 @@ function resolvePaneKey(
       exists: false,
       title: undefined,
       identityTitle: undefined,
+      launchAgent: undefined,
       repoConnectionId,
       repoConnectionResolved,
       owningWorktreeId
@@ -3799,6 +3806,7 @@ function resolvePaneKey(
       exists: false,
       title: undefined,
       identityTitle: undefined,
+      launchAgent: undefined,
       repoConnectionId,
       repoConnectionResolved,
       owningWorktreeId
@@ -3813,6 +3821,7 @@ function resolvePaneKey(
     title: paneTitle ?? tabTitle,
     // Why: some agents (OpenClaude) keep the terminal title generic while the tab label carries the agent identity; use only the non-custom label for attribution.
     identityTitle: paneTitle ?? unifiedTabLabel ?? tabTitle,
+    launchAgent,
     repoConnectionId,
     repoConnectionResolved,
     owningWorktreeId
@@ -3841,18 +3850,24 @@ function resolveWorktreeConnection(
 
 function resolveHookPayloadAgentType(
   payload: ParsedAgentStatusPayload,
-  terminalTitle: string | undefined
+  terminalTitle: string | undefined,
+  launchAgent: TuiAgent | undefined
 ): ParsedAgentStatusPayload {
-  if (payload.agentType !== 'claude' || !terminalTitle) {
+  if (payload.agentType !== 'claude' || (!terminalTitle && !launchAgent)) {
     return payload
   }
   // Why: OpenClaude emits Claude-compatible hooks; the title is the last renderer signal to keep it out of Claude-only status paths.
-  if (titleHasAgentName(terminalTitle, 'openclaude')) {
+  if (terminalTitle && titleHasAgentName(terminalTitle, 'openclaude')) {
     return { ...payload, agentType: 'openclaude' }
   }
   // Why: the codeagent fork emits the same Claude-compatible hooks.
-  if (isCodeAgentTitle(terminalTitle)) {
+  if (terminalTitle && isCodeAgentTitle(terminalTitle)) {
     return { ...payload, agentType: 'codeagent' }
+  }
+  // Why: the forks' titles can stay pure Claude-style (no distinguishing token),
+  // so when the title carries no identity, trust Orca's own launch record.
+  if (launchAgent === 'openclaude' || launchAgent === 'codeagent') {
+    return { ...payload, agentType: launchAgent }
   }
   return payload
 }
