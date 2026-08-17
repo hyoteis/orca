@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { joinPath } from '@/lib/path'
 import type { RuntimeGitContext } from '../../runtime/runtime-git-client'
 import type { FlatEntry } from './useSourceControlSelection'
 
@@ -31,7 +31,7 @@ export function buildSubmoduleContext(
 ): RuntimeGitContext {
   return {
     ...parent,
-    worktreePath: join(parent.worktreePath, submoduleRoot),
+    worktreePath: joinPath(parent.worktreePath, submoduleRoot),
     worktreeId: null
   }
 }
