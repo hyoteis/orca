@@ -10,7 +10,7 @@ const fe = (path: string, submoduleRoot?: string): FlatEntry => ({
 
 describe('groupSelectedBySubmoduleRoot', () => {
   it('splits parent and submodule groups', () => {
-    const groups = groupSelectedBySubmoduleRoot([fe('root.txt'), fe('a.ts', 'sub'), fe('b.ts', 'sub')])
+    const groups = groupSelectedBySubmoduleRoot([fe('root.txt'), fe('sub/a.ts', 'sub'), fe('sub/b.ts', 'sub')])
     expect([...groups.keys()].sort()).toEqual([null, 'sub'])
     expect(groups.get(null)).toEqual(['root.txt'])
     expect(groups.get('sub')).toEqual(['a.ts', 'b.ts'])

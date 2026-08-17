@@ -4,7 +4,7 @@ import type { FlatEntry } from './useSourceControlSelection'
 
 // Why: parent git cannot stage/commit inside a submodule's nested worktree dirtiness,
 // so each submoduleRoot forms its own group whose paths are relative to that submodule
-// root (the GitStatusEntry.path inside an expanded submodule is already submodule-relative).
+// root (buildSubmoduleChildEntry prefixes child paths with `${root}/`, stripped here).
 export function groupSelectedBySubmoduleRoot(
   entries: ReadonlyArray<FlatEntry>
 ): Map<string | null, string[]> {
@@ -12,7 +12,11 @@ export function groupSelectedBySubmoduleRoot(
   for (const e of entries) {
     const root: string | null = e.entry.submoduleRoot ?? null
     const list = groups.get(root) ?? []
-    list.push(e.entry.path)
+    // Why: child paths are prefixed with `${root}/` (buildSubmoduleChildEntry);
+    // git -C <parent/root> needs paths relative to the submodule root.
+    const rel =
+      root && e.entry.path.startsWith(`${root}/`) ? e.entry.path.slice(root.length + 1) : e.entry.path
+    list.push(rel)
     groups.set(root, list)
   }
   return groups
