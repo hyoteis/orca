@@ -53,10 +53,19 @@ describe('resolveExplicitTerminalTitleAgentType', () => {
   it('keeps Claude task text that merely mentions CodeAgent out of codeagent identity', () => {
     expect(resolveExplicitTerminalTitleAgentType('✳ add codeagent support')).toBeNull()
     expect(resolveExplicitTerminalTitleAgentType('. fix the CodeAgent bug')).toBeNull()
+    expect(resolveExplicitTerminalTitleAgentType('✳ wire up codeagent')).toBeNull()
     expect(isClaudeAgent('✳ add codeagent support')).toBe(true)
     expect(isClaudeAgent('✳ CodeAgent')).toBe(false)
     expect(getSharedAgentLabel('✳ add codeagent support')).toBe('Claude Code')
     expect(getSharedAgentLabel('⠋ CodeAgent')).toBe('CodeAgent')
+  })
+
+  it('matches the fork identity carried as a trailing token after a separator', () => {
+    expect(resolveExplicitTerminalTitleAgentType('⠋ fix the flaky suite - CodeAgent')).toBe(
+      'codeagent'
+    )
+    expect(resolveExplicitTerminalTitleAgentType('✳ 修复登录超时 · CodeAgent')).toBe('codeagent')
+    expect(getSharedAgentLabel('⠋ fix bug — CodeAgent')).toBe('CodeAgent')
   })
 
   it('treats Claude generic status prefixes as activity-only, not identity', () => {

@@ -76,7 +76,19 @@ export const AGY_AGENT_NAME_RE = /(?<![\w./\\-])agy(?![\w./\\-])/i
 // bare token match would both miss glyph-prefixed titles and steal Claude task
 // text that merely mentions CodeAgent. Anchor to the post-decoration head.
 const CODEAGENT_IDENTITY_RE = /^codeagent(?:\.(?:exe|cmd|bat|ps1))?(?![\w./\\-])/i
+// Why: fork titles also carry the identity as a trailing token after an explicit
+// separator ("⠋ fix bug - CodeAgent"); guarded against a claude token so Claude
+// task text stays Claude. A bare space boundary is deliberately excluded —
+// "wire up codeagent" as Claude task text must not flip identity.
+const CODEAGENT_TRAILING_RE = /(?:^|[-–—·|>]\s*)codeagent(?:\.(?:exe|cmd|bat|ps1))?\s*$/i
 
 export function isCodeAgentTitle(title: string): boolean {
-  return CODEAGENT_IDENTITY_RE.test(stripLeadingAgentTitleDecorationOrEmpty(title))
+  const stripped = stripLeadingAgentTitleDecorationOrEmpty(title)
+  if (CODEAGENT_IDENTITY_RE.test(stripped)) {
+    return true
+  }
+  if (titleHasAgentName(stripped, 'claude')) {
+    return false
+  }
+  return CODEAGENT_TRAILING_RE.test(stripped)
 }
