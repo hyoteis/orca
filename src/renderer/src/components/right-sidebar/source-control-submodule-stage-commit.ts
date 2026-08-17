@@ -56,3 +56,34 @@ export function planBulkStageContexts(
   }
   return plan
 }
+
+export type CommitResult = { success: boolean; error?: string }
+export type CommitFn = (context: RuntimeGitContext, message: string) => Promise<CommitResult>
+export type CommitGroupFailure = { root: string | null; error: string }
+
+// Why: like staging, a commit must run per submoduleRoot — parent git can't commit
+// inside a submodule. The parent (null-root) commit is unconditional (spec 父仓一次):
+// parent rows aren't UI-selectable, so without forcing the null-root group the
+// primary "type message + Commit" path would commit nothing. One group's failure
+// must not abort the others, so failures are collected, not thrown.
+export async function commitSelectedAcrossSubmoduleRoots(
+  selectedEntries: readonly FlatEntry[],
+  parent: RuntimeGitContext,
+  commit: CommitFn,
+  message: string
+): Promise<{ failures: CommitGroupFailure[]; success: boolean }> {
+  const staged = selectedEntries.filter((e) => e.area === 'staged')
+  const groups = groupSelectedBySubmoduleRoot(staged)
+  if (!groups.has(null)) {
+    groups.set(null, [])
+  }
+  const failures: CommitGroupFailure[] = []
+  for (const [root] of groups) {
+    const ctx = root ? buildSubmoduleContext(parent, root) : parent
+    const result = await commit(ctx, message)
+    if (!result.success) {
+      failures.push({ root, error: result.error ?? 'Commit failed' })
+    }
+  }
+  return { failures, success: failures.length === 0 }
+}

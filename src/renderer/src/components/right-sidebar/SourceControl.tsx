@@ -110,7 +110,10 @@ import {
   type RenderableSubmoduleListItem
 } from './source-control-submodule-expansion'
 import { useSourceControlSubmoduleStatus } from './useSourceControlSubmoduleStatus'
-import { planBulkStageContexts } from './source-control-submodule-stage-commit'
+import {
+  planBulkStageContexts,
+  commitSelectedAcrossSubmoduleRoots
+} from './source-control-submodule-stage-commit'
 import {
   buildSourceControlDisplaySections,
   getSourceControlSectionViewAction,
@@ -1078,6 +1081,10 @@ function SourceControlInner(): React.JSX.Element {
     loadSessionCommitDrafts()
   )
   const commitDraftsRef = useRef<CommitDraftsByWorktree>(commitDrafts)
+  // Why: handleCommit (declared above selectedEntries) reads the staged selection via
+  // this ref so the memoized callback always sees the latest selection without a dep
+  // on a value declared later in render (TDZ).
+  const selectedEntriesRef = useRef<readonly FlatEntry[]>([])
   const commitErrorsRef = useRef<Record<string, string | null>>({})
   const [commitErrors, setCommitErrors] = useState<Record<string, string | null>>({})
   const [remoteActionErrors, setRemoteActionErrors] = useState<
@@ -2122,18 +2129,30 @@ function SourceControlInner(): React.JSX.Element {
       setCommitInFlightByWorktree((prev) => ({ ...prev, [target.worktreeId]: true }))
       setCommitErrorForWorktree(target.worktreeId, null)
       try {
-        const commitResult = await commitRuntimeGit(
-          {
-            // Why: route the commit by the repo OWNER host, not the focused runtime.
-            settings: target.settings,
-            worktreeId: target.worktreeId,
-            worktreePath: target.worktreePath,
-            connectionId: target.connectionId
-          },
+        // Why: route the commit by the repo OWNER host, not the focused runtime.
+        const gitContext: RuntimeGitContext = {
+          settings: target.settings,
+          worktreeId: target.worktreeId,
+          worktreePath: target.worktreePath,
+          connectionId: target.connectionId
+        }
+        // Why: parent git can't commit inside a submodule, so split the staged
+        // selection by submoduleRoot and commit each group in its own context.
+        // One group's failure must not abort the others — failures are collected.
+        const { failures } = await commitSelectedAcrossSubmoduleRoots(
+          selectedEntriesRef.current,
+          gitContext,
+          commitRuntimeGit,
           message
         )
-        if (!commitResult.success) {
-          setCommitErrorForWorktree(target.worktreeId, commitResult.error ?? 'Commit failed')
+        if (failures.length > 0) {
+          const summary = failures
+            .map((f) => {
+              const s = summarizeCommitFailure(f.error)
+              return f.root ? `${f.root}: ${s}` : s
+            })
+            .join('\n')
+          setCommitErrorForWorktree(target.worktreeId, summary)
           return false
         }
 
@@ -4613,6 +4632,7 @@ function SourceControlInner(): React.JSX.Element {
         .filter((entry): entry is FlatEntry => Boolean(entry)),
     [selectedKeys, flatEntriesByKey]
   )
+  selectedEntriesRef.current = selectedEntries
 
   const bulkStagePaths = useMemo(
     () =>
