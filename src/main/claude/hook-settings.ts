@@ -131,9 +131,12 @@ export function getManagedCommand(scriptPath: string, settings = CLAUDE_HOOK_SET
   const extension = extname(scriptFileName)
   const baseName = extension ? scriptFileName.slice(0, -extension.length) : scriptFileName
   if (settings.hookCommandStyle === 'script-path') {
-    // Why: no shell syntax survives the fork's `bash -c "bash <command>"` wrap —
-    // a bare quoted $HOME path runs under both that wrap and a plain `bash -c`.
-    return `"$HOME/.orca/agent-hooks/${scriptFileName}"`
+    // Why: no shell syntax survives the fork's `bash -c "bash <command>"` wrap, and its
+    // hook env may not even export HOME (the $HOME form resolved to a missing path in
+    // the field report) — bake the absolute script path itself in forward-slash form,
+    // the same style the 1.4.182 claude hook used. Correct locally and over SSH,
+    // where scriptPath already carries the remote home.
+    return `'${scriptPath.replaceAll('\\', '/')}'`
   }
   return wrapRuntimeHomeHookCommand(baseName)
 }
