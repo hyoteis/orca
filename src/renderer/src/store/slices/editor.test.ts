@@ -5706,3 +5706,35 @@ describe('read-only editor tabs (AI Vault View Log)', () => {
     )
   })
 })
+
+describe('reorderOpenFiles', () => {
+  let store: ReturnType<typeof createEditorStore>
+  beforeEach(() => {
+    store = createEditorStore()
+    store.setState({
+      openFiles: [
+        { id: 'a', filePath: '/w/a', relativePath: 'a', worktreeId: 'w', language: 'text', isDirty: false },
+        { id: 'b', filePath: '/w/b', relativePath: 'b', worktreeId: 'w', language: 'text', isDirty: false },
+        { id: 'c', filePath: '/w/c', relativePath: 'c', worktreeId: 'w', language: 'text', isDirty: false }
+      ]
+    } as never)
+  })
+
+  it('reorders within a worktree', () => {
+    store.getState().reorderOpenFiles('w', 0, 2)
+    const ids = store.getState().openFiles.map((f) => f.id)
+    expect(ids).toEqual(['b', 'c', 'a'])
+  })
+
+  it('is a no-op when indices are out of range', () => {
+    store.getState().reorderOpenFiles('w', 0, 9)
+    expect(store.getState().openFiles.map((f) => f.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('ignores other worktrees', () => {
+    store.setState((s) => ({ openFiles: [...s.openFiles, { id: 'z', filePath: '/x/z', relativePath: 'z', worktreeId: 'other', language: 'text', isDirty: false }] }) as never)
+    store.getState().reorderOpenFiles('w', 0, 1)
+    const byWorktree = store.getState().openFiles.filter((f) => f.worktreeId === 'other').map((f) => f.id)
+    expect(byWorktree).toEqual(['z'])
+  })
+})

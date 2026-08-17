@@ -526,6 +526,7 @@ export type EditorSlice = {
   makePreviewFilePermanent: (fileId: string, tabId?: string) => void
   pinFile: (fileId: string, tabId?: string) => void
   closeFile: (fileId: string) => void
+  reorderOpenFiles: (worktreeId: string, fromIndex: number, toIndex: number) => void
   closeAllFiles: () => void
   /** Most recently closed editor tabs per worktree (for Cmd/Ctrl+Shift+T). */
   recentlyClosedEditorTabsByWorktree: Record<string, ClosedEditorTabSnapshot[]>
@@ -2368,6 +2369,28 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
         break
       }
     }
+  },
+
+  reorderOpenFiles: (worktreeId, fromIndex, toIndex) => {
+    if (fromIndex === toIndex) {
+      return
+    }
+    set((s) => {
+      // Why: only reorder the contiguous subsequence belonging to worktreeId; other worktrees' files stay put.
+      const indices = s.openFiles
+        .map((f, i) => ({ f, i }))
+        .filter((x) => x.f.worktreeId === worktreeId)
+        .map((x) => x.i)
+      if (fromIndex < 0 || fromIndex >= indices.length || toIndex < 0 || toIndex >= indices.length) {
+        return s
+      }
+      const fromGlobal = indices[fromIndex]
+      const toGlobal = indices[toIndex]
+      const next = [...s.openFiles]
+      const [moved] = next.splice(fromGlobal, 1)
+      next.splice(toGlobal, 0, moved)
+      return { openFiles: next }
+    })
   },
 
   reopenClosedEditorTab: (worktreeId) => {
