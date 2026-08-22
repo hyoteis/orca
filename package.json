@@ -151,6 +151,8 @@
     "sherpa-onnx": "1.12.37",
     "ssh2": "^1.17.0",
     "tweetnacl": "^1.0.3",
+    "vscode-jsonrpc": "^9.0.1",
+    "vscode-languageserver-protocol": "^3.18.2",
     "ws": "^8.21.0",
     "yaml": "^2.8.4",
     "zod": "~4.4.3"
