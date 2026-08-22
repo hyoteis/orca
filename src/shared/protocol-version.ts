@@ -89,9 +89,11 @@ export const FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY = 'files.mutation-owners
 export const FILE_MUTATION_OWNERSHIP_UPDATE_REQUIRED_MESSAGE =
   'Remote file changes require a newer Orca server. Update the HUB and try again.'
 
+export const LANGUAGE_SERVER_SESSION_RUNTIME_CAPABILITY = 'language-server.session.v1' as const
 export const RUNTIME_CAPABILITIES = [
   'runtime.status.compat.v1',
   'runtime.environments.v1',
+  LANGUAGE_SERVER_SESSION_RUNTIME_CAPABILITY,
   REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY,
   ORCHESTRATION_FEDERATION_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_CONTROL_MAIL_RUNTIME_CAPABILITY,
