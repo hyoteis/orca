@@ -72,13 +72,17 @@ export class SshLanguageServerSessionManager {
     private readonly buildCommand = buildPosixLanguageServerCommand,
     private readonly options: { maxPendingInputBytes?: number; maxStderrBytes?: number } = {}
   ) {}
-  async open(connection: SshConnection, request: LanguageServerSessionOpenRequest): Promise<void> {
+  async open(
+    connection: SshConnection,
+    request: LanguageServerSessionOpenRequest,
+    buildCommand: (command: SshLanguageServerCommand) => string = this.buildCommand
+  ): Promise<void> {
     if (this.sessions.has(request.sessionId)) {
       throw new Error(`Language server session already exists: ${request.sessionId}`)
     }
     this.emit(request.sessionId, { type: 'status', status: { type: 'starting' } })
     const channel = (await connection.exec(
-      this.buildCommand(this.resolveCommand(request))
+      buildCommand(this.resolveCommand(request))
     )) as unknown as Channel
     const session = { channel, stderrBytes: 0 }
     this.sessions.set(request.sessionId, session)

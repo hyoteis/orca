@@ -7,7 +7,10 @@ import {
   LocalLanguageServerSessionManager,
   resolveDefaultLocalLanguageServerCommand
 } from '../language-server/local-language-server-session-manager'
-import { SshLanguageServerSessionManager } from '../ssh/ssh-language-server-session-manager'
+import {
+  buildWindowsLanguageServerCommand,
+  SshLanguageServerSessionManager
+} from '../ssh/ssh-language-server-session-manager'
 import { getSshConnectionManager } from './ssh'
 
 export function registerLanguageServerSessionHandlers(): void {
@@ -38,12 +41,17 @@ export function registerLanguageServerSessionHandlers(): void {
       try {
         if (request.executionHostId?.startsWith('ssh:')) {
           const targetId = request.executionHostId.slice('ssh:'.length)
-          const connection = getSshConnectionManager()?.getConnection(targetId)
+          const connectionManager = getSshConnectionManager()
+          const connection = connectionManager?.getConnection(targetId)
           if (!connection) {
             throw new Error(`SSH target is not connected: ${targetId}`)
           }
           routes.set(request.sessionId, 'ssh')
-          await sshManager.open(connection, request)
+          const buildCommand =
+            connectionManager?.getState(targetId)?.remotePlatform === 'win32'
+              ? buildWindowsLanguageServerCommand
+              : undefined
+          await sshManager.open(connection, request, buildCommand)
         } else {
           routes.set(request.sessionId, 'local')
           manager.open(request)
