@@ -4,7 +4,7 @@ export type LanguageServerSessionOpenRequest = {
   sessionId: string
   kind: LanguageServerKind
   workspaceRoot: string
-  executionHostId?: `ssh:${string}` | 'local'
+  executionHostId?: `ssh:${string}` | `runtime:${string}` | 'local'
 }
 
 export type LanguageServerSessionStatus =

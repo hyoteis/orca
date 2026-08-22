@@ -287,8 +287,12 @@ function shouldUseOneShotRequest(method: string): boolean {
   return method === 'session.tabs.list' || method === 'session.tabs.listAll'
 }
 
-function shouldKeepDedicatedSubscriptionSocket(method: string): boolean {
-  return method === 'browser.screencast' || method === 'terminal.multiplex'
+export function shouldKeepDedicatedSubscriptionSocket(method: string): boolean {
+  return (
+    method === 'browser.screencast' ||
+    method === 'terminal.multiplex' ||
+    method === 'languageServer.session'
+  )
 }
 
 function shouldUseSharedControlSubscription(method: string): boolean {

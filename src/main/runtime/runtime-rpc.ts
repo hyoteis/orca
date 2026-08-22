@@ -522,6 +522,10 @@ export class OrcaRuntimeRpcServer {
   private mobilePairingOfferGeneration = 0
   private onUnpairedDeviceAuthFailure: (() => void) | null = null
   private unpairedDeviceAuthThrottle: UnpairedDeviceAuthThrottle | null = null
+  private readonly rawBinaryHandlers = new Map<
+    string,
+    (bytes: Uint8Array<ArrayBufferLike>) => void
+  >()
   private readonly binaryStreamHandlers = new Map<
     string,
     Map<number, (frame: TerminalStreamFrame) => void>
@@ -998,6 +1002,21 @@ export class OrcaRuntimeRpcServer {
     return true
   }
 
+  private registerRawBinaryHandler(
+    connectionId: string | undefined,
+    handler: (bytes: Uint8Array<ArrayBufferLike>) => void
+  ): () => void {
+    if (!connectionId) {
+      return () => {}
+    }
+    this.rawBinaryHandlers.set(connectionId, handler)
+    return () => {
+      if (this.rawBinaryHandlers.get(connectionId) === handler) {
+        this.rawBinaryHandlers.delete(connectionId)
+      }
+    }
+  }
+
   private registerBinaryStreamHandler(
     connectionId: string | undefined,
     streamId: number,
@@ -1027,6 +1046,11 @@ export class OrcaRuntimeRpcServer {
   private handleWebSocketBinaryMessage(bytes: Uint8Array<ArrayBufferLike>, ws: WebSocket): void {
     const connectionId = this.mobileSocketWiring?.getConnectionId(ws)
     if (!connectionId) {
+      return
+    }
+    const rawHandler = this.rawBinaryHandlers.get(connectionId)
+    if (rawHandler) {
+      rawHandler(bytes)
       return
     }
     const frame = decodeTerminalStreamFrame(bytes)
@@ -1338,6 +1362,7 @@ export class OrcaRuntimeRpcServer {
         // Why: subscriptions and binary streams are socket-scoped, but disconnect state is device-scoped across transports.
         this.runtime.cleanupSubscriptionsForConnection(socket.connectionId)
         this.runtime.cancelMobileDictationForConnection(socket.connectionId)
+        this.rawBinaryHandlers.delete(socket.connectionId)
         this.binaryStreamHandlers.delete(socket.connectionId)
         if (!hasOtherConnections) {
           this.runtime.onClientDisconnected(socket.device.deviceToken)
@@ -1720,6 +1745,7 @@ export class OrcaRuntimeRpcServer {
         pairing: pairingContext,
         signal: abortRegistration?.signal,
         sendBinary,
+        registerRawBinaryHandler: (handler) => this.registerRawBinaryHandler(connectionId, handler),
         registerBinaryStreamHandler: (streamId, handler) =>
           this.registerBinaryStreamHandler(connectionId, streamId, handler)
       })
