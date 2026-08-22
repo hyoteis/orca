@@ -1,4 +1,5 @@
-﻿import {
+﻿import type { TextDocumentContentChangeEvent } from 'vscode-languageserver-protocol'
+import {
   DidChangeTextDocumentNotification,
   DidCloseTextDocumentNotification,
   DidOpenTextDocumentNotification,
@@ -29,12 +30,22 @@ export class LanguageServerDocumentRegistry {
     })
   }
   change(uri: string, text: string): number {
+    return this.changeWithEvents(uri, text, [{ text }])
+  }
+  changeIncremental(uri: string, text: string, changes: TextDocumentContentChangeEvent[]): number {
+    return this.changeWithEvents(uri, text, changes)
+  }
+  private changeWithEvents(
+    uri: string,
+    text: string,
+    changes: TextDocumentContentChangeEvent[]
+  ): number {
     const entry = this.require(uri)
     entry.version += 1
     entry.text = text
     this.connection.sendNotification(DidChangeTextDocumentNotification.type, {
       textDocument: { uri, version: entry.version },
-      contentChanges: [{ text }]
+      contentChanges: changes
     })
     return entry.version
   }
@@ -74,6 +85,13 @@ export class LanguageServerDocumentRegistry {
       connection.sendNotification(DidOpenTextDocumentNotification.type, {
         textDocument: { uri: entry.uri, languageId: entry.languageId, version: 1, text: entry.text }
       })
+    }
+  }
+  closeAll(): void {
+    for (const uri of [...this.documents.keys()]) {
+      const entry = this.documents.get(uri)
+      if (entry) entry.references = 1
+      this.close(uri)
     }
   }
   snapshot(): readonly Readonly<Entry>[] {
