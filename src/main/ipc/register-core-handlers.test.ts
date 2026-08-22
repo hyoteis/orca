@@ -28,6 +28,7 @@ const {
   registerFilesystemHandlersMock,
   registerRuntimeHandlersMock,
   registerRuntimeEnvironmentHandlersMock,
+  registerLanguageServerSessionHandlersMock,
   registerEphemeralVmHandlersMock,
   registerAiVaultHandlersMock,
   registerOrcaProfileHandlersMock,
@@ -93,6 +94,7 @@ const {
   registerFilesystemHandlersMock: vi.fn(),
   registerRuntimeHandlersMock: vi.fn(),
   registerRuntimeEnvironmentHandlersMock: vi.fn(),
+  registerLanguageServerSessionHandlersMock: vi.fn(),
   registerEphemeralVmHandlersMock: vi.fn(),
   registerAiVaultHandlersMock: vi.fn(),
   registerOrcaProfileHandlersMock: vi.fn(),
@@ -293,6 +295,10 @@ vi.mock('./runtime', () => ({
 
 vi.mock('./runtime-environments', () => ({
   registerRuntimeEnvironmentHandlers: registerRuntimeEnvironmentHandlersMock
+}))
+
+vi.mock('./language-server-sessions', () => ({
+  registerLanguageServerSessionHandlers: registerLanguageServerSessionHandlersMock
 }))
 
 vi.mock('./ephemeral-vm', () => ({
