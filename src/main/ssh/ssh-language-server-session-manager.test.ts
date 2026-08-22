@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildPosixLanguageServerCommand,
+  buildWindowsLanguageServerCommand,
   SshLanguageServerSessionManager
 } from './ssh-language-server-session-manager'
 import type { SshConnection } from './ssh-connection'
@@ -22,6 +23,15 @@ describe('SshLanguageServerSessionManager', () => {
         cwd: "/repo/it's"
       })
     ).toBe("cd '/repo/it'\\''s' && exec 'clangd' '--query-driver=/a b/g++'")
+  })
+  it('builds an explicit PowerShell wrapper for Windows hosts', () => {
+    expect(
+      buildWindowsLanguageServerCommand({
+        executable: 'C:\\Tools\\clangd.cmd',
+        args: ['--stdio'],
+        cwd: 'C:\\repo'
+      })
+    ).toContain('powershell.exe -NoLogo -NoProfile -NonInteractive')
   })
   it('streams bytes and owns channel cleanup', async () => {
     const events: LanguageServerSessionEvent[] = [],

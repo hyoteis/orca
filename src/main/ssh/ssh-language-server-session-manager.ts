@@ -15,9 +15,51 @@ type Channel = EventEmitter & {
 }
 type Session = { channel: Channel; stderrBytes: number }
 const quotePosix = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`
+const quotePowerShell = (value: string): string => `'${value.replace(/'/g, "''")}'`
 export function buildPosixLanguageServerCommand(command: SshLanguageServerCommand): string {
   return `cd ${quotePosix(command.cwd)} && exec ${[command.executable, ...command.args].map(quotePosix).join(' ')}`
 }
+export function buildWindowsLanguageServerCommand(command: SshLanguageServerCommand): string {
+  const invocation = [command.executable, ...command.args].map(quotePowerShell).join(' ')
+  const script = `Set-Location -LiteralPath ${quotePowerShell(command.cwd)}; & ${invocation}`
+  return `powershell.exe -NoLogo -NoProfile -NonInteractive -Command ${quotePowerShell(script)}`
+}
+export async function probeSshLanguageServer(
+  connection: SshConnection,
+  command: SshLanguageServerCommand,
+  buildCommand: (command: SshLanguageServerCommand) => string = buildPosixLanguageServerCommand,
+  timeoutMs = 5_000
+): Promise<string> {
+  const channel = (await connection.exec(
+    buildCommand({ ...command, args: [...command.args, '--version'] })
+  )) as unknown as Channel
+  return await new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let retainedBytes = 0
+    const collect = (chunk: Buffer): void => {
+      if (retainedBytes >= 64 * 1024) return
+      const accepted = chunk.subarray(0, 64 * 1024 - retainedBytes)
+      retainedBytes += accepted.length
+      chunks.push(accepted)
+    }
+    channel.on('data', collect)
+    channel.stderr.on('data', collect)
+    const timer = setTimeout(() => {
+      channel.close()
+      reject(new Error('Timed out probing SSH language server'))
+    }, timeoutMs)
+    timer.unref?.()
+    channel.once('error', (error: Error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    channel.once('close', () => {
+      clearTimeout(timer)
+      resolve(Buffer.concat(chunks).toString('utf8').trim())
+    })
+  })
+}
+
 export class SshLanguageServerSessionManager {
   private readonly sessions = new Map<string, Session>()
   constructor(
@@ -50,6 +92,9 @@ export class SshLanguageServerSessionManager {
       })
     )
     channel.once('close', () => {
+      if (this.sessions.get(request.sessionId) !== session) {
+        return
+      }
       this.sessions.delete(request.sessionId)
       this.emit(request.sessionId, { type: 'status', status: { type: 'closed' } })
     })
