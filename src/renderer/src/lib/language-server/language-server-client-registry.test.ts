@@ -1,5 +1,5 @@
 ﻿import { describe, expect, it } from 'vitest'
-import { toClientDocumentUri, toServerFileUri } from './language-server-client-registry'
+import { toClientDocumentUri, toServerFileUri } from './language-server-document-uri'
 describe('language-server document mapping', () => {
   it('isolates identical paths by Host and scope', () => {
     const path = 'src/main.cpp'

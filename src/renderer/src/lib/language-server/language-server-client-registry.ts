@@ -40,7 +40,9 @@ class ByteReader extends AbstractMessageReader {
     for (;;) {
       const text = decoder.decode(this.buffer)
       const headerEnd = text.indexOf('\r\n\r\n')
-      if (headerEnd < 0) return
+      if (headerEnd === -1) {
+        return
+      }
       const match = /content-length:\s*(\d+)/i.exec(text.slice(0, headerEnd))
       if (!match) {
         this.fireError(new Error('Missing LSP Content-Length'))
@@ -49,7 +51,9 @@ class ByteReader extends AbstractMessageReader {
       }
       const bodyStart = encoder.encode(text.slice(0, headerEnd + 4)).byteLength,
         length = Number(match[1])
-      if (this.buffer.byteLength < bodyStart + length) return
+      if (this.buffer.byteLength < bodyStart + length) {
+        return
+      }
       const body = this.buffer.slice(bodyStart, bodyStart + length)
       this.buffer = this.buffer.slice(bodyStart + length)
       try {
@@ -79,17 +83,7 @@ class ByteWriter extends AbstractMessageWriter {
 }
 
 export type LanguageServerClientKey = { executionHostId: string; scopeId: string; kind: string }
-export function toClientDocumentUri(key: LanguageServerClientKey, relativePath: string): string {
-  return `orca-lsp://${encodeURIComponent(key.executionHostId)}/${encodeURIComponent(key.scopeId)}/${relativePath.split('\\').map(encodeURIComponent).join('/')}`
-}
-export function toServerFileUri(hostPath: string): string {
-  const normalized = hostPath.replace(/\\/g, '/')
-  const rooted = /^[A-Za-z]:\//.test(normalized) ? `/${normalized}` : normalized
-  return `file://${rooted
-    .split('/')
-    .map((part, index) => (index === 0 ? '' : encodeURIComponent(part)))
-    .join('/')}`
-}
+
 export class LanguageServerClientRegistry {
   private readonly clients = new Map<
     string,
@@ -107,8 +101,11 @@ export class LanguageServerClientRegistry {
     let handle: LanguageServerSessionHandle | null = null
     handle = await this.api.open(request, {
       onEvent: (event: LanguageServerSessionEvent) => {
-        if (event.type === 'stdout') reader.push(event.bytes)
-        else if (event.status.type === 'exit' || event.status.type === 'closed') reader.close()
+        if (event.type === 'stdout') {
+          reader.push(event.bytes)
+        } else if (event.status.type === 'exit' || event.status.type === 'closed') {
+          reader.close()
+        }
       }
     })
     const writer = new ByteWriter(() => handle),
@@ -119,7 +116,9 @@ export class LanguageServerClientRegistry {
   }
   close(key: LanguageServerClientKey): void {
     const current = this.clients.get(JSON.stringify(key))
-    if (!current) return
+    if (!current) {
+      return
+    }
     current.connection.dispose()
     current.handle.close()
     this.clients.delete(JSON.stringify(key))
