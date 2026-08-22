@@ -15,7 +15,9 @@ export class LanguageServerDocumentRegistry {
     const current = this.documents.get(snapshot.uri)
     if (current) {
       current.references += 1
-      if (current.text !== snapshot.text) this.change(snapshot.uri, snapshot.text)
+      if (current.text !== snapshot.text) {
+        this.change(snapshot.uri, snapshot.text)
+      }
       return
     }
     const entry: Entry = { ...snapshot, version: 1, references: 1 }
@@ -51,9 +53,13 @@ export class LanguageServerDocumentRegistry {
   }
   close(uri: string): void {
     const entry = this.documents.get(uri)
-    if (!entry) return
+    if (!entry) {
+      return
+    }
     entry.references -= 1
-    if (entry.references > 0) return
+    if (entry.references > 0) {
+      return
+    }
     this.documents.delete(uri)
     this.connection.sendNotification(DidCloseTextDocumentNotification.type, {
       textDocument: { uri }
@@ -61,7 +67,9 @@ export class LanguageServerDocumentRegistry {
   }
   rename(oldUri: string, next: SyncedDocumentSnapshot): void {
     const old = this.documents.get(oldUri)
-    if (!old) return
+    if (!old) {
+      return
+    }
     const refs = old.references
     this.documents.delete(oldUri)
     this.connection.sendNotification(DidCloseTextDocumentNotification.type, {
@@ -88,9 +96,11 @@ export class LanguageServerDocumentRegistry {
     }
   }
   closeAll(): void {
-    for (const uri of [...this.documents.keys()]) {
+    for (const uri of this.documents.keys()) {
       const entry = this.documents.get(uri)
-      if (entry) entry.references = 1
+      if (entry) {
+        entry.references = 1
+      }
       this.close(uri)
     }
   }
@@ -99,7 +109,9 @@ export class LanguageServerDocumentRegistry {
   }
   private require(uri: string): Entry {
     const entry = this.documents.get(uri)
-    if (!entry) throw new Error(`Language server document is not open: ${uri}`)
+    if (!entry) {
+      throw new Error(`Language server document is not open: ${uri}`)
+    }
     return entry
   }
 }

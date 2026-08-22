@@ -12,6 +12,12 @@ import {
   type InitializeParams,
   type InitializeResult
 } from 'vscode-languageserver-protocol'
+import { LanguageServerDocumentRegistry } from './language-server-document-registry'
+import { LanguageServerDocumentSyncController } from './language-server-document-sync-controller'
+import {
+  LanguageServerSessionLifecycle,
+  type SessionRestartDecision
+} from './language-server-session-lifecycle'
 import type {
   LanguageServerSessionEvent,
   LanguageServerSessionHandle,
@@ -90,6 +96,7 @@ class ByteWriter extends AbstractMessageWriter {
 export type LanguageServerClientKey = { executionHostId: string; scopeId: string; kind: string }
 
 export class LanguageServerClientRegistry {
+  private readonly lifecycles = new Map<string, LanguageServerSessionLifecycle>()
   private readonly clients = new Map<
     string,
     {
@@ -97,9 +104,16 @@ export class LanguageServerClientRegistry {
       requestGeneration: number
       connection: MessageConnection
       handle: LanguageServerSessionHandle
+      sync: LanguageServerDocumentSyncController
     }
   >()
-  constructor(private readonly api: NonNullable<Window['api']>['languageServers']) {}
+  constructor(
+    private readonly api: NonNullable<Window['api']>['languageServers'],
+    private readonly onRestartDecision?: (
+      key: LanguageServerClientKey,
+      decision: SessionRestartDecision
+    ) => void
+  ) {}
   async open(
     key: LanguageServerClientKey,
     request: LanguageServerSessionOpenRequest
@@ -107,9 +121,12 @@ export class LanguageServerClientRegistry {
     generation: number
     connection: MessageConnection
     initialize: (params: InitializeParams) => Promise<InitializeResult>
+    sync: LanguageServerDocumentSyncController
   }> {
-    const id = JSON.stringify(key),
-      generation = (this.clients.get(id)?.generation ?? 0) + 1
+    const id = JSON.stringify(key)
+    const lifecycle = this.lifecycles.get(id) ?? new LanguageServerSessionLifecycle()
+    this.lifecycles.set(id, lifecycle)
+    const generation = lifecycle.beginGeneration()
     this.close(key)
     const reader = new ByteReader()
     let handle: LanguageServerSessionHandle | null = null
@@ -119,16 +136,22 @@ export class LanguageServerClientRegistry {
           reader.push(event.bytes)
         } else if (event.status.type === 'exit' || event.status.type === 'closed') {
           reader.close()
+          if (lifecycle.isCurrent(generation) && event.status.type === 'exit') {
+            this.onRestartDecision?.(key, lifecycle.recordCrash())
+          }
         }
       }
     })
     const writer = new ByteWriter(() => handle),
       connection = createMessageConnection(reader, writer)
     connection.listen()
-    this.clients.set(id, { generation, requestGeneration: 0, connection, handle })
+    const documents = new LanguageServerDocumentRegistry(connection)
+    const sync = new LanguageServerDocumentSyncController(documents)
+    this.clients.set(id, { generation, requestGeneration: 0, connection, handle, sync })
     return {
       generation,
       connection,
+      sync,
       initialize: (params) => connection.sendRequest(InitializeRequest.type, params)
     }
   }
@@ -150,11 +173,24 @@ export class LanguageServerClientRegistry {
       current?.generation === sessionGeneration && current.requestGeneration === requestGeneration
     )
   }
+  scheduleIdle(key: LanguageServerClientKey, onIdle: () => void): void {
+    this.lifecycles.get(JSON.stringify(key))?.scheduleIdle(onIdle)
+  }
+  markActive(key: LanguageServerClientKey): void {
+    this.lifecycles.get(JSON.stringify(key))?.cancelIdle()
+  }
+  disposeKey(key: LanguageServerClientKey): void {
+    this.close(key)
+    const id = JSON.stringify(key)
+    this.lifecycles.get(id)?.dispose()
+    this.lifecycles.delete(id)
+  }
   close(key: LanguageServerClientKey): void {
     const current = this.clients.get(JSON.stringify(key))
     if (!current) {
       return
     }
+    current.sync.dispose()
     current.connection.dispose()
     current.handle.close()
     this.clients.delete(JSON.stringify(key))

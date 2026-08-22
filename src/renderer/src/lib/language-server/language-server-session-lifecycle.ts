@@ -23,7 +23,9 @@ export class LanguageServerSessionLifecycle {
       max = this.options.maxCrashes ?? 3
     this.crashes = this.crashes.filter((at) => now - at <= windowMs)
     this.crashes.push(now)
-    if (this.crashes.length >= max) return { type: 'circuit-open' }
+    if (this.crashes.length >= max) {
+      return { type: 'circuit-open' }
+    }
     const delays = this.options.restartDelaysMs ?? [1_000, 2_000, 5_000, 30_000]
     return {
       type: 'restart',
