@@ -37,7 +37,9 @@ export async function probeSshLanguageServer(
     const chunks: Buffer[] = []
     let retainedBytes = 0
     const collect = (chunk: Buffer): void => {
-      if (retainedBytes >= 64 * 1024) return
+      if (retainedBytes >= 64 * 1024) {
+        return
+      }
       const accepted = chunk.subarray(0, 64 * 1024 - retainedBytes)
       retainedBytes += accepted.length
       chunks.push(accepted)
