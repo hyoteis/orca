@@ -102,6 +102,8 @@ describe('RepositoryPane search entries', () => {
     expect(matchesSettingsSearch('local settings scripts', entries)).toBe(true)
     expect(matchesSettingsSearch('../worktrees', entries)).toBe(true)
     expect(matchesSettingsSearch('worktree path', entries)).toBe(true)
+    expect(matchesSettingsSearch('language server', entries)).toBe(true)
+    expect(matchesSettingsSearch('semantic navigation', entries)).toBe(true)
   })
 
   it('includes each project search section once', () => {
@@ -163,6 +165,8 @@ describe('RepositoryPane search entries', () => {
       expect(html).toContain('Setup Script')
       expect(html).toContain('Archive Script')
       expect(html).toContain('Custom GitHub Issue Command')
+      expect(html).toContain('Code Intelligence')
+      expect(html).toContain('Discover scopes')
     } finally {
       useAppStore.setState({
         settingsSearchQuery: '',

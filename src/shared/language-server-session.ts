@@ -1,11 +1,31 @@
-﻿export type LanguageServerKind = 'basedpyright' | 'pyright' | 'clangd'
+import type { ExecutionHostId } from './execution-host'
+import type { CodeIntelligenceScopeMember } from './code-intelligence-scope'
+
+export type LanguageServerKind = 'basedpyright' | 'pyright' | 'clangd'
 
 export type LanguageServerSessionOpenRequest = {
   sessionId: string
+  scopeId: string
+  revision: number
+}
+
+export type LanguageServerLaunchCommand = {
+  executable: string
+  args: readonly string[]
+}
+
+export type LanguageServerLaunchRequest = LanguageServerSessionOpenRequest & {
   kind: LanguageServerKind
   workspaceRoot: string
-  executionHostId?: `ssh:${string}` | `runtime:${string}` | 'local'
+  executionHostId: ExecutionHostId
+  command?: LanguageServerLaunchCommand
+  members: readonly CodeIntelligenceScopeMember[]
 }
+
+export type RuntimeLanguageServerSessionParams = Pick<
+  LanguageServerLaunchRequest,
+  'sessionId' | 'kind' | 'workspaceRoot' | 'executionHostId' | 'command'
+>
 
 export type LanguageServerSessionStatus =
   | { type: 'starting' }

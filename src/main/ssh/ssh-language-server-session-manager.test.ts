@@ -1,4 +1,4 @@
-﻿import { EventEmitter } from 'node:events'
+import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildPosixLanguageServerCommand,
@@ -32,7 +32,19 @@ describe('SshLanguageServerSessionManager', () => {
         args: ['--stdio'],
         cwd: 'C:\\repo'
       })
-    ).toContain('powershell.exe -NoLogo -NoProfile -NonInteractive')
+    ).toMatch(
+      /^powershell\.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand [A-Za-z0-9+/=]+$/
+    )
+    const encoded = buildWindowsLanguageServerCommand({
+      executable: 'C:\\Tools\\clangd.cmd',
+      args: ['--stdio'],
+      cwd: 'C:\\repo'
+    })
+      .split(' ')
+      .at(-1)
+    expect(Buffer.from(encoded ?? '', 'base64').toString('utf16le')).toBe(
+      "Set-Location -LiteralPath 'C:\\repo'; & 'C:\\Tools\\clangd.cmd' '--stdio'"
+    )
   })
   it('probes the language server on the SSH Host', async () => {
     const channel = new Channel()
@@ -58,7 +70,15 @@ describe('SshLanguageServerSessionManager', () => {
       (_id, event) => events.push(event),
       (request) => ({ executable: 'clangd', args: [], cwd: request.workspaceRoot })
     )
-    await manager.open(connection, { sessionId: 's', kind: 'clangd', workspaceRoot: '/repo' })
+    await manager.open(connection, {
+      sessionId: 's',
+      scopeId: 'scope',
+      revision: 1,
+      kind: 'clangd',
+      workspaceRoot: '/repo',
+      executionHostId: 'local',
+      members: []
+    })
     channel.emit('data', Buffer.from('hello'))
     expect(events.some((event) => event.type === 'stdout')).toBe(true)
     expect(manager.send('s', new TextEncoder().encode('in'))).toBe(true)

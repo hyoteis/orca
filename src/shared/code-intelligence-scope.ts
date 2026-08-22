@@ -1,4 +1,4 @@
-﻿import type { ExecutionHostId } from './execution-host'
+import type { ExecutionHostId } from './execution-host'
 
 export type CodeIntelligenceLanguage = 'python' | 'cpp'
 export type CodeIntelligenceServerSource =
@@ -7,11 +7,23 @@ export type CodeIntelligenceServerSource =
   | { type: 'custom'; executable: string; args: string[] }
 export type CodeIntelligenceScopeMember = { relativePath: string; visibleResults: boolean }
 export type CodeIntelligenceScopeConsent = { configurationFingerprint: string; grantedAt: number }
+export type CodeIntelligenceProbeResult = {
+  available: boolean
+  version?: string
+  message?: string
+  installCommand?: string
+}
+export type CodeIntelligenceScopeChange = {
+  scopeId: string
+  revision: number | null
+  removed: boolean
+}
 export type CodeIntelligenceScope = {
   id: string
   name: string
   executionHostId: ExecutionHostId
   workspaceKey: `worktree:${string}` | `folder:${string}`
+  workspaceRoot: string
   language: CodeIntelligenceLanguage
   members: CodeIntelligenceScopeMember[]
   serverSource: CodeIntelligenceServerSource
@@ -44,7 +56,7 @@ export function normalizeCodeIntelligenceScope(
         relativePath: normalizeScopeRelativePath(member.relativePath)
       }))
       .filter((member) => {
-        const key = member.relativePath.toLowerCase()
+        const key = member.relativePath
         if (seen.has(key)) {
           return false
         }
@@ -63,6 +75,7 @@ export function scopeConfigurationPayload(scope: CodeIntelligenceScope): unknown
   return {
     executionHostId: scope.executionHostId,
     workspaceKey: scope.workspaceKey,
+    workspaceRoot: scope.workspaceRoot,
     language: scope.language,
     members: scope.members,
     serverSource: scope.serverSource,

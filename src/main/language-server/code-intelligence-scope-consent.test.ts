@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   grantCodeIntelligenceConsent,
   getCodeIntelligenceConfigurationFingerprint,
@@ -10,6 +10,7 @@ const scope = (): CodeIntelligenceScope => ({
   name: 'Engine',
   executionHostId: 'ssh:box',
   workspaceKey: 'folder:w',
+  workspaceRoot: '/workspace',
   language: 'cpp',
   members: [{ relativePath: 'repo-a', visibleResults: true }],
   serverSource: { type: 'custom', executable: '/usr/bin/clangd', args: [] },

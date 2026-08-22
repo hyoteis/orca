@@ -1,15 +1,21 @@
-﻿import { z } from 'zod'
+import { z } from 'zod'
 import { defineStreamingMethod, type RpcAnyMethod } from '../core'
 import { LocalLanguageServerSessionManager } from '../../../language-server/local-language-server-session-manager'
 
-const Params = z
-  .object({
-    sessionId: z.string().min(1),
-    kind: z.enum(['basedpyright', 'pyright', 'clangd']),
-    workspaceRoot: z.string().min(1),
-    executionHostId: z.string().optional()
-  })
-  .strict()
+const Params = z.object({
+  sessionId: z.string().min(1),
+  kind: z.enum(['basedpyright', 'pyright', 'clangd']),
+  workspaceRoot: z.string().min(1),
+  executionHostId: z.string().optional(),
+  scopeId: z.string().min(1).optional(),
+  revision: z.number().int().nonnegative().optional(),
+  command: z
+    .object({
+      executable: z.string().min(1),
+      args: z.array(z.string())
+    })
+    .optional()
+})
 export const LANGUAGE_SERVER_METHODS: RpcAnyMethod[] = [
   defineStreamingMethod({
     name: 'languageServer.session',
@@ -43,8 +49,13 @@ export const LANGUAGE_SERVER_METHODS: RpcAnyMethod[] = [
       try {
         manager.open({
           sessionId: params.sessionId,
+          scopeId: params.scopeId ?? 'runtime',
+          revision: params.revision ?? 0,
           kind: params.kind,
-          workspaceRoot: params.workspaceRoot
+          workspaceRoot: params.workspaceRoot,
+          executionHostId: 'local',
+          command: params.command,
+          members: []
         })
         await done
       } finally {

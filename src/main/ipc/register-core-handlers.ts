@@ -25,6 +25,7 @@ import { registerRuntimeHandlers } from './runtime'
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { registerLanguageServerSessionHandlers } from './language-server-sessions'
 import { registerCodeIntelligenceHandlers } from './code-intelligence'
+import { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
 import { registerAiVaultHandlers } from './ai-vault'
 import { registerNativeChatHandlers } from './native-chat'
@@ -216,8 +217,9 @@ export function registerCoreHandlers(
   registerFilesystemWatcherHandlers()
   registerRuntimeHandlers(runtime)
   registerRuntimeEnvironmentHandlers(store)
-  registerLanguageServerSessionHandlers()
-  registerCodeIntelligenceHandlers()
+  const codeIntelligenceScopes = new CodeIntelligenceScopeStore(store)
+  registerLanguageServerSessionHandlers(codeIntelligenceScopes)
+  registerCodeIntelligenceHandlers(codeIntelligenceScopes)
   registerEphemeralVmHandlers(store, pluginService)
   registerAiVaultHandlers({
     getAdditionalCodexHomePaths: lifecycleOptions.getAdditionalAiVaultCodexHomePaths,

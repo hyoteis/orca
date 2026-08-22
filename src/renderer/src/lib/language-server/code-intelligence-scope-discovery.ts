@@ -1,4 +1,4 @@
-﻿import type { CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
+import type { CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 export type CodeIntelligenceCandidate = {
   relativeRoot: string
   languages: CodeIntelligenceLanguage[]
@@ -23,7 +23,9 @@ export function discoverCodeIntelligenceCandidates(
     const normalized = file.replace(/\\/g, '/'),
       name = normalized.split('/').pop() ?? '',
       languages = MARKERS[name]
-    if (!languages) continue
+    if (!languages) {
+      continue
+    }
     const root = normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '.',
       entry = byRoot.get(root) ?? { languages: new Set(), markers: new Set() }
     languages.forEach((language) => entry.languages.add(language))

@@ -1,10 +1,27 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { tmpdir } from 'node:os'
 import {
   LocalLanguageServerSessionManager,
   resolveDefaultLocalLanguageServerCommand
 } from './local-language-server-session-manager'
-import type { LanguageServerSessionEvent } from '../../shared/language-server-session'
+import { probeLocalLanguageServer } from './local-language-server-probe'
+import type {
+  LanguageServerLaunchRequest,
+  LanguageServerSessionEvent
+} from '../../shared/language-server-session'
+
+const launch = (
+  overrides: Partial<LanguageServerLaunchRequest> = {}
+): LanguageServerLaunchRequest => ({
+  sessionId: 's',
+  scopeId: 'scope',
+  revision: 1,
+  kind: 'clangd',
+  workspaceRoot: tmpdir(),
+  executionHostId: 'local',
+  members: [],
+  ...overrides
+})
 
 function waitFor(predicate: () => boolean, timeoutMs = 3_000): Promise<void> {
   const started = Date.now()
@@ -26,13 +43,30 @@ function waitFor(predicate: () => boolean, timeoutMs = 3_000): Promise<void> {
 
 describe('LocalLanguageServerSessionManager', () => {
   it('resolves only known language-server commands', () => {
+    expect(resolveDefaultLocalLanguageServerCommand(launch())).toEqual({
+      executable: 'clangd',
+      args: [],
+      cwd: tmpdir()
+    })
     expect(
-      resolveDefaultLocalLanguageServerCommand({
-        sessionId: 's',
-        kind: 'clangd',
-        workspaceRoot: tmpdir()
+      resolveDefaultLocalLanguageServerCommand(
+        launch({ command: { executable: '/custom/clangd', args: ['--background-index'] } })
+      )
+    ).toEqual({
+      executable: '/custom/clangd',
+      args: ['--background-index'],
+      cwd: tmpdir()
+    })
+  })
+
+  it('re-detects a configured executable without starting a session', async () => {
+    await expect(
+      probeLocalLanguageServer({
+        executable: process.execPath,
+        args: ['-e', "process.stdout.write('test-language-server 1.0')", '--'],
+        cwd: tmpdir()
       })
-    ).toEqual({ executable: 'clangd', args: [], cwd: tmpdir() })
+    ).resolves.toBe('test-language-server 1.0')
   })
 
   it('streams bytes and terminates the owned process', async () => {
@@ -49,7 +83,7 @@ describe('LocalLanguageServerSessionManager', () => {
       }),
       { closeTimeoutMs: 100 }
     )
-    manager.open({ sessionId: 'session-1', kind: 'clangd', workspaceRoot: tmpdir() })
+    manager.open(launch({ sessionId: 'session-1' }))
     await waitFor(() =>
       events.some((event) => event.type === 'status' && event.status.type === 'ready')
     )
@@ -75,8 +109,8 @@ describe('LocalLanguageServerSessionManager', () => {
         cwd: request.workspaceRoot
       })
     )
-    expect(() =>
-      manager.open({ sessionId: 'bad', kind: 'clangd', workspaceRoot: 'relative' })
-    ).toThrow('must be absolute')
+    expect(() => manager.open(launch({ sessionId: 'bad', workspaceRoot: 'relative' }))).toThrow(
+      'must be absolute'
+    )
   })
 })

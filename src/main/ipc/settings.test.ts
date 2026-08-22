@@ -192,6 +192,25 @@ describe('registerSettingsHandlers', () => {
     )
   })
 
+  it('rejects code intelligence authority writes through generic settings:set', async () => {
+    store.getSettings.mockReturnValue({ codeIntelligenceScopes: [] })
+    store.updateSettings.mockReturnValue({ codeIntelligenceScopes: [] })
+    registerSettingsHandlers(store as never)
+    const handler = handleMock.mock.calls.find((call) => call[0] === 'settings:set')?.[1] as (
+      event: typeof settingsInvokeEvent,
+      args: { codeIntelligenceScopes: unknown[] }
+    ) => Promise<unknown>
+
+    await handler(settingsInvokeEvent, {
+      codeIntelligenceScopes: [{ id: 'forged', consent: { configurationFingerprint: 'x' } }]
+    })
+
+    expect(store.updateSettings).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ originWebContentsId: 1 })
+    )
+  })
+
   it('persists Active Server only through the dedicated preference channel', () => {
     store.updateSettings.mockReturnValue({ activeRuntimeEnvironmentId: 'windows-2' })
     registerSettingsHandlers(store as never)

@@ -1,8 +1,12 @@
-﻿import type { EventEmitter } from 'node:events'
+import type { EventEmitter } from 'node:events'
 import type {
-  LanguageServerSessionEvent,
-  LanguageServerSessionOpenRequest
+  LanguageServerLaunchRequest,
+  LanguageServerSessionEvent
 } from '../../shared/language-server-session'
+import {
+  acceptsLanguageServerInput,
+  retainLanguageServerStderr
+} from '../language-server/language-server-session-io-policy'
 import type { SshConnection } from './ssh-connection'
 
 export type SshLanguageServerCommand = { executable: string; args: readonly string[]; cwd: string }
@@ -22,7 +26,8 @@ export function buildPosixLanguageServerCommand(command: SshLanguageServerComman
 export function buildWindowsLanguageServerCommand(command: SshLanguageServerCommand): string {
   const invocation = [command.executable, ...command.args].map(quotePowerShell).join(' ')
   const script = `Set-Location -LiteralPath ${quotePowerShell(command.cwd)}; & ${invocation}`
-  return `powershell.exe -NoLogo -NoProfile -NonInteractive -Command ${quotePowerShell(script)}`
+  const encoded = Buffer.from(script, 'utf16le').toString('base64')
+  return `powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`
 }
 export async function probeSshLanguageServer(
   connection: SshConnection,
@@ -67,14 +72,14 @@ export class SshLanguageServerSessionManager {
   constructor(
     private readonly emit: (sessionId: string, event: LanguageServerSessionEvent) => void,
     private readonly resolveCommand: (
-      request: LanguageServerSessionOpenRequest
+      request: LanguageServerLaunchRequest
     ) => SshLanguageServerCommand,
     private readonly buildCommand = buildPosixLanguageServerCommand,
     private readonly options: { maxPendingInputBytes?: number; maxStderrBytes?: number } = {}
   ) {}
   async open(
     connection: SshConnection,
-    request: LanguageServerSessionOpenRequest,
+    request: LanguageServerLaunchRequest,
     buildCommand: (command: SshLanguageServerCommand) => string = this.buildCommand
   ): Promise<void> {
     if (this.sessions.has(request.sessionId)) {
@@ -111,8 +116,11 @@ export class SshLanguageServerSessionManager {
       return false
     }
     if (
-      (session.channel.writableLength ?? 0) + bytes.byteLength >
-      (this.options.maxPendingInputBytes ?? 8 * 1024 * 1024)
+      !acceptsLanguageServerInput(
+        session.channel.writableLength ?? 0,
+        bytes.byteLength,
+        this.options.maxPendingInputBytes
+      )
     ) {
       this.emit(sessionId, { type: 'status', status: { type: 'backpressure', direction: 'stdin' } })
       return false
@@ -135,18 +143,21 @@ export class SshLanguageServerSessionManager {
     }
   }
   private stderr(id: string, session: Session, chunk: Buffer): void {
-    const max = this.options.maxStderrBytes ?? 256 * 1024,
-      accepted = chunk.subarray(0, Math.max(0, max - session.stderrBytes))
-    if (!accepted.length) {
+    const retained = retainLanguageServerStderr(
+      session.stderrBytes,
+      chunk,
+      this.options.maxStderrBytes
+    )
+    if (!retained.accepted.length) {
       return
     }
-    session.stderrBytes += accepted.length
+    session.stderrBytes = retained.retainedBytes
     this.emit(id, {
       type: 'status',
       status: {
         type: 'stderr',
-        text: accepted.toString('utf8'),
-        truncated: accepted.length < chunk.length || session.stderrBytes === max
+        text: retained.accepted.toString('utf8'),
+        truncated: retained.truncated
       }
     })
   }

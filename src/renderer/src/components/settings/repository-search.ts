@@ -120,6 +120,23 @@ export function getRepositoryPaneSearchEntries(
           }
         ]
       : []),
+    {
+      title: translate('settings.codeIntelligence.title', 'Code Intelligence'),
+      description: translate(
+        'settings.codeIntelligence.description',
+        'Configure Python and C++ semantic scopes on this Host. Orca does not modify project files.'
+      ),
+      keywords: [
+        repo.displayName,
+        ...translateSearchKeyword('settings.codeIntelligence.pythonKeyword', 'python'),
+        ...translateSearchKeyword('settings.codeIntelligence.cppKeyword', 'c++'),
+        ...translateSearchKeyword('settings.codeIntelligence.lspKeyword', 'language server'),
+        ...translateSearchKeyword(
+          'settings.codeIntelligence.semanticKeyword',
+          'semantic navigation'
+        )
+      ]
+    },
     ...(isFolder || !isLocalWindowsProject
       ? []
       : [

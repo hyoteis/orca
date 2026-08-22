@@ -1,4 +1,4 @@
-﻿import {
+import {
   AbstractMessageReader,
   AbstractMessageWriter,
   createMessageConnection,
@@ -14,11 +14,15 @@ import {
 } from 'vscode-languageserver-protocol'
 import { LanguageServerDocumentRegistry } from './language-server-document-registry'
 import { LanguageServerDocumentSyncController } from './language-server-document-sync-controller'
+import { isCodeIntelligenceResultVisible } from './code-intelligence-scope-membership'
+import type { CodeIntelligenceScopeMember } from '../../../../shared/code-intelligence-scope'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   LanguageServerSessionLifecycle,
   type SessionRestartDecision
 } from './language-server-session-lifecycle'
 import type {
+  LanguageServerKind,
   LanguageServerSessionEvent,
   LanguageServerSessionHandle,
   LanguageServerSessionOpenRequest
@@ -93,7 +97,12 @@ class ByteWriter extends AbstractMessageWriter {
   }
 }
 
-export type LanguageServerClientKey = { executionHostId: string; scopeId: string; kind: string }
+export type LanguageServerClientKey = {
+  executionHostId: ExecutionHostId
+  scopeId: string
+  kind: LanguageServerKind
+  revision: number
+}
 
 export class LanguageServerClientRegistry {
   private readonly lifecycles = new Map<string, LanguageServerSessionLifecycle>()
@@ -105,15 +114,29 @@ export class LanguageServerClientRegistry {
       connection: MessageConnection
       handle: LanguageServerSessionHandle
       sync: LanguageServerDocumentSyncController
+      members: readonly CodeIntelligenceScopeMember[]
     }
   >()
+  private readonly unsubscribeScopeChanges: () => void
   constructor(
     private readonly api: NonNullable<Window['api']>['languageServers'],
     private readonly onRestartDecision?: (
       key: LanguageServerClientKey,
       decision: SessionRestartDecision
-    ) => void
-  ) {}
+    ) => void,
+    private readonly scopeAuthority: Pick<
+      NonNullable<Window['api']>['codeIntelligence'],
+      'authorizeSession' | 'onScopeChanged'
+    > = window.api.codeIntelligence
+  ) {
+    this.unsubscribeScopeChanges = scopeAuthority.onScopeChanged((change) => {
+      if (change.revision !== null) {
+        this.restartScope(change.scopeId, change.revision)
+      } else {
+        this.closeScope(change.scopeId)
+      }
+    })
+  }
   async open(
     key: LanguageServerClientKey,
     request: LanguageServerSessionOpenRequest
@@ -130,6 +153,7 @@ export class LanguageServerClientRegistry {
     this.close(key)
     const reader = new ByteReader()
     let handle: LanguageServerSessionHandle | null = null
+    const launch = await this.scopeAuthority.authorizeSession(request)
     handle = await this.api.open(request, {
       onEvent: (event: LanguageServerSessionEvent) => {
         if (event.type === 'stdout') {
@@ -147,13 +171,57 @@ export class LanguageServerClientRegistry {
     connection.listen()
     const documents = new LanguageServerDocumentRegistry(connection)
     const sync = new LanguageServerDocumentSyncController(documents)
-    this.clients.set(id, { generation, requestGeneration: 0, connection, handle, sync })
+    this.clients.set(id, {
+      generation,
+      requestGeneration: 0,
+      connection,
+      handle,
+      sync,
+      members: launch.members
+    })
     return {
       generation,
       connection,
       sync,
       initialize: (params) => connection.sendRequest(InitializeRequest.type, params)
     }
+  }
+  isResultVisible(key: LanguageServerClientKey, relativePath: string): boolean {
+    const current = this.clients.get(JSON.stringify(key))
+    return current
+      ? isCodeIntelligenceResultVisible({ members: current.members }, relativePath)
+      : false
+  }
+  restartScope(scopeId: string, revision: number): void {
+    for (const [id, current] of this.clients) {
+      const key = JSON.parse(id) as LanguageServerClientKey
+      if (key.scopeId !== scopeId) {
+        continue
+      }
+      current.sync.dispose()
+      current.connection.dispose()
+      current.handle.close()
+      this.clients.delete(id)
+      this.onRestartDecision?.({ ...key, revision }, { type: 'restart', delayMs: 0 })
+    }
+  }
+  closeScope(scopeId: string): void {
+    for (const id of this.clients.keys()) {
+      const key = JSON.parse(id) as LanguageServerClientKey
+      if (key.scopeId === scopeId) {
+        this.close(key)
+      }
+    }
+  }
+  dispose(): void {
+    this.unsubscribeScopeChanges()
+    for (const id of this.clients.keys()) {
+      this.close(JSON.parse(id) as LanguageServerClientKey)
+    }
+    for (const lifecycle of this.lifecycles.values()) {
+      lifecycle.dispose()
+    }
+    this.lifecycles.clear()
   }
   nextRequestGeneration(key: LanguageServerClientKey): number {
     const current = this.clients.get(JSON.stringify(key))

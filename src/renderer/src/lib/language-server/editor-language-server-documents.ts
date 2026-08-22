@@ -1,5 +1,7 @@
-﻿import type { OpenFile } from '@/store/slices/editor'
+import type { OpenFile } from '@/store/slices/editor'
 import type { LanguageServerDocumentSource } from './language-server-document-sync-controller'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import { isDocumentInCodeIntelligenceScope } from './code-intelligence-scope-membership'
 
 export function collectEditorLanguageServerDocuments(args: {
   openFiles: readonly OpenFile[]
@@ -7,10 +9,16 @@ export function collectEditorLanguageServerDocuments(args: {
   diskTextByFileId: Readonly<Record<string, string>>
   toUri: (file: OpenFile) => string
   acceptsLanguage: (language: string) => boolean
+  scope: Pick<CodeIntelligenceScope, 'members'>
 }): LanguageServerDocumentSource[] {
   const collected = new Map<string, LanguageServerDocumentSource>()
   for (const file of args.openFiles) {
-    if (file.mode !== 'edit' || file.readOnly || !args.acceptsLanguage(file.language)) {
+    if (
+      file.mode !== 'edit' ||
+      file.readOnly ||
+      !args.acceptsLanguage(file.language) ||
+      !isDocumentInCodeIntelligenceScope(args.scope, file.relativePath)
+    ) {
       continue
     }
     const diskText = args.diskTextByFileId[file.id]

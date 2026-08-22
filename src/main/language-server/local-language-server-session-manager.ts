@@ -1,10 +1,14 @@
-﻿import { isAbsolute } from 'node:path'
+import { isAbsolute } from 'node:path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import type {
   LanguageServerKind,
-  LanguageServerSessionEvent,
-  LanguageServerSessionOpenRequest
+  LanguageServerLaunchRequest,
+  LanguageServerSessionEvent
 } from '../../shared/language-server-session'
+import {
+  acceptsLanguageServerInput,
+  retainLanguageServerStderr
+} from './language-server-session-io-policy'
 
 export type ResolvedLanguageServerCommand = {
   executable: string
@@ -17,18 +21,16 @@ type LocalSession = {
   closeTimer: ReturnType<typeof setTimeout> | null
   stderrBytes: number
 }
-const MAX_INPUT = 8 * 1024 * 1024
-const MAX_STDERR = 256 * 1024
-
 export function resolveDefaultLocalLanguageServerCommand(
-  request: LanguageServerSessionOpenRequest
+  request: LanguageServerLaunchRequest
 ): ResolvedLanguageServerCommand {
   const commands: Record<LanguageServerKind, { executable: string; args: string[] }> = {
     basedpyright: { executable: 'basedpyright-langserver', args: ['--stdio'] },
     pyright: { executable: 'pyright-langserver', args: ['--stdio'] },
     clangd: { executable: 'clangd', args: [] }
   }
-  return { ...commands[request.kind], cwd: request.workspaceRoot }
+  const command = request.command ?? commands[request.kind]
+  return { executable: command.executable, args: [...command.args], cwd: request.workspaceRoot }
 }
 
 export class LocalLanguageServerSessionManager {
@@ -43,7 +45,7 @@ export class LocalLanguageServerSessionManager {
     } = {}
   ) {}
 
-  open(request: LanguageServerSessionOpenRequest): void {
+  open(request: LanguageServerLaunchRequest): void {
     if (this.sessions.has(request.sessionId)) {
       throw new Error(`Language server session already exists: ${request.sessionId}`)
     }
@@ -92,8 +94,11 @@ export class LocalLanguageServerSessionManager {
       return false
     }
     if (
-      session.child.stdin.writableLength + bytes.byteLength >
-      (this.options.maxPendingInputBytes ?? MAX_INPUT)
+      !acceptsLanguageServerInput(
+        session.child.stdin.writableLength,
+        bytes.byteLength,
+        this.options.maxPendingInputBytes
+      )
     ) {
       this.emit(sessionId, { type: 'status', status: { type: 'backpressure', direction: 'stdin' } })
       return false
@@ -122,18 +127,21 @@ export class LocalLanguageServerSessionManager {
   }
 
   private emitStderr(sessionId: string, session: LocalSession, chunk: Buffer): void {
-    const max = this.options.maxStderrBytes ?? MAX_STDERR
-    const accepted = chunk.subarray(0, Math.max(0, max - session.stderrBytes))
-    if (accepted.byteLength === 0) {
+    const retained = retainLanguageServerStderr(
+      session.stderrBytes,
+      chunk,
+      this.options.maxStderrBytes
+    )
+    if (retained.accepted.byteLength === 0) {
       return
     }
-    session.stderrBytes += accepted.byteLength
+    session.stderrBytes = retained.retainedBytes
     this.emit(sessionId, {
       type: 'status',
       status: {
         type: 'stderr',
-        text: accepted.toString('utf8'),
-        truncated: accepted.byteLength < chunk.byteLength || session.stderrBytes === max
+        text: retained.accepted.toString('utf8'),
+        truncated: retained.truncated
       }
     })
   }

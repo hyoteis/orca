@@ -1,8 +1,13 @@
 import type {
+  CodeIntelligenceProbeResult,
   CodeIntelligenceScope,
-  CodeIntelligenceScopeConsent
+  CodeIntelligenceScopeChange
 } from '../shared/code-intelligence-scope'
-import type { LanguageServerSessionsApi } from '../shared/language-server-session'
+import type {
+  LanguageServerLaunchRequest,
+  LanguageServerSessionOpenRequest,
+  LanguageServerSessionsApi
+} from '../shared/language-server-session'
 /* eslint-disable max-lines -- Why: the preload contract is intentionally centralized in one declaration file so renderer and preload stay in lockstep when IPC surfaces change. */
 import type {
   CreateHostedReviewArgs,
@@ -1119,7 +1124,17 @@ export type PluginMarketplaceHostInstallPreview = {
 
 export type PreloadApi = {
   codeIntelligence: {
-    grantConsent: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScopeConsent>
+    listScopes: () => Promise<readonly CodeIntelligenceScope[]>
+    probeScope: (scopeId: string) => Promise<CodeIntelligenceProbeResult>
+    upsertScope: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScope>
+    removeScope: (scopeId: string) => Promise<boolean>
+    grantConsent: (
+      request: Pick<LanguageServerSessionOpenRequest, 'scopeId' | 'revision'>
+    ) => Promise<CodeIntelligenceScope>
+    authorizeSession: (
+      request: LanguageServerSessionOpenRequest
+    ) => Promise<LanguageServerLaunchRequest>
+    onScopeChanged: (callback: (change: CodeIntelligenceScopeChange) => void) => () => void
   }
   languageServers: LanguageServerSessionsApi
   app: AppApi

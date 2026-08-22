@@ -1,4 +1,7 @@
-﻿import { LANGUAGE_SERVER_SESSION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
+import {
+  LANGUAGE_SERVER_CUSTOM_COMMAND_RUNTIME_CAPABILITY,
+  LANGUAGE_SERVER_SESSION_RUNTIME_CAPABILITY
+} from '../../../shared/protocol-version'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import type {
   LanguageServerSessionCallbacks,
@@ -21,8 +24,19 @@ export async function openRuntimeLanguageServerSession(
   ) {
     throw new Error('Remote Runtime Host does not support language-server sessions')
   }
+  const launch = await window.api.codeIntelligence.authorizeSession(request)
+  if (
+    launch.command &&
+    !(await runtimeEnvironmentSupportsCapability(
+      environmentId,
+      LANGUAGE_SERVER_CUSTOM_COMMAND_RUNTIME_CAPABILITY
+    ))
+  ) {
+    throw new Error('Remote Runtime Host does not support custom language-server commands')
+  }
+  const { members: _members, scopeId: _scopeId, revision: _revision, ...params } = launch
   const subscription = await api.subscribe(
-    { selector: environmentId, method: 'languageServer.session', params: request },
+    { selector: environmentId, method: 'languageServer.session', params },
     {
       onResponse: (response) => {
         if (!response.ok || !response.result || typeof response.result !== 'object') {

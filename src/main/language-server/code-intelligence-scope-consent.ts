@@ -1,4 +1,4 @@
-﻿import { createHash } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import {
   normalizeCodeIntelligenceScope,
   scopeConfigurationPayload,
@@ -6,12 +6,15 @@ import {
   type CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (value && typeof value === 'object')
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(',')}]`
+  }
+  if (value && typeof value === 'object') {
     return `{${Object.entries(value as Record<string, unknown>)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
       .join(',')}}`
+  }
   return JSON.stringify(value) ?? 'null'
 }
 export function getCodeIntelligenceConfigurationFingerprint(scope: CodeIntelligenceScope): string {

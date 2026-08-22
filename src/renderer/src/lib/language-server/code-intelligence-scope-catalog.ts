@@ -1,52 +1,49 @@
-﻿import {
+import {
   normalizeCodeIntelligenceScope,
-  scopeConfigurationPayload,
   type CodeIntelligenceScope
 } from '../../../../shared/code-intelligence-scope'
+
+type CodeIntelligenceScopePersistence = {
+  upsert: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScope>
+  remove: (scopeId: string) => Promise<boolean>
+}
+
 export class CodeIntelligenceScopeCatalog {
   private scopes: CodeIntelligenceScope[]
   private readonly listeners = new Set<(scopeId: string) => void>()
   constructor(
     initial: readonly CodeIntelligenceScope[],
-    private readonly persist: (scopes: readonly CodeIntelligenceScope[]) => void | Promise<void>
+    private readonly persistence: CodeIntelligenceScopePersistence
   ) {
     this.scopes = initial.map(normalizeCodeIntelligenceScope)
   }
   list(): readonly CodeIntelligenceScope[] {
     return this.scopes.map((scope) => structuredClone(scope))
   }
-  async upsert(next: CodeIntelligenceScope): Promise<void> {
-    let normalized = normalizeCodeIntelligenceScope(next)
-    const index = this.scopes.findIndex((scope) => scope.id === normalized.id)
-    const prior = index >= 0 ? this.scopes[index] : null
-    const changed = prior
-      ? JSON.stringify(scopeConfigurationPayload(prior)) !==
-        JSON.stringify(scopeConfigurationPayload(normalized))
-      : true
-    if (prior && changed) {
-      normalized = { ...normalized, consent: undefined, revision: prior.revision + 1 }
-    }
-    if (!prior && normalized.revision < 1) {
-      normalized = { ...normalized, revision: 1 }
-    }
-    if (index >= 0) {
-      this.scopes[index] = normalized
+  async upsert(input: CodeIntelligenceScope): Promise<void> {
+    const normalized = normalizeCodeIntelligenceScope(input)
+    const prior = this.scopes.find((scope) => scope.id === normalized.id)
+    const persisted = normalizeCodeIntelligenceScope(await this.persistence.upsert(normalized))
+    const index = this.scopes.findIndex((scope) => scope.id === persisted.id)
+    if (index !== -1) {
+      this.scopes[index] = persisted
     } else {
-      this.scopes.push(normalized)
+      this.scopes.push(persisted)
     }
-    await this.persist(this.list())
-    if (prior && changed) {
+    if (prior && prior.revision !== persisted.revision) {
       for (const listener of this.listeners) {
-        listener(normalized.id)
+        listener(persisted.id)
       }
     }
   }
   async remove(scopeId: string): Promise<void> {
-    const next = this.scopes.filter((scope) => scope.id !== scopeId)
-    if (next.length === this.scopes.length) return
-    this.scopes = next
-    await this.persist(this.list())
-    for (const listener of this.listeners) listener(scopeId)
+    if (!(await this.persistence.remove(scopeId))) {
+      return
+    }
+    this.scopes = this.scopes.filter((scope) => scope.id !== scopeId)
+    for (const listener of this.listeners) {
+      listener(scopeId)
+    }
   }
   subscribeRestart(listener: (scopeId: string) => void): () => void {
     this.listeners.add(listener)

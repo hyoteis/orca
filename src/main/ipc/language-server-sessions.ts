@@ -1,8 +1,10 @@
-﻿import { ipcMain, type WebContents } from 'electron'
+import { ipcMain, type WebContents } from 'electron'
+import { parseExecutionHostId } from '../../shared/execution-host'
 import type {
   LanguageServerSessionEvent,
   LanguageServerSessionOpenRequest
 } from '../../shared/language-server-session'
+import type { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 import {
   LocalLanguageServerSessionManager,
   resolveDefaultLocalLanguageServerCommand
@@ -13,9 +15,14 @@ import {
 } from '../ssh/ssh-language-server-session-manager'
 import { getSshConnectionManager } from './ssh'
 
-export function registerLanguageServerSessionHandlers(): void {
+type SessionRoute = {
+  send: (bytes: Uint8Array<ArrayBufferLike>) => boolean
+  close: () => void
+}
+
+export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceScopeStore): void {
   const owners = new Map<string, WebContents>()
-  const routes = new Map<string, 'local' | 'ssh'>()
+  const routes = new Map<string, SessionRoute>()
   const emit = (sessionId: string, event: LanguageServerSessionEvent): void => {
     const owner = owners.get(sessionId)
     if (!owner?.isDestroyed()) {
@@ -29,32 +36,49 @@ export function registerLanguageServerSessionHandlers(): void {
       routes.delete(sessionId)
     }
   }
-  const manager = new LocalLanguageServerSessionManager(emit)
+  const localManager = new LocalLanguageServerSessionManager(emit)
   const sshManager = new SshLanguageServerSessionManager(
     emit,
     resolveDefaultLocalLanguageServerCommand
   )
+  const closeOwnedSession = (sessionId: string): void => {
+    owners.delete(sessionId)
+    const route = routes.get(sessionId)
+    routes.delete(sessionId)
+    route?.close()
+  }
+
   ipcMain.handle(
     'languageServers:open',
     async (event, request: LanguageServerSessionOpenRequest) => {
+      const launch = scopes.authorizeSession(request)
+      const host = parseExecutionHostId(launch.executionHostId)
+      if (!host || host.kind === 'runtime') {
+        throw new Error('Runtime language-server sessions must use the Runtime adapter')
+      }
       owners.set(request.sessionId, event.sender)
       try {
-        if (request.executionHostId?.startsWith('ssh:')) {
-          const targetId = request.executionHostId.slice('ssh:'.length)
+        if (host.kind === 'ssh') {
           const connectionManager = getSshConnectionManager()
-          const connection = connectionManager?.getConnection(targetId)
+          const connection = connectionManager?.getConnection(host.targetId)
           if (!connection) {
-            throw new Error(`SSH target is not connected: ${targetId}`)
+            throw new Error(`SSH target is not connected: ${host.targetId}`)
           }
-          routes.set(request.sessionId, 'ssh')
           const buildCommand =
-            connectionManager?.getState(targetId)?.remotePlatform === 'win32'
+            connectionManager?.getState(host.targetId)?.remotePlatform === 'win32'
               ? buildWindowsLanguageServerCommand
               : undefined
-          await sshManager.open(connection, request, buildCommand)
+          await sshManager.open(connection, launch, buildCommand)
+          routes.set(request.sessionId, {
+            send: (bytes) => sshManager.send(request.sessionId, bytes),
+            close: () => sshManager.close(request.sessionId)
+          })
         } else {
-          routes.set(request.sessionId, 'local')
-          manager.open(request)
+          localManager.open(launch)
+          routes.set(request.sessionId, {
+            send: (bytes) => localManager.send(request.sessionId, bytes),
+            close: () => localManager.close(request.sessionId)
+          })
         }
       } catch (error) {
         owners.delete(request.sessionId)
@@ -63,14 +87,7 @@ export function registerLanguageServerSessionHandlers(): void {
       }
       event.sender.once('destroyed', () => {
         if (owners.get(request.sessionId) === event.sender) {
-          owners.delete(request.sessionId)
-          const route = routes.get(request.sessionId)
-          routes.delete(request.sessionId)
-          if (route === 'ssh') {
-            sshManager.close(request.sessionId)
-          } else {
-            manager.close(request.sessionId)
-          }
+          closeOwnedSession(request.sessionId)
         }
       })
       return { sessionId: request.sessionId }
@@ -80,25 +97,13 @@ export function registerLanguageServerSessionHandlers(): void {
     'languageServers:write',
     (event, payload: { sessionId: string; bytes: Uint8Array<ArrayBufferLike> }) => {
       if (owners.get(payload.sessionId) === event.sender) {
-        if (routes.get(payload.sessionId) === 'ssh') {
-          sshManager.send(payload.sessionId, payload.bytes)
-        } else {
-          manager.send(payload.sessionId, payload.bytes)
-        }
+        routes.get(payload.sessionId)?.send(payload.bytes)
       }
     }
   )
   ipcMain.on('languageServers:close', (event, payload: { sessionId: string }) => {
-    if (owners.get(payload.sessionId) !== event.sender) {
-      return
-    }
-    owners.delete(payload.sessionId)
-    const route = routes.get(payload.sessionId)
-    routes.delete(payload.sessionId)
-    if (route === 'ssh') {
-      sshManager.close(payload.sessionId)
-    } else {
-      manager.close(payload.sessionId)
+    if (owners.get(payload.sessionId) === event.sender) {
+      closeOwnedSession(payload.sessionId)
     }
   })
 }
