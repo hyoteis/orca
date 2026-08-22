@@ -54,6 +54,9 @@ export function normalizeCodeIntelligenceScope(
   if (!scope.id.trim() || !scope.name.trim() || members.length === 0) {
     throw new Error('Code intelligence scope requires an id, name, and member')
   }
+  if (scope.serverSource.type === 'custom' && !scope.serverSource.executable.trim()) {
+    throw new Error('Custom language server executable is required')
+  }
   return { ...scope, id: scope.id.trim(), name: scope.name.trim(), members }
 }
 export function scopeConfigurationPayload(scope: CodeIntelligenceScope): unknown {

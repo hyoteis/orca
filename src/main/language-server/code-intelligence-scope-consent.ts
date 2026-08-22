@@ -12,7 +12,7 @@ function canonical(value: unknown): string {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
       .join(',')}}`
-  return JSON.stringify(value)
+  return JSON.stringify(value) ?? 'null'
 }
 export function getCodeIntelligenceConfigurationFingerprint(scope: CodeIntelligenceScope): string {
   return createHash('sha256')

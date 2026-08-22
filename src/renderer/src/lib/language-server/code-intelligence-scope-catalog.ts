@@ -24,7 +24,10 @@ export class CodeIntelligenceScopeCatalog {
         JSON.stringify(scopeConfigurationPayload(normalized))
       : true
     if (prior && changed) {
-      normalized = { ...normalized, consent: undefined }
+      normalized = { ...normalized, consent: undefined, revision: prior.revision + 1 }
+    }
+    if (!prior && normalized.revision < 1) {
+      normalized = { ...normalized, revision: 1 }
     }
     if (index >= 0) {
       this.scopes[index] = normalized
