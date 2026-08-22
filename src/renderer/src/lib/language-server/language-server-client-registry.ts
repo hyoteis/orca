@@ -7,6 +7,11 @@
   type Message,
   type MessageConnection
 } from 'vscode-jsonrpc/browser'
+import {
+  InitializeRequest,
+  type InitializeParams,
+  type InitializeResult
+} from 'vscode-languageserver-protocol'
 import type {
   LanguageServerSessionEvent,
   LanguageServerSessionHandle,
@@ -87,13 +92,22 @@ export type LanguageServerClientKey = { executionHostId: string; scopeId: string
 export class LanguageServerClientRegistry {
   private readonly clients = new Map<
     string,
-    { generation: number; connection: MessageConnection; handle: LanguageServerSessionHandle }
+    {
+      generation: number
+      requestGeneration: number
+      connection: MessageConnection
+      handle: LanguageServerSessionHandle
+    }
   >()
   constructor(private readonly api: NonNullable<Window['api']>['languageServers']) {}
   async open(
     key: LanguageServerClientKey,
     request: LanguageServerSessionOpenRequest
-  ): Promise<{ generation: number; connection: MessageConnection }> {
+  ): Promise<{
+    generation: number
+    connection: MessageConnection
+    initialize: (params: InitializeParams) => Promise<InitializeResult>
+  }> {
     const id = JSON.stringify(key),
       generation = (this.clients.get(id)?.generation ?? 0) + 1
     this.close(key)
@@ -111,8 +125,30 @@ export class LanguageServerClientRegistry {
     const writer = new ByteWriter(() => handle),
       connection = createMessageConnection(reader, writer)
     connection.listen()
-    this.clients.set(id, { generation, connection, handle })
-    return { generation, connection }
+    this.clients.set(id, { generation, requestGeneration: 0, connection, handle })
+    return {
+      generation,
+      connection,
+      initialize: (params) => connection.sendRequest(InitializeRequest.type, params)
+    }
+  }
+  nextRequestGeneration(key: LanguageServerClientKey): number {
+    const current = this.clients.get(JSON.stringify(key))
+    if (!current) {
+      throw new Error('Language server client is not open')
+    }
+    current.requestGeneration += 1
+    return current.requestGeneration
+  }
+  isCurrentRequest(
+    key: LanguageServerClientKey,
+    sessionGeneration: number,
+    requestGeneration: number
+  ): boolean {
+    const current = this.clients.get(JSON.stringify(key))
+    return (
+      current?.generation === sessionGeneration && current.requestGeneration === requestGeneration
+    )
   }
   close(key: LanguageServerClientKey): void {
     const current = this.clients.get(JSON.stringify(key))
