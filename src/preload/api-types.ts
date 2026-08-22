@@ -1,3 +1,7 @@
+import type {
+  CodeIntelligenceScope,
+  CodeIntelligenceScopeConsent
+} from '../shared/code-intelligence-scope'
 import type { LanguageServerSessionsApi } from '../shared/language-server-session'
 /* eslint-disable max-lines -- Why: the preload contract is intentionally centralized in one declaration file so renderer and preload stay in lockstep when IPC surfaces change. */
 import type {
@@ -1114,6 +1118,9 @@ export type PluginMarketplaceHostInstallPreview = {
 }
 
 export type PreloadApi = {
+  codeIntelligence: {
+    grantConsent: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScopeConsent>
+  }
   languageServers: LanguageServerSessionsApi
   app: AppApi
   orcaProfiles: {

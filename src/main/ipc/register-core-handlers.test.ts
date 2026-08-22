@@ -29,6 +29,7 @@ const {
   registerRuntimeHandlersMock,
   registerRuntimeEnvironmentHandlersMock,
   registerLanguageServerSessionHandlersMock,
+  registerCodeIntelligenceHandlersMock,
   registerEphemeralVmHandlersMock,
   registerAiVaultHandlersMock,
   registerOrcaProfileHandlersMock,
@@ -95,6 +96,7 @@ const {
   registerRuntimeHandlersMock: vi.fn(),
   registerRuntimeEnvironmentHandlersMock: vi.fn(),
   registerLanguageServerSessionHandlersMock: vi.fn(),
+  registerCodeIntelligenceHandlersMock: vi.fn(),
   registerEphemeralVmHandlersMock: vi.fn(),
   registerAiVaultHandlersMock: vi.fn(),
   registerOrcaProfileHandlersMock: vi.fn(),
@@ -299,6 +301,10 @@ vi.mock('./runtime-environments', () => ({
 
 vi.mock('./language-server-sessions', () => ({
   registerLanguageServerSessionHandlers: registerLanguageServerSessionHandlersMock
+}))
+
+vi.mock('./code-intelligence', () => ({
+  registerCodeIntelligenceHandlers: registerCodeIntelligenceHandlersMock
 }))
 
 vi.mock('./ephemeral-vm', () => ({

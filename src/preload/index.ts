@@ -493,6 +493,9 @@ ipcRenderer.on('ui:findInBrowserPage', (_event, source: unknown) => {
 
 // Custom APIs for renderer
 const api = {
+  codeIntelligence: {
+    grantConsent: (scope) => ipcRenderer.invoke('codeIntelligence:grantConsent', scope)
+  } satisfies PreloadApi['codeIntelligence'],
   languageServers: createLanguageServerSessionsApi(ipcRenderer),
   app: {
     getIdentity: (): Promise<AppIdentity> => ipcRenderer.invoke('app:getIdentity'),

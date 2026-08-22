@@ -1,3 +1,4 @@
+import type { CodeIntelligenceScope } from './code-intelligence-scope'
 /* eslint-disable max-lines */
 import type { ExecutionHostId } from './execution-host'
 import type {
@@ -2806,6 +2807,8 @@ export type GlobalSettings = {
   uiLanguage: UiLanguage
   appIcon: AppIconId
   appFontFamily: string
+  /** User-authorized semantic scopes; absent for profiles created before code intelligence. */
+  codeIntelligenceScopes?: CodeIntelligenceScope[]
   editorAutoSave: boolean
   editorAutoSaveDelayMs: number
   editorMinimapEnabled: boolean
