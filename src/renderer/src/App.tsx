@@ -361,6 +361,9 @@ const AddProjectFromFolderDialog = lazy(
 )
 const ProjectAddedDialog = lazy(() => import('./components/sidebar/ProjectAddedDialog'))
 const DeleteWorktreeDialog = lazy(() => import('./components/sidebar/DeleteWorktreeDialog'))
+const CodeIntelligenceCmakeSetupDialog = lazy(
+  () => import('./components/sidebar/CodeIntelligenceCmakeSetupDialog')
+)
 const PreservedBranchBatchReviewModal = lazy(
   () => import('./components/sidebar/PreservedBranchBatchReviewModal')
 )
@@ -2689,6 +2692,16 @@ function App(): React.JSX.Element {
               <ZoomOverlay />
             </RecoverableRenderErrorBoundary>
             <Suspense fallback={null}>
+              {activeModal === 'code-intelligence-cmake-setup' ? (
+                <RecoverableRenderErrorBoundary
+                  boundaryId="modal.code-intelligence-cmake-setup"
+                  surface="modal"
+                  resetKey
+                  compact
+                >
+                  <CodeIntelligenceCmakeSetupDialog />
+                </RecoverableRenderErrorBoundary>
+              ) : null}
               {activeModal === 'delete-worktree' ? (
                 <RecoverableRenderErrorBoundary
                   boundaryId="modal.delete-worktree"

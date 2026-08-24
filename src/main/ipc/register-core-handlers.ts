@@ -219,7 +219,7 @@ export function registerCoreHandlers(
   registerRuntimeEnvironmentHandlers(store)
   const codeIntelligenceScopes = new CodeIntelligenceScopeStore(store)
   registerLanguageServerSessionHandlers(codeIntelligenceScopes)
-  registerCodeIntelligenceHandlers(codeIntelligenceScopes)
+  registerCodeIntelligenceHandlers(codeIntelligenceScopes, store)
   registerEphemeralVmHandlers(store, pluginService)
   registerAiVaultHandlers({
     getAdditionalCodexHomePaths: lifecycleOptions.getAdditionalAiVaultCodexHomePaths,

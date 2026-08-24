@@ -495,6 +495,7 @@ ipcRenderer.on('ui:findInBrowserPage', (_event, source: unknown) => {
 const api = {
   codeIntelligence: {
     listScopes: () => ipcRenderer.invoke('codeIntelligence:listScopes'),
+    setupCpp: (request) => ipcRenderer.invoke('codeIntelligence:setupCpp', request),
     probeScope: (scopeId) => ipcRenderer.invoke('codeIntelligence:probeScope', scopeId),
     upsertScope: (scope) => ipcRenderer.invoke('codeIntelligence:upsertScope', scope),
     removeScope: (scopeId) => ipcRenderer.invoke('codeIntelligence:removeScope', scopeId),

@@ -300,6 +300,7 @@ import { useHostHeaderDrag } from './host-header-drag'
 import { buildSidebarHostOptions } from './sidebar-host-options'
 import { HostSectionHeaderMenu } from './HostSectionHeaderMenu'
 import { ProjectHeaderActions } from './ProjectHeaderActions'
+import { ProjectCodeIntelligenceSetupContext } from './ProjectCodeIntelligenceSetupContext'
 import { translate } from '@/i18n/i18n'
 import { folderWorkspaceKey, getActiveSidebarWorkspaceId } from '../../../../shared/workspace-scope'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
@@ -4279,7 +4280,8 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                       : { transform: getVirtualRowTransform(vItem.start) }
                   }
                 >
-                  <div
+                  <ProjectCodeIntelligenceSetupContext repoId={row.repo?.id}>
+                    <div
                     id={getWorktreeOptionId(row.key)}
                     role="button"
                     tabIndex={0}
@@ -4778,7 +4780,8 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                         </Tooltip>
                       ) : null}
                     </ProjectHeaderActions>
-                  </div>
+                    </div>
+                  </ProjectCodeIntelligenceSetupContext>
                 </div>
               )
             }

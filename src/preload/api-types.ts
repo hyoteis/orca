@@ -1,4 +1,8 @@
 import type {
+  CodeIntelligenceCmakeSetupRequest,
+  CodeIntelligenceCmakeSetupResult
+} from '../shared/code-intelligence-cmake-setup'
+import type {
   CodeIntelligenceProbeResult,
   CodeIntelligenceScope,
   CodeIntelligenceScopeChange
@@ -1125,6 +1129,9 @@ export type PluginMarketplaceHostInstallPreview = {
 export type PreloadApi = {
   codeIntelligence: {
     listScopes: () => Promise<readonly CodeIntelligenceScope[]>
+    setupCpp: (
+      request: CodeIntelligenceCmakeSetupRequest
+    ) => Promise<CodeIntelligenceCmakeSetupResult>
     probeScope: (scopeId: string) => Promise<CodeIntelligenceProbeResult>
     upsertScope: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScope>
     removeScope: (scopeId: string) => Promise<boolean>

@@ -1,4 +1,5 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
+import { join } from 'node:path'
 import type {
   CodeIntelligenceProbeResult,
   CodeIntelligenceScope,
@@ -6,6 +7,8 @@ import type {
 } from '../../shared/code-intelligence-scope'
 import type { LanguageServerSessionOpenRequest } from '../../shared/language-server-session'
 import type { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
+import type { Store } from '../persistence'
+import { CodeIntelligenceCmakeSetup } from '../language-server/code-intelligence-cmake-setup'
 import { probeLocalLanguageServer } from '../language-server/local-language-server-probe'
 import { resolveDefaultLocalLanguageServerCommand } from '../language-server/local-language-server-session-manager'
 import { parseExecutionHostId } from '../../shared/execution-host'
@@ -84,8 +87,16 @@ async function probeScope(
   }
 }
 
-export function registerCodeIntelligenceHandlers(scopes: CodeIntelligenceScopeStore): void {
+export function registerCodeIntelligenceHandlers(
+  scopes: CodeIntelligenceScopeStore,
+  store: Store
+): void {
+  const cmakeSetup = new CodeIntelligenceCmakeSetup(
+    store,
+    join(app.getPath('userData'), 'code-intelligence', 'cmake')
+  )
   ipcMain.handle('codeIntelligence:listScopes', () => scopes.list())
+  ipcMain.handle('codeIntelligence:setupCpp', (_event, request) => cmakeSetup.run(request))
   ipcMain.handle('codeIntelligence:probeScope', (_event, scopeId: string) =>
     probeScope(scopes, scopeId)
   )

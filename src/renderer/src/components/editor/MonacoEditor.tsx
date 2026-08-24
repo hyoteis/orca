@@ -66,6 +66,7 @@ import {
 import { installMonacoE2EProbe } from './monaco-e2e-probe'
 import { monacoFindOptions } from './monaco-find-options'
 import { matchesPendingEditorFocusRequest } from './pending-editor-focus-request'
+import { navigateToCppDefinition } from '@/lib/language-server/cpp-definition-navigation'
 
 type MonacoEditorProps = {
   fileId: string
@@ -425,6 +426,69 @@ export default function MonacoEditor({
         setSelectionAnnotationTarget(null)
         return true
       })
+      const runGoToDefinition = async (): Promise<void> => {
+        const position = editorInstance.getPosition()
+        if (!position || !worktreeId) {
+          return
+        }
+        const toastId = toast.loading(
+          translate('settings.codeIntelligence.findingDefinition', 'Finding definition...')
+        )
+        try {
+          const navigated = await navigateToCppDefinition({
+            fileId,
+            filePath,
+            relativePath: propsRef.current.relativePath,
+            worktreeId,
+            language: propsRef.current.language,
+            text: editorInstance.getValue(),
+            lineNumber: position.lineNumber,
+            column: position.column
+          })
+          toast.dismiss(toastId)
+          if (!navigated) {
+            toast.info(
+              translate('settings.codeIntelligence.definitionNotFound', 'No definition found')
+            )
+          }
+        } catch (error) {
+          toast.dismiss(toastId)
+          toast.error(
+            translate(
+              'settings.codeIntelligence.definitionFailed',
+              'Could not open the definition'
+            ),
+            { description: error instanceof Error ? error.message : String(error) }
+          )
+        }
+      }
+      const goToDefinitionAction = editorInstance.addAction({
+        id: 'orca.goToDefinition',
+        label: translate('settings.codeIntelligence.goToDefinition', 'Go to Definition'),
+        keybindings: [monaco.KeyCode.F12],
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 1,
+        run: runGoToDefinition
+      })
+      const definitionMouseDownSub = editorInstance.onMouseDown((event) => {
+        const isMac = navigator.userAgent.includes('Mac')
+        const modifierPressed = isMac ? event.event.metaKey : event.event.ctrlKey
+        if (
+          !modifierPressed ||
+          !event.event.leftButton ||
+          event.target.type !== monaco.editor.MouseTargetType.CONTENT_TEXT ||
+          !event.target.position ||
+          !worktreeId ||
+          !['c', 'cpp', 'objective-c', 'objective-cpp'].includes(propsRef.current.language)
+        ) {
+          return
+        }
+        event.event.preventDefault()
+        event.event.stopPropagation()
+        editorInstance.setPosition(event.target.position)
+        void runGoToDefinition()
+      })
+
       const searchInFilesAction = editorInstance.addAction({
         id: 'orca.searchInFiles',
         label: translate('auto.components.editor.MonacoEditor.fd68ae03b3', 'Search in Files'),
@@ -516,6 +580,8 @@ export default function MonacoEditor({
         cursorPositionSub.dispose()
         scrollStateSub.dispose()
         gutterMouseDownSub.dispose()
+        definitionMouseDownSub.dispose()
+        goToDefinitionAction.dispose()
         cleanupSaveShortcut()
         cleanupFindShortcut()
         cleanupAddReviewNoteShortcut()
