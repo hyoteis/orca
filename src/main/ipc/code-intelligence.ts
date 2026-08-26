@@ -8,15 +8,17 @@ import type {
 import type { LanguageServerSessionOpenRequest } from '../../shared/language-server-session'
 import type { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 import type { Store } from '../persistence'
-import { CodeIntelligenceCmakeSetup } from '../language-server/code-intelligence-cmake-setup'
+import { CodeIntelligenceCppSetup } from '../language-server/code-intelligence-cpp-setup'
+import { CodeIntelligenceSshCppSetup } from '../language-server/code-intelligence-ssh-cpp-setup'
 import { probeLocalLanguageServer } from '../language-server/local-language-server-probe'
 import { resolveDefaultLocalLanguageServerCommand } from '../language-server/local-language-server-session-manager'
-import { parseExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 import {
   buildWindowsLanguageServerCommand,
   probeSshLanguageServer
 } from '../ssh/ssh-language-server-session-manager'
 import { getSshConnectionManager } from './ssh'
+import { getSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
 
 function broadcastScopeChange(change: CodeIntelligenceScopeChange): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -91,12 +93,21 @@ export function registerCodeIntelligenceHandlers(
   scopes: CodeIntelligenceScopeStore,
   store: Store
 ): void {
-  const cmakeSetup = new CodeIntelligenceCmakeSetup(
+  const cppSetup = new CodeIntelligenceCppSetup(
     store,
-    join(app.getPath('userData'), 'code-intelligence', 'cmake')
+    join(app.getPath('userData'), 'code-intelligence', 'cpp')
   )
+  const sshCppSetup = new CodeIntelligenceSshCppSetup(store, {
+    getConnection: (targetId) => getSshConnectionManager()?.getConnection(targetId),
+    getProvider: (targetId) => getSshFilesystemProvider(targetId),
+    getPlatform: (targetId) => getSshConnectionManager()?.getState(targetId)?.remotePlatform
+  })
   ipcMain.handle('codeIntelligence:listScopes', () => scopes.list())
-  ipcMain.handle('codeIntelligence:setupCpp', (_event, request) => cmakeSetup.run(request))
+  ipcMain.handle('codeIntelligence:setupCpp', async (_event, request) => {
+    const repo = store.getRepo(request.repoId)
+    const host = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
+    return host?.kind === 'ssh' ? sshCppSetup.run(request) : cppSetup.run(request)
+  })
   ipcMain.handle('codeIntelligence:probeScope', (_event, scopeId: string) =>
     probeScope(scopes, scopeId)
   )

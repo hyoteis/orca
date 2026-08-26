@@ -31,7 +31,7 @@ import {
   Save,
   Trash2
 } from 'lucide-react'
-import { monaco } from '@/lib/monaco-setup'
+import { MONACO_DARK_THEME, MONACO_LIGHT_THEME, monaco } from '@/lib/monaco-setup'
 import {
   computeEditorFontSize,
   resolveEditorFontFamily,
@@ -374,7 +374,7 @@ function CodeCell({
   }, [])
 
   useEffect(() => {
-    monaco.editor.setTheme(isDark ? 'vs-dark' : 'vs')
+    monaco.editor.setTheme(isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME)
   }, [isDark])
 
   if (!active) {
@@ -407,7 +407,7 @@ function CodeCell({
         height={editorHeight}
         defaultLanguage={cell.language}
         language={cell.language}
-        theme={isDark ? 'vs-dark' : 'vs'}
+        theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}
         value={source}
         onMount={handleMount}
         onChange={(value) => onChange(value ?? '')}

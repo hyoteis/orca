@@ -6,17 +6,17 @@ import { join } from 'node:path'
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000
 const MAX_LOG_BYTES = 1024 * 1024
 
-export type CmakeSetupToolName = 'clangd' | 'cmake' | 'ninja'
-export type CmakeSetupCommandResult = { code: number | null; output: string }
-export type CmakeSetupToolPaths = Partial<Record<CmakeSetupToolName, string>>
-export type CmakeSetupCommandRunner = (
+export type CppSetupToolName = 'clangd' | 'cmake' | 'ninja' | 'gn'
+export type CppSetupCommandResult = { code: number | null; output: string }
+export type CppSetupToolPaths = Partial<Record<CppSetupToolName, string>>
+export type CppSetupCommandRunner = (
   executable: string,
   args: readonly string[],
   cwd: string,
   env?: NodeJS.ProcessEnv
-) => Promise<CmakeSetupCommandResult>
+) => Promise<CppSetupCommandResult>
 
-function executableName(tool: CmakeSetupToolName, platform: NodeJS.Platform): string {
+function executableName(tool: CppSetupToolName, platform: NodeJS.Platform): string {
   return platform === 'win32' ? `${tool}.exe` : tool
 }
 
@@ -29,7 +29,7 @@ async function isExecutable(path: string): Promise<boolean> {
   }
 }
 
-function windowsToolCandidates(tool: CmakeSetupToolName, env: NodeJS.ProcessEnv): string[] {
+function windowsToolCandidates(tool: CppSetupToolName, env: NodeJS.ProcessEnv): string[] {
   const programFiles = env.ProgramFiles ?? 'C:\\Program Files'
   const localAppData = env.LOCALAPPDATA ?? ''
   const name = executableName(tool, 'win32')
@@ -62,7 +62,7 @@ function windowsToolCandidates(tool: CmakeSetupToolName, env: NodeJS.ProcessEnv)
       candidates.push(join(vsRoot, 'CommonExtensions', 'Microsoft', 'CMake', 'CMake', 'bin', name))
     } else if (tool === 'ninja') {
       candidates.push(join(vsRoot, 'CommonExtensions', 'Microsoft', 'CMake', 'Ninja', name))
-    } else {
+    } else if (tool === 'clangd') {
       candidates.push(
         join(vsRoot, 'CommonExtensions', 'Microsoft', 'VC', 'Tools', 'Llvm', 'x64', 'bin', name)
       )
@@ -72,7 +72,7 @@ function windowsToolCandidates(tool: CmakeSetupToolName, env: NodeJS.ProcessEnv)
 }
 
 function pathCandidates(
-  tool: CmakeSetupToolName,
+  tool: CppSetupToolName,
   platform: NodeJS.Platform,
   env: NodeJS.ProcessEnv
 ): string[] {
@@ -86,12 +86,12 @@ function pathCandidates(
   return [...new Set(candidates)]
 }
 
-export async function discoverCmakeSetupTools(
+export async function discoverCppSetupTools(
   platform: NodeJS.Platform,
   env: NodeJS.ProcessEnv
-): Promise<CmakeSetupToolPaths> {
-  const result: CmakeSetupToolPaths = {}
-  for (const tool of ['clangd', 'cmake', 'ninja'] as const) {
+): Promise<CppSetupToolPaths> {
+  const result: CppSetupToolPaths = {}
+  for (const tool of ['clangd', 'cmake', 'ninja', 'gn'] as const) {
     for (const candidate of pathCandidates(tool, platform, env)) {
       if (await isExecutable(candidate)) {
         result[tool] = candidate
@@ -102,12 +102,43 @@ export async function discoverCmakeSetupTools(
   return result
 }
 
+export async function discoverBundledGn(
+  workspaceRoot: string,
+  platform: NodeJS.Platform
+): Promise<string | null> {
+  const executable = executableName('gn', platform)
+  const platformDirectories =
+    platform === 'win32'
+      ? ['win', 'win64']
+      : platform === 'darwin'
+        ? ['mac', 'mac_arm64']
+        : ['linux64', 'linux']
+  const candidates = [
+    ...platformDirectories.map((directory) =>
+      join(workspaceRoot, 'buildtools', directory, executable)
+    ),
+    join(workspaceRoot, 'buildtools', executable),
+    join(workspaceRoot, 'tools', executable)
+  ]
+  for (const candidate of candidates) {
+    if (await isExecutable(candidate)) {
+      return candidate
+    }
+  }
+  return null
+}
+
 function packageInstallCommands(
   platform: NodeJS.Platform,
-  missing: readonly CmakeSetupToolName[]
+  missing: readonly CppSetupToolName[]
 ): string[][] {
   if (platform === 'win32') {
-    const packages: Record<CmakeSetupToolName, string> = {
+    if (missing.includes('gn')) {
+      throw new Error(
+        'GN was not found. Install depot_tools or add a gn.exe binary to PATH, then retry.'
+      )
+    }
+    const packages: Record<Exclude<CppSetupToolName, 'gn'>, string> = {
       clangd: 'LLVM.LLVM',
       cmake: 'Kitware.CMake',
       ninja: 'Ninja-build.Ninja'
@@ -126,19 +157,21 @@ function packageInstallCommands(
   if (platform === 'darwin') {
     return [['brew', 'install', ...missing.map((tool) => (tool === 'clangd' ? 'llvm' : tool))]]
   }
-  const packages = missing.map((tool) => (tool === 'ninja' ? 'ninja-build' : tool))
+  const packages = missing.map((tool) =>
+    tool === 'ninja' ? 'ninja-build' : tool === 'gn' ? 'generate-ninja' : tool
+  )
   return [
     ['sudo', '-n', 'apt-get', 'update'],
     ['sudo', '-n', 'apt-get', 'install', '-y', ...packages]
   ]
 }
 
-export function runCmakeSetupCommand(
+export function runCppSetupCommand(
   executable: string,
   args: readonly string[],
   cwd: string,
   env: NodeJS.ProcessEnv = process.env
-): Promise<CmakeSetupCommandResult> {
+): Promise<CppSetupCommandResult> {
   return new Promise((resolveResult) => {
     const child = spawn(executable, [...args], {
       cwd,
@@ -230,7 +263,7 @@ function captureVisualStudioEnvironment(
   })
 }
 
-export async function resolveCmakeSetupEnvironment(
+export async function resolveCppSetupEnvironment(
   platform: NodeJS.Platform,
   env: NodeJS.ProcessEnv,
   logs: string[]
@@ -248,28 +281,28 @@ export async function resolveCmakeSetupEnvironment(
   throw new Error('Visual Studio C++ developer environment was not found')
 }
 
-export function appendCmakeSetupLog(
+export function appendCppSetupLog(
   logs: string[],
   title: string,
   command: readonly string[],
-  result: CmakeSetupCommandResult
+  result: CppSetupCommandResult
 ): void {
   logs.push(
     `\n## ${title}\n$ ${command.join(' ')}\n${result.output.trim()}\nExit: ${String(result.code)}`
   )
 }
 
-export async function installCmakeSetupTools(args: {
-  missing: readonly CmakeSetupToolName[]
+export async function installCppSetupTools(args: {
+  missing: readonly CppSetupToolName[]
   platform: NodeJS.Platform
   cwd: string
-  run: CmakeSetupCommandRunner
+  run: CppSetupCommandRunner
   logs: string[]
 }): Promise<string[]> {
   for (const command of packageInstallCommands(args.platform, args.missing)) {
     const [executable, ...commandArgs] = command
     const result = await args.run(executable, commandArgs, args.cwd)
-    appendCmakeSetupLog(args.logs, 'Install dependencies', command, result)
+    appendCppSetupLog(args.logs, 'Install dependencies', command, result)
     if (result.code !== 0) {
       throw new Error(`Dependency installation failed: ${executable}`)
     }

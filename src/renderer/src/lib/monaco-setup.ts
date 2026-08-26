@@ -87,6 +87,18 @@ installMonacoPeekReferencesPreviewOptions()
 // so right-click Paste works like Cmd+V (which already works via native events).
 installMonacoContextMenuPaste(monaco)
 
+export const MONACO_LIGHT_THEME = 'orca-light'
+export const MONACO_DARK_THEME = 'orca-dark'
+
+const semanticTheme = (base: 'vs' | 'vs-dark'): monaco.editor.IStandaloneThemeData => ({
+  base,
+  inherit: true,
+  rules: [],
+  colors: {}
+})
+monaco.editor.defineTheme(MONACO_LIGHT_THEME, semanticTheme('vs'))
+monaco.editor.defineTheme(MONACO_DARK_THEME, semanticTheme('vs-dark'))
+
 // Configure Monaco to use the locally bundled editor instead of CDN
 loader.config({ monaco })
 

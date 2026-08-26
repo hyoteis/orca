@@ -814,6 +814,25 @@ describe('registerFilesystemHandlers', () => {
     )
   })
 
+  it('opens the folder picker at the remembered download directory', async () => {
+    const provider = { downloadFolder: vi.fn().mockResolvedValue(undefined) }
+    getSshFilesystemProviderMock.mockReturnValue(provider)
+    showOpenDialogMock.mockResolvedValue({ canceled: false, filePaths: ['/downloads'] })
+    statMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
+    registerFilesystemHandlers(store as never)
+
+    await handlers.get('fs:downloadFolder')!(folderDownloadEvent, {
+      dirPath: '/remote/src',
+      connectionId: 'ssh-1',
+      defaultPath: '/previous/downloads'
+    })
+
+    expect(showOpenDialogMock).toHaveBeenCalledWith({
+      defaultPath: '/previous/downloads',
+      properties: ['openDirectory', 'createDirectory']
+    })
+  })
+
   it('returns canceled remote folder downloads without transferring', async () => {
     const provider = {
       stat: vi.fn().mockResolvedValue({ size: 0, type: 'directory', mtime: 123 }),

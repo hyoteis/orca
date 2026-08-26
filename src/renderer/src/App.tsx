@@ -223,6 +223,7 @@ import {
   refreshTerminalProviderSnapshotCapabilities
 } from './components/terminal/terminal-provider-snapshot-capability'
 import { useRemoteRuntimeRecoveryTriggers } from './runtime/use-remote-runtime-recovery-triggers'
+import { useMouseWorktreeHistoryNavigation } from './lib/mouse-worktree-history-navigation'
 
 // Why: bound the resume-record loss window on a hard kill to ~1 min; capture skips unchanged records so per-tick cost is negligible.
 const SLEEPING_AGENT_RESUME_CAPTURE_INTERVAL_MS = 60_000
@@ -361,8 +362,8 @@ const AddProjectFromFolderDialog = lazy(
 )
 const ProjectAddedDialog = lazy(() => import('./components/sidebar/ProjectAddedDialog'))
 const DeleteWorktreeDialog = lazy(() => import('./components/sidebar/DeleteWorktreeDialog'))
-const CodeIntelligenceCmakeSetupDialog = lazy(
-  () => import('./components/sidebar/CodeIntelligenceCmakeSetupDialog')
+const CodeIntelligenceCppSetupDialog = lazy(
+  () => import('./components/sidebar/CodeIntelligenceCppSetupDialog')
 )
 const PreservedBranchBatchReviewModal = lazy(
   () => import('./components/sidebar/PreservedBranchBatchReviewModal')
@@ -451,6 +452,7 @@ function App(): React.JSX.Element {
   const clearUnreadDockBadge = useUnreadDockBadge()
   useRadixBodyPointerEventsRecovery()
   useWebSessionTabsSync()
+  useMouseWorktreeHistoryNavigation()
   // Why restored: leaving the panel closed forces the user to reopen and re-maximize it,
   // and that size jump reflows a live TUI's buffer (see floating-terminal-panel-view-state).
   const [floatingTerminalOpen, setFloatingTerminalOpen] = useState(
@@ -2692,14 +2694,14 @@ function App(): React.JSX.Element {
               <ZoomOverlay />
             </RecoverableRenderErrorBoundary>
             <Suspense fallback={null}>
-              {activeModal === 'code-intelligence-cmake-setup' ? (
+              {activeModal === 'code-intelligence-cpp-setup' ? (
                 <RecoverableRenderErrorBoundary
-                  boundaryId="modal.code-intelligence-cmake-setup"
+                  boundaryId="modal.code-intelligence-cpp-setup"
                   surface="modal"
                   resetKey
                   compact
                 >
-                  <CodeIntelligenceCmakeSetupDialog />
+                  <CodeIntelligenceCppSetupDialog />
                 </RecoverableRenderErrorBoundary>
               ) : null}
               {activeModal === 'delete-worktree' ? (

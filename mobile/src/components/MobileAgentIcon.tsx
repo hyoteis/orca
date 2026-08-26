@@ -86,8 +86,26 @@ function AgentLetterIcon({ letter, size = 16 }: { letter: string; size?: number 
 }
 
 export function MobileAgentIcon({ agentId, size = 16 }: { agentId: string; size?: number }) {
-  if (agentId === 'claude' || agentId === 'claude-agent-teams' || agentId === 'codeagent') {
+  if (agentId === 'claude' || agentId === 'claude-agent-teams') {
     return <ClaudeIcon size={size} />
+  }
+  // Why: CodeAgent brand mark — blue uppercase italic "C", matching the desktop CodeAgentIcon.
+  if (agentId === 'codeagent') {
+    return (
+      <View style={[styles.letterIcon, { width: size, height: size }]}>
+        <Text
+          style={{
+            fontSize: size * 0.68,
+            fontStyle: 'italic',
+            fontWeight: '700',
+            color: '#2563EB',
+            fontFamily: 'Georgia, serif'
+          }}
+        >
+          C
+        </Text>
+      </View>
+    )
   }
   if (agentId === 'codex') {
     return <OpenAIIcon size={size} />

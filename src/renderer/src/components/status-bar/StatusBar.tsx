@@ -115,6 +115,11 @@ type StatusBarProps = {
 const PetStatusSegment = lazyWithRetry(() =>
   import('./PetStatusSegment').then((module) => ({ default: module.PetStatusSegment }))
 )
+const CodeIntelligenceStatusSegment = lazyWithRetry(() =>
+  import('./CodeIntelligenceStatusSegment').then((module) => ({
+    default: module.CodeIntelligenceStatusSegment
+  }))
+)
 const ResourceUsageStatusSegment = lazyWithRetry(() =>
   import('./ResourceUsageStatusSegment').then((module) => ({
     default: module.ResourceUsageStatusSegment
@@ -2356,6 +2361,7 @@ function StatusBarInner({ floatingTerminalOpen }: StatusBarProps): React.JSX.Ele
         <SkillUpdateStatusSegment iconOnly={iconOnly} />
         <UpdateStatusSegment compact={compact} iconOnly={iconOnly} />
         <React.Suspense fallback={null}>
+          <CodeIntelligenceStatusSegment iconOnly={iconOnly} />
           {petEnabled ? <PetStatusSegment /> : null}
           {showResourceUsage ? (
             <ResourceUsageStatusSegment compact={compact} iconOnly={iconOnly} />

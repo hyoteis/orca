@@ -2,6 +2,7 @@ import {
   AGY_AGENT_NAME_RE,
   DROID_AGENT_NAME_RE,
   HERMES_AGENT_NAME_RE,
+  isCodeAgentTitle,
   titleHasAgentName
 } from './agent-name-token-match'
 import { containsAgentSpinnerGlyph, isCursorAgentTitle } from './agent-title-core'
@@ -79,7 +80,14 @@ export function isPiAgentTitle(title: string): boolean {
  * agents have different (or no) caching semantics.
  */
 export function isClaudeAgent(title: string): boolean {
-  if (!title || isClaudeManagementTitle(title) || isOpenCodeNativeTitle(title)) {
+  if (
+    !title ||
+    isClaudeManagementTitle(title) ||
+    isOpenCodeNativeTitle(title) ||
+    // Why: the codeagent fork reuses Claude's title prefixes; its own identity
+    // token must outrank them or every codeagent tab reads as Claude Code.
+    isCodeAgentTitle(title)
+  ) {
     return false
   }
   const lower = title.toLowerCase()
@@ -127,6 +135,11 @@ export function getAgentLabel(title: string): string | null {
   // include status glyphs from other agents without changing OpenCode identity.
   if (isOpenCodeNativeTitle(title)) {
     return 'OpenCode'
+  }
+  // Why: check before Claude's prefix branches — the codeagent fork pairs those
+  // prefixes with its own leading identity token.
+  if (isCodeAgentTitle(title)) {
+    return 'CodeAgent'
   }
   // Why: Claude Code title text is often the task title. If that task mentions
   // another CLI, the Claude-specific prefix is the identity signal, not the words.
@@ -213,6 +226,7 @@ export function getAgentLabel(title: string): string | null {
 const TITLE_LABEL_TO_AGENT: Partial<Record<string, TuiAgent>> = {
   'Claude Code': 'claude',
   OpenClaude: 'openclaude',
+  'CodeAgent': 'codeagent',
   Codex: 'codex',
   'Gemini CLI': 'gemini',
   'GitHub Copilot': 'copilot',

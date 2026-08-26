@@ -808,7 +808,7 @@ export type UISlice = {
     | 'feature-tips'
     | 'new-workspace-composer'
     | 'confirm-orca-yaml-hooks'
-    | 'code-intelligence-cmake-setup'
+    | 'code-intelligence-cpp-setup'
   modalData: Record<string, unknown>
   openModal: (modal: UISlice['activeModal'], data?: Record<string, unknown>) => void
   closeModal: () => void

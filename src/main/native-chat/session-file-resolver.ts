@@ -23,6 +23,12 @@ function claudeProjectsDir(): string {
   return join(homedir(), '.claude', 'projects')
 }
 
+// Why: the codeagent fork nests Claude-format transcripts under ~/.cac/projects;
+// the hook transcript_path stays authoritative, this covers the id-glob fallback.
+function codeagentProjectsDir(): string {
+  return join(homedir(), '.cac', 'projects')
+}
+
 // Why: Orca launches Codex with ORCA_CODEX_HOME pointing at its own managed
 // runtime home, so Orca-started Codex rollout files land under
 // `<managed home>/sessions`, NOT `~/.codex/sessions`. Search the managed home
@@ -109,11 +115,12 @@ export async function resolveSessionFilePath(
   }
 
   if (transcriptAgent === 'claude') {
-    return resolveClaudeSessionFile(
-      trimmedId,
-      options.claudeProjectsDir ?? claudeProjectsDir(),
-      signal
-    )
+    // Why: codeagent writes the Claude layout under its own ~/.cac root.
+    const projectsDir =
+      agent === 'codeagent'
+        ? (options.claudeProjectsDir ?? codeagentProjectsDir())
+        : (options.claudeProjectsDir ?? claudeProjectsDir())
+    return resolveClaudeSessionFile(trimmedId, projectsDir, signal)
   }
   if (transcriptAgent === 'codex') {
     const overrideDirs = options.codexSessionsDirs

@@ -51,7 +51,7 @@ export function registerFilesystemDownloadFolderHandlers(): void {
     'fs:downloadFolder',
     async (
       event,
-      args: { dirPath?: string; connectionId?: string }
+      args: { dirPath?: string; connectionId?: string; defaultPath?: string }
     ): Promise<DownloadFolderResult> => {
       const dirPath = validateRequiredString(args?.dirPath, 'dirPath')
       const connectionId = validateRequiredString(args?.connectionId, 'connectionId')
@@ -76,7 +76,12 @@ export function registerFilesystemDownloadFolderHandlers(): void {
         const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined
         // Why: after the local capability/abort checks, open the picker before
         // remote tree validation so SSH latency does not delay click feedback.
+        const defaultPath =
+          typeof args.defaultPath === 'string' && args.defaultPath.trim()
+            ? args.defaultPath
+            : undefined
         const dialogOptions: Electron.OpenDialogOptions = {
+          ...(defaultPath ? { defaultPath } : {}),
           properties: ['openDirectory', 'createDirectory']
         }
         const dialogResult = parentWindow

@@ -13,6 +13,16 @@ export type CodeIntelligenceProbeResult = {
   message?: string
   installCommand?: string
 }
+export type CodeIntelligenceConfigurationMode = 'cmake' | 'gn' | 'basic' | 'mixed'
+export type CodeIntelligenceSetupStatus = {
+  state: 'ready' | 'limited' | 'error'
+  mode: CodeIntelligenceConfigurationMode
+  generatedAt: number
+  compileCommandCount?: number
+  warningCount?: number
+  message?: string
+  compileCommandsDir?: string
+}
 export type CodeIntelligenceScopeChange = {
   scopeId: string
   revision: number | null
@@ -28,6 +38,7 @@ export type CodeIntelligenceScope = {
   members: CodeIntelligenceScopeMember[]
   serverSource: CodeIntelligenceServerSource
   consent?: CodeIntelligenceScopeConsent
+  setupStatus?: CodeIntelligenceSetupStatus
   enabled: boolean
   revision: number
 }

@@ -177,6 +177,13 @@ describe('AgentCombobox', () => {
     expect(markup).not.toContain('Blank Terminal')
   })
 
+  it('uses the blue CodeAgent mark instead of the Claude icon', () => {
+    const markup = renderToStaticMarkup(<AgentIcon agent="codeagent" />)
+
+    expect(markup).toContain('fill="#2563EB"')
+    expect(markup).not.toContain('fill="currentColor"')
+  })
+
   it('uses the bundled OpenClaude favicon crop instead of Claude or GitHub artwork', () => {
     const markup = renderToStaticMarkup(<AgentIcon agent="openclaude" />)
 

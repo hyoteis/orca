@@ -34,6 +34,9 @@ vi.mock('@/store', () => ({
       worktreeDiffComments: {}
     })
 }))
+vi.mock('@/lib/language-server/cpp-monaco-language-features', () => ({
+  registerCppMonacoDocument: vi.fn(() => vi.fn())
+}))
 vi.mock('../diff-comments/useDiffCommentDecorator', () => ({
   useDiffCommentDecorator: vi.fn()
 }))
@@ -75,6 +78,13 @@ describe('MonacoEditor font family', () => {
     renderEditor()
     const options = editorProps.current?.options as Record<string, unknown> | undefined
     expect(options?.fontFamily).toBe('D2Coding Nerd Font Mono')
+  })
+
+  it('forces semantic highlighting for language-server token colors', () => {
+    renderEditor()
+    const options = editorProps.current?.options as Record<string, unknown> | undefined
+    expect(options?.['semanticHighlighting.enabled']).toBe(true)
+    expect(editorProps.current?.theme).toBe('orca-dark')
   })
 
   it('uses the opt-in editor font override instead of the terminal font', () => {

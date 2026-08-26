@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { CDPSession, Page, TestInfo } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/orca-app'
 import { getStoreState, waitForSessionReady } from './helpers/store'
-import type { GlobalSettings, Repo } from '../../src/shared/types'
+import type { Repo } from '../../src/shared/types'
 
 async function openRepoSettings(page: Page, repoId: string): Promise<void> {
   await page.evaluate(async (id) => {
@@ -36,68 +36,65 @@ async function captureSettings(
   await testInfo.attach(name, { path: screenshotPath, contentType: 'image/png' })
 }
 
-test('configures a consented custom C++ scope and captures the rendered settings', async ({
+test('keeps code intelligence out of settings and exposes one-click setup in project actions', async ({
   orcaPage
 }, testInfo) => {
   await waitForSessionReady(orcaPage)
   const [repo] = await getStoreState<Repo[]>(orcaPage, 'repos')
   expect(repo).toBeDefined()
+  for (const directory of ['Alpha', path.join('Alpha', 'Nested'), 'Zeta']) {
+    const absoluteDirectory = path.join(repo.path, directory)
+    mkdirSync(absoluteDirectory, { recursive: true })
+    writeFileSync(path.join(absoluteDirectory, 'CMakeLists.txt'), 'project(test)')
+  }
   await openRepoSettings(orcaPage, repo.id)
 
   const project = orcaPage.locator(`[data-settings-section="repo-${repo.id}"]`)
-  await expect(project.getByRole('heading', { name: 'Code Intelligence' })).toBeVisible()
-  await project.getByRole('button', { name: 'Add C++ scope' }).click()
-  await expect(project.getByText(`${repo.displayName} C++`, { exact: true })).toBeVisible()
+  await expect(project.getByRole('heading', { name: 'Code Intelligence' })).toHaveCount(0)
+  await expect(project.getByText('Discover scopes')).toHaveCount(0)
 
-  await project.getByRole('radio', { name: 'Custom' }).click()
-  await project.getByLabel('Executable path').fill('clangd')
-  await project.getByLabel('Server arguments').fill('--background-index')
-  await project.getByRole('button', { name: 'Add directory' }).click()
-  await project.getByLabel('Scope directory').nth(1).fill('src')
-  await project.getByRole('button', { name: 'Save', exact: true }).click()
-  await project.getByRole('button', { name: 'Allow launch' }).click()
-  await expect(project.getByRole('button', { name: 'Re-allow launch' })).toBeVisible()
-
-  await expect
-    .poll(async () => {
-      const settings = await getStoreState<GlobalSettings | null>(orcaPage, 'settings')
-      return settings?.codeIntelligenceScopes?.find((scope) => scope.language === 'cpp')
-    })
-    .toMatchObject({
-      enabled: true,
-      serverSource: { type: 'custom', executable: 'clangd', args: ['--background-index'] },
-      members: [
-        { relativePath: '.', visibleResults: true },
-        { relativePath: 'src', visibleResults: true }
-      ],
-      consent: { configurationFingerprint: expect.any(String) }
-    })
-
-  await project.getByRole('heading', { name: 'Code Intelligence' }).scrollIntoViewIfNeeded()
-  const englishLayout = await project.evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth
-  }))
-  expect(englishLayout.scrollWidth).toBeLessThanOrEqual(englishLayout.clientWidth + 1)
+  await orcaPage.evaluate(() => {
+    const state = window.__store!.getState()
+    state.setGroupBy('repo')
+    state.closeSettingsPage()
+  })
+  const projectHeader = orcaPage.locator(`[data-repo-header-id="${repo.id}"]`)
+  await projectHeader.hover()
+  const actions = orcaPage.getByRole('button', {
+    name: `Project actions for ${repo.displayName}`,
+    exact: true
+  })
+  await expect(actions).toBeVisible()
+  await actions.click()
+  const setupItem = orcaPage.getByRole('menuitem', { name: 'Configure C++ code intelligence' })
+  await expect(setupItem).toBeVisible()
 
   const cdp = await orcaPage.context().newCDPSession(orcaPage)
-  await captureSettings(cdp, testInfo, 'code-intelligence-settings-en')
+  await captureSettings(cdp, testInfo, 'code-intelligence-project-actions-en')
+  await setupItem.click()
+  const setupDialog = orcaPage.getByRole('dialog')
+  await expect(setupDialog).toContainText('Configure C++ code intelligence')
+  await setupDialog.getByRole('radio', { name: 'Selected folders' }).click()
+  const folderSearch = setupDialog.getByRole('textbox', { name: 'Search code folders' })
+  await folderSearch.fill('alpha')
+  const alphaCheckboxes = setupDialog.getByRole('checkbox')
+  await expect(setupDialog.getByRole('checkbox', { name: 'Alpha' })).toBeVisible()
+  await expect(setupDialog.getByRole('checkbox', { name: 'Alpha/Nested' })).toBeVisible()
+  expect(
+    await alphaCheckboxes.evaluateAll((checkboxes) =>
+      checkboxes
+        .map((checkbox) => checkbox.getAttribute('aria-label'))
+        .filter((label): label is string => Boolean(label))
+    )
+  ).toEqual(['Alpha', 'Alpha/Nested'])
 
-  await orcaPage.evaluate(async () => {
-    await window.__store!.getState().updateSettingsOrThrow({ uiLanguage: 'zh' })
-  })
-  await expect(project.getByRole('heading', { name: '\u4ee3\u7801\u667a\u80fd' })).toBeVisible()
-  await expect(project).toContainText(
-    '\u5728\u6b64\u4e3b\u673a\u4e0a\u914d\u7f6e Python \u548c C++ \u8bed\u4e49\u8303\u56f4'
-  )
-  await expect(
-    project.getByRole('button', { name: '\u91cd\u65b0\u5141\u8bb8\u542f\u52a8' })
-  ).toBeVisible()
-  expect(await project.innerText()).not.toMatch(/\?{2,}/)
-  const chineseLayout = await project.evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth
-  }))
-  expect(chineseLayout.scrollWidth).toBeLessThanOrEqual(chineseLayout.clientWidth + 1)
-  await captureSettings(cdp, testInfo, 'code-intelligence-settings-zh')
+  await folderSearch.fill('zeta')
+  const zetaCheckbox = setupDialog.getByRole('checkbox', { name: 'Zeta' })
+  await expect(zetaCheckbox).toBeVisible()
+  await zetaCheckbox.click()
+  await expect(setupDialog.getByText('Selected folders')).toBeVisible()
+  await expect(zetaCheckbox).toBeChecked()
+  await setupDialog.getByRole('button', { name: 'Clear folder search' }).click()
+  await expect(setupDialog.getByRole('checkbox', { name: 'Zeta' })).toBeChecked()
+  await captureSettings(cdp, testInfo, 'code-intelligence-setup-en')
 })

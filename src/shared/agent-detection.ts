@@ -30,7 +30,7 @@ export {
 } from './agent-title-status'
 
 // Re-export so existing `agent-detection` importers keep working.
-export { AGENT_NAMES, titleHasAgentName } from './agent-name-token-match'
+export { AGENT_NAMES, isCodeAgentTitle, titleHasAgentName } from './agent-name-token-match'
 export {
   extractAllOscTitles,
   extractLastOscTitle,

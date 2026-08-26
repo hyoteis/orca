@@ -44,7 +44,31 @@ describe('resolveExplicitTerminalTitleAgentType', () => {
     expect(resolveExplicitTerminalTitleAgentType('✦ Gemini CLI')).toBe('gemini')
     expect(resolveExplicitTerminalTitleAgentType('MiMo Code')).toBe('mimo-code')
     expect(resolveExplicitTerminalTitleAgentType('⠋ OpenClaude')).toBe('openclaude')
+    expect(resolveExplicitTerminalTitleAgentType('⠋ CodeAgent')).toBe('codeagent')
+    expect(resolveExplicitTerminalTitleAgentType('✳ CodeAgent')).toBe('codeagent')
+    expect(resolveExplicitTerminalTitleAgentType('. CodeAgent')).toBe('codeagent')
+    // Why: the fork brands itself "CodeAgentCLI" — match the CodeAgent prefix
+    // without a word-boundary lookahead so the CLI suffix doesn't mislabel it Claude.
+    expect(resolveExplicitTerminalTitleAgentType('⠂ CodeAgentCLI')).toBe('codeagent')
     expect(resolveExplicitTerminalTitleAgentType('OMP')).toBe('omp')
+  })
+
+  it('keeps Claude task text that merely mentions CodeAgent out of codeagent identity', () => {
+    expect(resolveExplicitTerminalTitleAgentType('✳ add codeagent support')).toBeNull()
+    expect(resolveExplicitTerminalTitleAgentType('. fix the CodeAgent bug')).toBeNull()
+    expect(resolveExplicitTerminalTitleAgentType('✳ wire up codeagent')).toBeNull()
+    expect(isClaudeAgent('✳ add codeagent support')).toBe(true)
+    expect(isClaudeAgent('✳ CodeAgent')).toBe(false)
+    expect(getSharedAgentLabel('✳ add codeagent support')).toBe('Claude Code')
+    expect(getSharedAgentLabel('⠋ CodeAgent')).toBe('CodeAgent')
+  })
+
+  it('matches the fork identity carried as a trailing token after a separator', () => {
+    expect(resolveExplicitTerminalTitleAgentType('⠋ fix the flaky suite - CodeAgent')).toBe(
+      'codeagent'
+    )
+    expect(resolveExplicitTerminalTitleAgentType('✳ 修复登录超时 · CodeAgent')).toBe('codeagent')
+    expect(getSharedAgentLabel('⠋ fix bug — CodeAgent')).toBe('CodeAgent')
   })
 
   it('treats Claude generic status prefixes as activity-only, not identity', () => {

@@ -1,7 +1,7 @@
 import type {
-  CodeIntelligenceCmakeSetupRequest,
-  CodeIntelligenceCmakeSetupResult
-} from '../shared/code-intelligence-cmake-setup'
+  CodeIntelligenceCppSetupRequest,
+  CodeIntelligenceCppSetupResult
+} from '../shared/code-intelligence-cpp-setup'
 import type {
   CodeIntelligenceProbeResult,
   CodeIntelligenceScope,
@@ -1129,9 +1129,7 @@ export type PluginMarketplaceHostInstallPreview = {
 export type PreloadApi = {
   codeIntelligence: {
     listScopes: () => Promise<readonly CodeIntelligenceScope[]>
-    setupCpp: (
-      request: CodeIntelligenceCmakeSetupRequest
-    ) => Promise<CodeIntelligenceCmakeSetupResult>
+    setupCpp: (request: CodeIntelligenceCppSetupRequest) => Promise<CodeIntelligenceCppSetupResult>
     probeScope: (scopeId: string) => Promise<CodeIntelligenceProbeResult>
     upsertScope: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScope>
     removeScope: (scopeId: string) => Promise<boolean>
@@ -2492,6 +2490,7 @@ export type PreloadApi = {
     copilotStatus: () => Promise<AgentHookInstallStatus>
     hermesStatus: () => Promise<AgentHookInstallStatus>
     devinStatus: () => Promise<AgentHookInstallStatus>
+    codeagentStatus: () => Promise<AgentHookInstallStatus>
   }
   agentTrust: {
     markTrusted: (args: {
@@ -2794,6 +2793,7 @@ export type PreloadApi = {
     downloadFolder: (args: {
       dirPath: string
       connectionId: string
+      defaultPath?: string
     }) => Promise<{ canceled: true } | { canceled: false; destinationPath: string }>
     saveDownloadedFile: (args: {
       suggestedName: string

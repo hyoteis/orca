@@ -763,6 +763,43 @@ describe('FileExplorerRow collapse folder action', () => {
     )
   })
 
+  it('reuses the last successful folder download parent', async () => {
+    const values = new Map<string, string>()
+    const downloadFolder = vi.fn().mockResolvedValue({
+      canceled: false,
+      destinationPath: 'C:\\Users\\dev\\Downloads\\src-copy'
+    })
+    ;(
+      globalThis as unknown as {
+        window: {
+          api: { fs: { downloadFolder: typeof downloadFolder } }
+          localStorage: Pick<Storage, 'getItem' | 'setItem'>
+        }
+      }
+    ).window = {
+      api: { fs: { downloadFolder } },
+      localStorage: {
+        getItem: (key) => values.get(key) ?? null,
+        setItem: (key, value) => values.set(key, value)
+      }
+    }
+    setDownloadPlatform('win32')
+
+    await downloadRemoteFile(directoryNode, 'ssh-1')
+    await downloadRemoteFile(directoryNode, 'ssh-1')
+
+    expect(downloadFolder.mock.calls).toEqual([
+      [{ dirPath: '/repo/src', connectionId: 'ssh-1' }],
+      [
+        {
+          dirPath: '/repo/src',
+          connectionId: 'ssh-1',
+          defaultPath: 'C:\\Users\\dev\\Downloads'
+        }
+      ]
+    ])
+  })
+
   it('calls the preload folder download API for SSH directory rows', async () => {
     const downloadFolder = vi.fn().mockResolvedValue({
       canceled: false,

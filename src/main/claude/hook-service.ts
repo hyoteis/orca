@@ -59,9 +59,11 @@ const DEFAULT_CLAUDE_HOOK_SERVICE_OPTIONS: ClaudeHookServiceOptions = {
 
 function getManagedScript(
   target: 'local' | 'posix' = 'local',
-  options: { skipWhenDevinImportsClaude?: boolean } = {}
+  options: { skipWhenDevinImportsClaude?: boolean; forcePosix?: boolean } = {}
 ): string {
-  if (target === 'local' && process.platform === 'win32') {
+  // Why: a script-path command (codeagent) is executed by bash even on Windows,
+  // so the managed script must carry POSIX content, never .cmd batch.
+  if (target === 'local' && process.platform === 'win32' && !options.forcePosix) {
     return [
       '@echo off',
       'setlocal',
@@ -178,7 +180,10 @@ export class ClaudeHookService {
   async refreshManagedScripts(): Promise<void> {
     await refreshManagedScriptIfPresent(
       getManagedScriptPath(this.options.settings),
-      getManagedScript('local', { skipWhenDevinImportsClaude: this.options.agent === 'claude' })
+      getManagedScript('local', {
+        skipWhenDevinImportsClaude: this.options.agent === 'claude',
+        forcePosix: this.options.settings.hookCommandStyle === 'script-path'
+      })
     )
     // Why: no agent gate — the statusline script only ever exists for claude, so presence is the gate.
     await refreshManagedScriptIfPresent(
@@ -209,7 +214,10 @@ export class ClaudeHookService {
     )
     writeManagedScript(
       scriptPath,
-      getManagedScript('local', { skipWhenDevinImportsClaude: this.options.agent === 'claude' })
+      getManagedScript('local', {
+        skipWhenDevinImportsClaude: this.options.agent === 'claude',
+        forcePosix: this.options.settings.hookCommandStyle === 'script-path'
+      })
     )
     // Why: the statusline usage feed is Claude-only — OpenClaude data would be misattributed to the Claude provider.
     if (this.options.agent === 'claude') {
@@ -263,7 +271,9 @@ export class ClaudeHookService {
       }
 
       // Why: settings resolve HOME at runtime while SFTP still targets the discovered remote home.
-      const hook = buildManagedCommandHook(getRemoteManagedCommand(remoteScriptPath))
+      const hook = buildManagedCommandHook(
+        getRemoteManagedCommand(remoteScriptPath, this.options.settings)
+      )
       const nextConfig = applyManagedHooks(config, hook, remoteScriptFileName)
 
       // Why: write scripts before settings to avoid settings pointing to missing scripts.

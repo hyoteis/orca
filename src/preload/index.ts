@@ -2220,7 +2220,9 @@ const api = {
       ipcRenderer.invoke('agentHooks:copilotStatus'),
     hermesStatus: (): Promise<AgentHookInstallStatus> =>
       ipcRenderer.invoke('agentHooks:hermesStatus'),
-    kimiStatus: (): Promise<AgentHookInstallStatus> => ipcRenderer.invoke('agentHooks:kimiStatus')
+    kimiStatus: (): Promise<AgentHookInstallStatus> => ipcRenderer.invoke('agentHooks:kimiStatus'),
+    codeagentStatus: (): Promise<AgentHookInstallStatus> =>
+      ipcRenderer.invoke('agentHooks:codeagentStatus')
   },
 
   agentTrust: {
@@ -3174,6 +3176,7 @@ const api = {
     downloadFolder: (args: {
       dirPath: string
       connectionId: string
+      defaultPath?: string
     }): Promise<{ canceled: true } | { canceled: false; destinationPath: string }> =>
       ipcRenderer.invoke('fs:downloadFolder', args),
     saveDownloadedFile: (args: {

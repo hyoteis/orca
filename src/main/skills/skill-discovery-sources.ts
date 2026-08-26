@@ -97,6 +97,15 @@ export function buildSkillDiscoverySources(
       ['claude'],
       'claude'
     ),
+    // Why: the codeagent fork keeps its own skill roots instead of Claude's.
+    source(
+      'home-codeagent',
+      'CodeAgent home',
+      pathApi.join(home, '.cac', 'skills'),
+      'home',
+      ['agent-skills'],
+      'codeagent'
+    ),
     source(
       'codex-plugin-cache',
       'Codex plugin cache',

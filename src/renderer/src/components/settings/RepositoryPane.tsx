@@ -32,7 +32,6 @@ import { translate } from '@/i18n/i18n'
 import { RepositoryWindowsRuntimeSection } from './RepositoryWindowsRuntimeSection'
 import { matchesRepositoryIdentitySearch } from './repository-identity-search'
 import { RepositoryWorktreeDefaultsSection } from './RepositoryWorktreeDefaultsSection'
-import { RepositoryCodeIntelligenceSection } from './RepositoryCodeIntelligenceSection'
 import { getProjectRuntimeSessionSummary } from './repository-runtime-session-summary'
 export { getRepositoryPaneSearchEntries }
 export { matchesRepositoryIdentitySearch } from './repository-identity-search'
@@ -192,9 +191,6 @@ export function RepositoryPane({
   const sourceControlAiEntries = allEntries.filter((entry) => entry.title === 'Git AI Author')
   const hostSetupEntries = allEntries.filter((entry) => entry.title === 'Available Hosts')
   const projectRuntimeEntries = allEntries.filter((entry) => entry.title === 'Project Runtime')
-  const codeIntelligenceEntries = allEntries.filter(
-    (entry) => entry.title === translate('settings.codeIntelligence.title', 'Code Intelligence')
-  )
   const removeProjectLabel =
     confirmingRemove === repo.id ? 'Confirm Remove Project' : 'Remove Project'
 
@@ -362,9 +358,6 @@ export function RepositoryPane({
           </>
         ) : null}
       </section>
-    ) : null,
-    forceFullPaneForRepoMatch || matchesSettingsSearch(searchQuery, codeIntelligenceEntries) ? (
-      <RepositoryCodeIntelligenceSection key="code-intelligence" repo={repo} />
     ) : null,
     hooksSection,
     !isFolder &&

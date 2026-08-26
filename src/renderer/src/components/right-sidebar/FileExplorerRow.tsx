@@ -51,6 +51,10 @@ import { useFileExplorerRowDrag } from './useFileExplorerRowDrag'
 import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
+import {
+  getRememberedRemoteFolderDownloadParent,
+  rememberRemoteFolderDownloadParent
+} from '@/lib/remote-folder-download-destination'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/components/tab-bar/SortableTab'
 import { downloadRuntimeFile, type RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
 
@@ -343,6 +347,24 @@ export function shouldShowCopyFileAction(
   )
 }
 
+function getLocalDownloadParent(
+  destinationPath: string,
+  platform: NodeJS.Platform
+): string | undefined {
+  const separatorIndex =
+    platform === 'win32'
+      ? Math.max(destinationPath.lastIndexOf('/'), destinationPath.lastIndexOf('\\'))
+      : destinationPath.lastIndexOf('/')
+  if (separatorIndex < 0) {
+    return undefined
+  }
+  if (separatorIndex === 0) {
+    return destinationPath.slice(0, 1)
+  }
+  const parent = destinationPath.slice(0, separatorIndex)
+  return platform === 'win32' && /^[A-Za-z]:$/.test(parent) ? `${parent}\\` : parent
+}
+
 function getLocalDownloadName(destinationPath: string, platform: NodeJS.Platform): string {
   const lastSeparatorIndex =
     platform === 'win32'
@@ -356,12 +378,16 @@ export async function downloadRemoteFile(
   connectionIdOrRuntimeContext: string | RuntimeFileOperationArgs
 ): Promise<void> {
   try {
+    const rememberedDownloadParent = node.isDirectory
+      ? getRememberedRemoteFolderDownloadParent()
+      : undefined
     const result =
       typeof connectionIdOrRuntimeContext === 'string'
         ? node.isDirectory
           ? await window.api.fs.downloadFolder({
               dirPath: node.path,
-              connectionId: connectionIdOrRuntimeContext
+              connectionId: connectionIdOrRuntimeContext,
+              ...(rememberedDownloadParent ? { defaultPath: rememberedDownloadParent } : {})
             })
           : await window.api.fs.downloadFile({
               filePath: node.path,
@@ -373,10 +399,14 @@ export async function downloadRemoteFile(
       return
     }
     // Why: POSIX permits backslashes in saved names; only Windows treats them as separators.
-    const savedName = getLocalDownloadName(
-      result.destinationPath,
-      window.api.platform.get().platform
-    )
+    const platform = window.api.platform.get().platform
+    const savedName = getLocalDownloadName(result.destinationPath, platform)
+    if (node.isDirectory) {
+      const destinationParent = getLocalDownloadParent(result.destinationPath, platform)
+      if (destinationParent) {
+        rememberRemoteFolderDownloadParent(destinationParent)
+      }
+    }
     toast.success(
       node.isDirectory
         ? translate(

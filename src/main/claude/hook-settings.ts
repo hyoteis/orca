@@ -17,6 +17,10 @@ export type ClaudeCompatibleHookSettings = {
   configDirName: '.claude' | '.openclaude' | '.cac'
   scriptBaseName: 'claude-hook' | 'openclaude-hook' | 'codeagent-hook'
   supportsExecHookArgs: boolean
+  /** Why: the codeagent fork wraps every hook as `bash -c "bash <command> <args>"`,
+   *  so any shell syntax (if/case/${...}) in command is a syntax error and a
+   *  .cmd is unrunnable batch — command must be a bare .sh path. */
+  hookCommandStyle?: 'shell-one-liner' | 'script-path'
 }
 
 export const CLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
@@ -31,13 +35,15 @@ export const OPENCLAUDE_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   supportsExecHookArgs: false
 }
 
-// Why: codeagent is a Claude Code fork reading ~/.cac/settings.json, but its
-// hook executor joins command+args and shells through bash, which strips the
-// backslash paths of the Windows exec form — so it gets the shell form.
+// Why: codeagent reads ~/.cac/settings.json, but its hook executor joins
+// command+args behind a `bash -c "bash …"` wrap — the exec form dies on
+// stripped backslashes and any shell one-liner is a syntax error under the
+// doubled bash, so it gets a bare .sh script path instead.
 export const CODEAGENT_HOOK_SETTINGS: ClaudeCompatibleHookSettings = {
   configDirName: '.cac',
   scriptBaseName: 'codeagent-hook',
-  supportsExecHookArgs: false
+  supportsExecHookArgs: false,
+  hookCommandStyle: 'script-path'
 }
 
 export const CLAUDE_EVENTS = [
@@ -100,9 +106,12 @@ export function getStatusLineScriptPath(settings = CLAUDE_HOOK_SETTINGS): string
 }
 
 export function getManagedScriptFileName(settings = CLAUDE_HOOK_SETTINGS): string {
-  return process.platform === 'win32'
-    ? `${settings.scriptBaseName}.cmd`
-    : getPosixManagedScriptFileName(settings)
+  // Why: a script-path command is executed by bash itself (the fork's `bash -c
+  // "bash <command>"` wrap), which cannot run .cmd batch content.
+  if (process.platform === 'win32' && settings.hookCommandStyle !== 'script-path') {
+    return `${settings.scriptBaseName}.cmd`
+  }
+  return getPosixManagedScriptFileName(settings)
 }
 
 export function getPosixManagedScriptFileName(settings = CLAUDE_HOOK_SETTINGS): string {
@@ -117,12 +126,19 @@ export function getRemoteConfigPath(remoteHome: string, settings = CLAUDE_HOOK_S
   return `${remoteHome.replace(/\/$/, '')}/${settings.configDirName}/settings.json`
 }
 
-export function getManagedCommand(scriptPath: string): string {
+export function getManagedCommand(scriptPath: string, settings = CLAUDE_HOOK_SETTINGS): string {
   const scriptFileName = basename(scriptPath)
   const extension = extname(scriptFileName)
-  return wrapRuntimeHomeHookCommand(
-    extension ? scriptFileName.slice(0, -extension.length) : scriptFileName
-  )
+  const baseName = extension ? scriptFileName.slice(0, -extension.length) : scriptFileName
+  if (settings.hookCommandStyle === 'script-path') {
+    // Why: no shell syntax survives the fork's `bash -c "bash <command>"` wrap, and its
+    // hook env may not even export HOME (the $HOME form resolved to a missing path in
+    // the field report) — bake the absolute script path itself in forward-slash form,
+    // the same style the 1.4.182 claude hook used. Correct locally and over SSH,
+    // where scriptPath already carries the remote home.
+    return `'${scriptPath.replaceAll('\\', '/')}'`
+  }
+  return wrapRuntimeHomeHookCommand(baseName)
 }
 
 export function getManagedLifecycleHook(
@@ -130,7 +146,7 @@ export function getManagedLifecycleHook(
   settings = CLAUDE_HOOK_SETTINGS
 ): HookCommandConfig {
   if (process.platform !== 'win32' || !settings.supportsExecHookArgs) {
-    return buildManagedCommandHook(getManagedCommand(scriptPath))
+    return buildManagedCommandHook(getManagedCommand(scriptPath, settings))
   }
   return getWindowsManagedLifecycleHook(scriptPath)
 }
@@ -162,8 +178,11 @@ export function hasSameManagedHookInvocation(
   )
 }
 
-export function getRemoteManagedCommand(scriptPath: string): string {
-  return getManagedCommand(scriptPath)
+export function getRemoteManagedCommand(
+  scriptPath: string,
+  settings = CLAUDE_HOOK_SETTINGS
+): string {
+  return getManagedCommand(scriptPath, settings)
 }
 
 export function applyManagedHooks(

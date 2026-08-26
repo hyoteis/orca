@@ -8,6 +8,7 @@ import {
 import type { Range } from '@tanstack/react-virtual'
 import {
   AlertTriangle,
+  Braces,
   ChevronDown,
   CircleX,
   Ellipsis,
@@ -300,7 +301,6 @@ import { useHostHeaderDrag } from './host-header-drag'
 import { buildSidebarHostOptions } from './sidebar-host-options'
 import { HostSectionHeaderMenu } from './HostSectionHeaderMenu'
 import { ProjectHeaderActions } from './ProjectHeaderActions'
-import { ProjectCodeIntelligenceSetupContext } from './ProjectCodeIntelligenceSetupContext'
 import { translate } from '@/i18n/i18n'
 import { folderWorkspaceKey, getActiveSidebarWorkspaceId } from '../../../../shared/workspace-scope'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
@@ -663,6 +663,7 @@ type VirtualizedWorktreeViewportProps = {
   collapsedGroups: Set<string>
   handleCreateForRepo: (projectId: string) => void
   handleOpenRepoSettings: (projectId: string, sectionId?: string) => void
+  handleSetupCodeIntelligence: (projectId: string) => void
   handleOpenWorktreeVisibility: (projectId: string) => void
   handleShowImportedWorktrees: (projectId: string) => void
   handleKeepImportedWorktreesHidden: (projectId: string) => void
@@ -1330,6 +1331,7 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
   collapsedGroups,
   handleCreateForRepo,
   handleOpenRepoSettings,
+  handleSetupCodeIntelligence,
   handleOpenWorktreeVisibility,
   handleShowImportedWorktrees,
   handleKeepImportedWorktreesHidden,
@@ -4280,8 +4282,7 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                       : { transform: getVirtualRowTransform(vItem.start) }
                   }
                 >
-                  <ProjectCodeIntelligenceSetupContext repoId={row.repo?.id}>
-                    <div
+                  <div
                     id={getWorktreeOptionId(row.key)}
                     role="button"
                     tabIndex={0}
@@ -4615,6 +4616,19 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                             <DropdownMenuItem
                               onSelect={() => {
                                 if (row.repo) {
+                                  handleSetupCodeIntelligence(row.repo.id)
+                                }
+                              }}
+                            >
+                              <Braces className="size-3.5" />
+                              {translate(
+                                'settings.codeIntelligence.setupMenu',
+                                'Configure C++ code intelligence'
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                if (row.repo) {
                                   handleOpenRepoSettings(
                                     row.repo.id,
                                     getRepositoryIconSectionId(row.repo.id)
@@ -4780,8 +4794,7 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                         </Tooltip>
                       ) : null}
                     </ProjectHeaderActions>
-                    </div>
-                  </ProjectCodeIntelligenceSetupContext>
+                  </div>
                 </div>
               )
             }
@@ -6059,6 +6072,12 @@ const WorktreeList = React.memo(function WorktreeList({
     },
     [openModal]
   )
+  const handleSetupCodeIntelligence = useCallback(
+    (projectId: string) => {
+      openModal('code-intelligence-cpp-setup', { repoId: projectId })
+    },
+    [openModal]
+  )
 
   const setImportedWorktreeCardState = useCallback(
     (projectId: string, state: ImportedWorktreeCardActionState | null) => {
@@ -6857,6 +6876,7 @@ const WorktreeList = React.memo(function WorktreeList({
         collapsedGroups={effectiveCollapsedGroups}
         handleCreateForRepo={handleCreateForRepo}
         handleOpenRepoSettings={handleOpenRepoSettings}
+        handleSetupCodeIntelligence={handleSetupCodeIntelligence}
         handleOpenWorktreeVisibility={handleOpenWorktreeVisibility}
         handleShowImportedWorktrees={handleShowImportedWorktrees}
         handleKeepImportedWorktreesHidden={handleKeepImportedWorktreesHidden}

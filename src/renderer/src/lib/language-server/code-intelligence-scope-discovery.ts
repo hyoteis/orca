@@ -10,6 +10,8 @@ const MARKERS: Record<string, CodeIntelligenceLanguage[]> = {
   'setup.py': ['python'],
   'compile_commands.json': ['cpp'],
   'CMakeLists.txt': ['cpp'],
+  'BUILD.gn': ['cpp'],
+  '.gn': ['cpp'],
   'compile_flags.txt': ['cpp']
 }
 export function discoverCodeIntelligenceCandidates(

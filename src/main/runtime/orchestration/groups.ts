@@ -9,6 +9,7 @@ import type { RuntimeTerminalSummary } from '../../../shared/runtime-types'
 const AGENT_NAME_GROUPS = [
   'claude',
   'openclaude',
+  'codeagent',
   'codex',
   'opencode',
   'mimo',

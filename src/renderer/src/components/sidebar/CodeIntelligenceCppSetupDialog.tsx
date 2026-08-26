@@ -1,16 +1,15 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Copy, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
-import type { CodeIntelligenceCmakeSetupResult } from '../../../../shared/code-intelligence-cmake-setup'
+import type { CodeIntelligenceCppSetupResult } from '../../../../shared/code-intelligence-cpp-setup'
 import { listRuntimeFiles } from '../../runtime/runtime-file-client'
-import { discoverCodeIntelligenceCandidates } from '../../lib/language-server/code-intelligence-scope-discovery'
+import { getCachedCodeIntelligenceDirectories } from '../../lib/language-server/code-intelligence-directory-scan-cache'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
 import { Button } from '../ui/button'
-import { Checkbox } from '../ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -19,27 +18,47 @@ import {
   DialogHeader,
   DialogTitle
 } from '../ui/dialog'
-import { Label } from '../ui/label'
 import { SettingsSegmentedControl } from '../settings/SettingsFormControls'
+import { CodeIntelligenceBasicOptions } from './CodeIntelligenceBasicOptions'
+import { CodeIntelligenceDirectoryPicker } from './CodeIntelligenceDirectoryPicker'
+import {
+  expandConfiguredCodeIntelligenceDirectories,
+  getMinimalCodeIntelligenceDirectories
+} from './code-intelligence-directory-list'
 
 type SelectionMode = 'all' | 'selected'
 type ModalData = { repoId?: string }
 
-export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | null {
+export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | null {
   const activeModal = useAppStore((state) => state.activeModal)
   const modalData = useAppStore((state) => state.modalData as ModalData)
   const closeModal = useAppStore((state) => state.closeModal)
   const repos = useAppStore((state) => state.repos)
   const settings = useAppStore((state) => state.settings)
   const fetchSettings = useAppStore((state) => state.fetchSettings)
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
   const repo = repos.find((candidate) => candidate.id === modalData.repoId) ?? null
   const [mode, setMode] = useState<SelectionMode>('all')
   const [roots, setRoots] = useState<string[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [directoryQuery, setDirectoryQuery] = useState('')
+  const [scanGeneration, setScanGeneration] = useState(0)
+  const [additionalIncludes, setAdditionalIncludes] = useState('')
+  const [defines, setDefines] = useState('')
+  const [cppStandard, setCppStandard] = useState<'c++17' | 'c++20' | 'c++23'>('c++17')
   const [stage, setStage] = useState<'idle' | 'discovering' | 'running' | 'success'>('idle')
-  const [result, setResult] = useState<CodeIntelligenceCmakeSetupResult | null>(null)
-  const open = activeModal === 'code-intelligence-cmake-setup'
-  const local = repo ? getRepoExecutionHostId(repo) === 'local' : false
+  const [result, setResult] = useState<CodeIntelligenceCppSetupResult | null>(null)
+  const open = activeModal === 'code-intelligence-cpp-setup'
+  const setupHost = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
+  const setupSupported = setupHost?.kind === 'local' || setupHost?.kind === 'ssh'
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    setScanGeneration(0)
+  }, [open, repo?.id])
 
   useEffect(() => {
     if (!open || !repo) {
@@ -47,32 +66,43 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
     }
     let cancelled = false
     setMode('all')
+    setDirectoryQuery('')
     setResult(null)
     setStage('discovering')
     const host = parseExecutionHostId(getRepoExecutionHostId(repo))
-    void listRuntimeFiles(
-      {
-        settings: { ...settings, activeRuntimeEnvironmentId: null },
-        worktreeId: repo.id,
-        worktreePath: repo.path,
-        connectionId: repo.connectionId ?? undefined,
-        expectedExecutionHostId:
-          host?.kind === 'local' || host?.kind === 'ssh' ? host.id : undefined
-      },
-      { rootPath: repo.path }
-    )
-      .then((files) => {
+    const executionHostId = getRepoExecutionHostId(repo)
+    void getCachedCodeIntelligenceDirectories({
+      key: `${executionHostId}:${repo.id}:${repo.path}`,
+      force: scanGeneration > 0,
+      loadFiles: () =>
+        listRuntimeFiles(
+          {
+            settings: { ...settingsRef.current, activeRuntimeEnvironmentId: null },
+            worktreeId: repo.id,
+            worktreePath: repo.path,
+            connectionId: repo.connectionId ?? undefined,
+            expectedExecutionHostId:
+              host?.kind === 'local' || host?.kind === 'ssh' ? host.id : undefined
+          },
+          { rootPath: repo.path }
+        )
+    })
+      .then((detected) => {
         if (cancelled) {
           return
         }
-        const detected = discoverCodeIntelligenceCandidates(files)
-          .filter(
-            (candidate) =>
-              candidate.languages.includes('cpp') && candidate.markers.includes('CMakeLists.txt')
-          )
-          .map((candidate) => candidate.relativeRoot)
+        const workspaceKey = `${isFolderRepo(repo) ? 'folder' : 'worktree'}:${repo.id}`
+        const existingMembers =
+          settingsRef.current?.codeIntelligenceScopes
+            ?.find(
+              (scope) =>
+                scope.workspaceKey === workspaceKey &&
+                scope.executionHostId === getRepoExecutionHostId(repo) &&
+                scope.language === 'cpp'
+            )
+            ?.members.map((member) => member.relativePath) ?? []
         setRoots(detected)
-        setSelected(new Set())
+        setSelected(expandConfiguredCodeIntelligenceDirectories(detected, existingMembers))
         setStage('idle')
       })
       .catch((error) => {
@@ -82,8 +112,8 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
         setResult({
           ok: false,
           message: translate(
-            'settings.codeIntelligence.scanFailed',
-            'Could not scan CMake folders'
+            'settings.codeIntelligence.buildScanFailed',
+            'Could not scan C++ build folders'
           ),
           log: error instanceof Error ? (error.stack ?? error.message) : String(error),
           relativeRoots: [],
@@ -94,10 +124,15 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
     return () => {
       cancelled = true
     }
-  }, [open, repo, settings])
+  }, [open, repo, scanGeneration])
 
   const selectedRoots = useMemo(
-    () => (mode === 'all' ? ['.'] : roots.filter((root) => selected.has(root))),
+    () =>
+      mode === 'all'
+        ? roots.includes('.')
+          ? ['.']
+          : roots
+        : getMinimalCodeIntelligenceDirectories(roots, selected),
     [mode, roots, selected]
   )
 
@@ -126,7 +161,17 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
       const setup = await setupCpp({
         repoId: repo.id,
         relativeRoots: selectedRoots,
-        installMissingTools: true
+        workspaceDirectories: roots,
+        installMissingTools: true,
+        additionalIncludeDirectories: additionalIncludes
+          .split(/\r?\n/)
+          .map((path) => path.trim())
+          .filter(Boolean),
+        defines: defines
+          .split(/\r?\n/)
+          .map((define) => define.trim())
+          .filter(Boolean),
+        cppStandard
       })
       setResult(setup)
       if (!setup.ok || !setup.clangdExecutable || !setup.compileCommandsDir) {
@@ -162,7 +207,20 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
           executable: setup.clangdExecutable,
           args: [`--compile-commands-dir=${setup.compileCommandsDir}`]
         },
-        enabled: true
+        enabled: true,
+        ...(setup.configurationMode && setup.healthState
+          ? {
+              setupStatus: {
+                state: setup.healthState,
+                mode: setup.configurationMode,
+                generatedAt: Date.now(),
+                compileCommandCount: setup.compileCommandCount,
+                warningCount: setup.warnings?.length ?? 0,
+                message: setup.warnings?.[0],
+                compileCommandsDir: setup.compileCommandsDir
+              }
+            }
+          : {})
       })
       await window.api.codeIntelligence.grantConsent({
         scopeId: saved.id,
@@ -194,25 +252,30 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] min-w-0 overflow-x-hidden overflow-y-auto scrollbar-sleek sm:w-[36rem] sm:max-w-[36rem]">
         <DialogHeader>
           <DialogTitle>
-            {translate('settings.codeIntelligence.setupTitle', 'Set up C++ code intelligence')}
+            {translate('settings.codeIntelligence.setupTitle', 'Configure C++ code intelligence')}
           </DialogTitle>
           <DialogDescription>
-            {translate(
-              'settings.codeIntelligence.setupDescription',
-              'Orca installs missing tools and generates compile commands in its cache. Project files are not modified.'
-            )}
+            {setupHost?.kind === 'ssh'
+              ? translate(
+                  'settings.codeIntelligence.sshSetupDescription',
+                  'Orca generates a BASIC compilation database on the connected SSH Host. clangd must already be installed there.'
+                )
+              : translate(
+                  'settings.codeIntelligence.setupDescription',
+                  'Orca installs missing tools and generates compile commands. Source files are not modified.'
+                )}
           </DialogDescription>
         </DialogHeader>
 
-        {!local ? (
+        {!setupSupported ? (
           <div
             className="flex gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm"
             role="alert"
           >
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
             {translate(
-              'settings.codeIntelligence.localOnly',
-              'One-click setup currently supports local Hosts. Configure this Host from project settings.'
+              'settings.codeIntelligence.setupUnsupportedHost',
+              'Code intelligence setup currently supports local and SSH Hosts.'
             )}
           </div>
         ) : (
@@ -233,39 +296,24 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
               ]}
             />
             {mode === 'selected' ? (
-              <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-border p-3 scrollbar-sleek">
-                {roots.length === 0 && stage !== 'discovering' ? (
-                  <p className="text-xs text-muted-foreground">
-                    {translate(
-                      'settings.codeIntelligence.noCmakeFolders',
-                      'No CMake folders were detected.'
-                    )}
-                  </p>
-                ) : null}
-                {roots.map((root) => (
-                  <Label
-                    key={root}
-                    className="flex cursor-pointer items-center gap-2 text-sm font-normal"
-                  >
-                    <Checkbox
-                      checked={selected.has(root)}
-                      onCheckedChange={(checked) =>
-                        setSelected((current) => {
-                          const next = new Set(current)
-                          if (checked) {
-                            next.add(root)
-                          } else {
-                            next.delete(root)
-                          }
-                          return next
-                        })
-                      }
-                    />
-                    <span className="truncate">{root}</span>
-                  </Label>
-                ))}
-              </div>
+              <CodeIntelligenceDirectoryPicker
+                directories={roots}
+                selected={selected}
+                query={directoryQuery}
+                discovering={stage === 'discovering'}
+                onQueryChange={setDirectoryQuery}
+                onSelectedChange={setSelected}
+                onRescan={() => setScanGeneration((value) => value + 1)}
+              />
             ) : null}
+            <CodeIntelligenceBasicOptions
+              additionalIncludes={additionalIncludes}
+              defines={defines}
+              cppStandard={cppStandard}
+              onAdditionalIncludesChange={setAdditionalIncludes}
+              onDefinesChange={setDefines}
+              onCppStandardChange={setCppStandard}
+            />
             {busy ? (
               <div
                 className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -274,8 +322,8 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
                 <Loader2 className="size-4 animate-spin" />
                 {stage === 'discovering'
                   ? translate(
-                      'settings.codeIntelligence.scanningFolders',
-                      'Scanning CMake folders...'
+                      'settings.codeIntelligence.scanningBuildFolders',
+                      'Scanning CMake and GN build folders...'
                     )
                   : translate(
                       'settings.codeIntelligence.runningSetup',
@@ -286,7 +334,15 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
             {stage === 'success' ? (
               <div className="flex items-center gap-2 text-sm text-foreground" role="status">
                 <CheckCircle2 className="size-4 text-success" />
-                {result?.message}
+                {result?.healthState === 'limited'
+                  ? translate(
+                      'settings.codeIntelligence.setupLimited',
+                      'Configured with limited BASIC indexing'
+                    )
+                  : translate(
+                      'settings.codeIntelligence.setupReady',
+                      'C++ code intelligence is ready'
+                    )}
               </div>
             ) : null}
             {result && !result.ok ? (
@@ -322,7 +378,7 @@ export default function CodeIntelligenceCmakeSetupDialog(): React.JSX.Element | 
               ? translate('settings.codeIntelligence.done', 'Done')
               : translate('settings.codeIntelligence.cancel', 'Cancel')}
           </Button>
-          {local && stage !== 'success' ? (
+          {setupSupported && stage !== 'success' ? (
             <Button
               type="button"
               disabled={busy || selectedRoots.length === 0}

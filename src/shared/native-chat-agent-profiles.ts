@@ -24,6 +24,12 @@ const NATIVE_CHAT_AGENT_PROFILES: Partial<Record<AgentType, NativeChatAgentProfi
     groupedSlash: true,
     skillSourceOwner: 'claude'
   },
+  // Why: unlike OpenClaude, the codeagent fork keeps its own skill roots (~/.cac/skills).
+  codeagent: {
+    skillPrefix: '/',
+    groupedSlash: true,
+    skillSourceOwner: 'codeagent'
+  },
   grok: {
     skillPrefix: '/',
     groupedSlash: true,

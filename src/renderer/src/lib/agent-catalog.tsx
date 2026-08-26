@@ -1,5 +1,5 @@
 import type React from 'react'
-import { ClaudeIcon, DroidIcon, OpenAIIcon } from '@/components/status-bar/icons'
+import { ClaudeIcon, CodeAgentIcon, DroidIcon, OpenAIIcon } from '@/components/status-bar/icons'
 import openClaudeLogoUrl from '../../../../resources/openclaude-logo.png?url'
 import type { TuiAgent } from '../../../shared/types'
 import { getTuiAgentLaunchCommand, TUI_AGENT_CONFIG } from '../../../shared/tui-agent-config'
@@ -54,8 +54,8 @@ export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] =>
     id: 'codeagent',
     label: translate('auto.lib.agent.catalog.codeagent', 'Codeagent'),
     cmd: 'codeagent',
-    // Why: placeholder until the fork's real homepage is known.
-    homepageUrl: 'https://example.com/codeagent'
+    // Why: claude-code fork; reuse Claude Code docs until the fork's own homepage exists.
+    homepageUrl: 'https://docs.anthropic.com/claude/docs/claude-code'
   },
   {
     id: 'claude-agent-teams',
@@ -341,7 +341,7 @@ export function AgentIcon({
     return <ClaudeIcon size={size} />
   }
   if (agent === 'codeagent') {
-    return <ClaudeIcon size={size} />
+    return <CodeAgentIcon size={size} />
   }
   if (agent === 'codex') {
     return <OpenAIIcon size={size} />

@@ -3,7 +3,7 @@ import { DiffEditor, type DiffOnMount } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import { useAppStore } from '@/store'
 import { diffViewStateCache, setWithLRU } from '@/lib/scroll-cache'
-import { monaco } from '@/lib/monaco-setup'
+import { MONACO_DARK_THEME, MONACO_LIGHT_THEME, monaco } from '@/lib/monaco-setup'
 import { computeDiffEditorFontSize, resolveEditorFontFamily } from '@/lib/editor-font-zoom'
 import { useContextualCopySetup } from './useContextualCopySetup'
 import { selectWorktreeDiffComments } from '@/store/worktree-diff-comments-selector'
@@ -408,7 +408,7 @@ export default function DiffViewer({
             language={language}
             original={originalContent}
             modified={modifiedContent}
-            theme={isDark ? 'vs-dark' : 'vs'}
+            theme={isDark ? MONACO_DARK_THEME : MONACO_LIGHT_THEME}
             onMount={handleMount}
             // Why: a file can have multiple live diff tabs, so key models off tab identity (not file path) to avoid cross-tab reuse.
             // Why: Changes mode rotates only the original-side model after HEAD moves, preserving the modified side's undo stack.

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,12 +26,12 @@ afterEach(() => {
   rmSync(tmpHome, { recursive: true, force: true })
 })
 
-// Why: the codeagent fork joins command+args and runs hooks through bash
-// (/usr/bin/bash), which strips unquoted backslashes — the Windows exec form
-// (`conhost.exe` with backslash paths) fails as `C:WINDOWSSystem32conhost.exe:
-// command not found`. The fork must get the bash-safe shell form.
+// Why: the codeagent fork runs hooks as `bash -c "bash <command> <args>"`, so
+// the exec form dies on stripped backslashes (`C:WINDOWSSystem32conhost.exe`)
+// and any shell one-liner (`if … then`) is a syntax error under the doubled
+// bash. Only a bare .sh path survives both that wrap and a plain `bash -c`.
 describe('codeagentHookService hook form', () => {
-  it('writes the bash-safe shell form, never the conhost exec form', () => {
+  it('writes a bare .sh path command with no shell syntax', () => {
     expect(codeagentHookService.install().state).toBe('installed')
 
     const settings = JSON.parse(readFileSync(join(tmpHome, '.cac', 'settings.json'), 'utf-8')) as {
@@ -44,9 +44,21 @@ describe('codeagentHookService hook form', () => {
     expect(commands.length).toBeGreaterThan(0)
     for (const hook of commands) {
       expect(hook.command).not.toContain('conhost')
-      expect(hook.command).toContain('codeagent-hook.cmd')
-      // Why: args marks the exec form; the portable shell form is a single string.
+      expect(hook.command).not.toMatch(/\b(if|case|then|fi|esac)\b/)
+      // Why: absolute forward-slash script path — the fork's hook bash may not
+      // export HOME, so a $HOME form resolved to a missing path in the field.
+      expect(hook.command).toMatch(/^'.*[/\\.]orca[/\\]agent-hooks[/\\]codeagent-hook\.sh'$/)
+      expect(hook.command).not.toContain('$HOME')
+      // Why: args would be joined into the fork's bash string; keep it empty.
       expect(hook.args).toBeUndefined()
     }
+  })
+
+  it('installs a POSIX .sh script even on Windows', () => {
+    codeagentHookService.install()
+
+    const shPath = join(tmpHome, '.orca', 'agent-hooks', 'codeagent-hook.sh')
+    expect(existsSync(shPath)).toBe(true)
+    expect(readFileSync(shPath, 'utf-8')).toContain('#!/bin/sh')
   })
 })

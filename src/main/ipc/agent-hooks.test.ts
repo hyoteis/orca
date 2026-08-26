@@ -63,6 +63,9 @@ vi.mock('../agent-hooks/migration-unsupported-pty-state', () => ({
 vi.mock('../claude/hook-service', () => ({
   claudeHookService: { getStatus: vi.fn(() => ({ agent: 'claude', state: 'absent' })) }
 }))
+vi.mock('../codeagent/hook-service', () => ({
+  codeagentHookService: { getStatus: vi.fn(() => ({ agent: 'codeagent', state: 'absent' })) }
+}))
 vi.mock('../openclaude/hook-service', () => ({
   openClaudeHookService: { getStatus: vi.fn(() => ({ agent: 'openclaude', state: 'absent' })) }
 }))
@@ -271,6 +274,17 @@ describe('agentHooks:kimiStatus IPC', () => {
     const handler = handleHandlers.get('agentHooks:kimiStatus')
     expect(handler).toBeDefined()
     expect(handler!({})).toEqual({ agent: 'kimi', state: 'absent' })
+  })
+})
+
+describe('agentHooks:codeagentStatus IPC', () => {
+  it('returns CodeAgent hook installation status', async () => {
+    const { registerAgentHookHandlers } = await import('./agent-hooks')
+    registerAgentHookHandlers()
+
+    const handler = handleHandlers.get('agentHooks:codeagentStatus')
+    expect(handler).toBeDefined()
+    expect(handler!({})).toEqual({ agent: 'codeagent', state: 'absent' })
   })
 })
 
