@@ -10,6 +10,7 @@ import type { CodeIntelligenceScopeStore } from '../language-server/code-intelli
 import type { Store } from '../persistence'
 import { CodeIntelligenceCppSetup } from '../language-server/code-intelligence-cpp-setup'
 import { CodeIntelligenceSshCppSetup } from '../language-server/code-intelligence-ssh-cpp-setup'
+import { sweepOrphanCppScopeDirectories } from '../language-server/code-intelligence-setup-cache'
 import { probeLocalLanguageServer } from '../language-server/local-language-server-probe'
 import { resolveDefaultLocalLanguageServerCommand } from '../language-server/local-language-server-session-manager'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
@@ -93,10 +94,9 @@ export function registerCodeIntelligenceHandlers(
   scopes: CodeIntelligenceScopeStore,
   store: Store
 ): void {
-  const cppSetup = new CodeIntelligenceCppSetup(
-    store,
-    join(app.getPath('userData'), 'code-intelligence', 'cpp')
-  )
+  const cppCacheRoot = join(app.getPath('userData'), 'code-intelligence', 'cpp')
+  const cppSetup = new CodeIntelligenceCppSetup(store, cppCacheRoot)
+  void sweepOrphanCppScopeDirectories(cppCacheRoot)
   const sshCppSetup = new CodeIntelligenceSshCppSetup(store, {
     getConnection: (targetId) => getSshConnectionManager()?.getConnection(targetId),
     getProvider: (targetId) => getSshFilesystemProvider(targetId),

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import type { ClientChannel } from 'ssh2'
 import { posix, win32 } from 'node:path'
 import type { Store } from '../persistence'
@@ -10,7 +9,11 @@ import type {
   CodeIntelligenceCppSetupResult
 } from '../../shared/code-intelligence-cpp-setup'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
-import { normalizeScopeRelativePath } from '../../shared/code-intelligence-scope'
+import {
+  getCppScopeIdForRepo,
+  normalizeScopeRelativePath
+} from '../../shared/code-intelligence-scope'
+import { cppScopeDirectoryName } from './code-intelligence-setup-cache'
 import { buildWindowsLanguageServerCommand } from '../ssh/ssh-language-server-session-manager'
 
 const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.m', '.mm'])
@@ -188,24 +191,13 @@ export class CodeIntelligenceSshCppSetup {
           ]
         }
       })
-      const cacheKey = createHash('sha256')
-        .update(
-          JSON.stringify({
-            repoId: repo.id,
-            roots,
-            includeDirectories: [...includeDirectories],
-            defines,
-            cppStandard
-          })
-        )
-        .digest('hex')
-        .slice(0, 16)
       const cacheDirectory = pathApi.join(
         environment.home,
         '.orca',
         'code-intelligence',
         'cpp',
-        cacheKey
+        'scopes',
+        cppScopeDirectoryName(getCppScopeIdForRepo(repo))
       )
       await provider.createDir(cacheDirectory)
       await provider.writeFile(

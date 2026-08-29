@@ -3,14 +3,11 @@ import type {
   CodeIntelligenceLanguage,
   CodeIntelligenceScope
 } from '../../../../shared/code-intelligence-scope'
+import {
+  getCodeIntelligenceScopeId,
+  getCodeIntelligenceWorkspaceKey
+} from '../../../../shared/code-intelligence-scope'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-
-export function getRepositoryCodeIntelligenceWorkspaceKey(
-  repoId: string,
-  isFolder: boolean
-): CodeIntelligenceScope['workspaceKey'] {
-  return isFolder ? `folder:${repoId}` : `worktree:${repoId}`
-}
 
 export function createRepositoryCodeIntelligenceScope(args: {
   repoId: string
@@ -22,9 +19,13 @@ export function createRepositoryCodeIntelligenceScope(args: {
   relativeRoot?: string
 }): CodeIntelligenceScope {
   const languageLabel = args.language === 'python' ? 'Python' : 'C++'
-  const workspaceKey = getRepositoryCodeIntelligenceWorkspaceKey(args.repoId, args.isFolder)
+  const workspaceKey = getCodeIntelligenceWorkspaceKey(args.repoId, args.isFolder)
   return {
-    id: `${encodeURIComponent(args.executionHostId)}:${workspaceKey}:${args.language}`,
+    id: getCodeIntelligenceScopeId({
+      executionHostId: args.executionHostId,
+      workspaceKey,
+      language: args.language
+    }),
     name: `${args.repoName} ${languageLabel}`,
     executionHostId: args.executionHostId,
     workspaceKey,

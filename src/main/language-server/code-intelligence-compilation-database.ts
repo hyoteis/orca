@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { extname, isAbsolute, join, resolve } from 'node:path'
 
@@ -139,6 +139,10 @@ export async function mergeCompilationDatabases(
     }
     entries.push(...parsed)
   }
-  await writeFile(join(destination, 'compile_commands.json'), JSON.stringify(entries, null, 2))
+  // Atomic swap: a mid-rewrite failure must never leave a torn merged CDB.
+  const destinationPath = join(destination, 'compile_commands.json')
+  const temporaryPath = join(destination, '.compile_commands.json.tmp')
+  await writeFile(temporaryPath, JSON.stringify(entries, null, 2))
+  await rename(temporaryPath, destinationPath)
   return entries.length
 }

@@ -6,7 +6,7 @@ import type {
   CodeIntelligenceCppSetupResult
 } from '../../shared/code-intelligence-cpp-setup'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
-import { normalizeScopeRelativePath } from '../../shared/code-intelligence-scope'
+import { getCppScopeIdForRepo, normalizeScopeRelativePath } from '../../shared/code-intelligence-scope'
 import {
   appendCppSetupLog,
   resolveCppSetupEnvironment,
@@ -27,7 +27,8 @@ import {
 import { findGnOutputFile, findGnRoot } from './code-intelligence-gn-output'
 import { provisionCppSetupTools } from './code-intelligence-cpp-tool-provisioning'
 import {
-  createCodeIntelligenceSetupCacheKey,
+  cppScopeDirectoryPath,
+  createCodeIntelligenceSetupFingerprint,
   readCachedCodeIntelligenceSetupResult,
   writeCachedCodeIntelligenceSetupResult
 } from './code-intelligence-setup-cache'
@@ -99,14 +100,14 @@ export class CodeIntelligenceCppSetup {
             root.system === 'basic' || (root.system === 'gn' && !gnRootBySource.get(root.sourceDir))
         )
         .map((root) => root.sourceDir)
-      const cacheKey = await createCodeIntelligenceSetupCacheKey({
+      const fingerprint = await createCodeIntelligenceSetupFingerprint({
         repoId: repo.id,
         roots,
         request,
         buildRoots
       })
-      const outputRoot = join(this.cacheRoot, cacheKey)
-      const cachedResult = await readCachedCodeIntelligenceSetupResult(outputRoot)
+      const outputRoot = cppScopeDirectoryPath(this.cacheRoot, getCppScopeIdForRepo(repo))
+      const cachedResult = await readCachedCodeIntelligenceSetupResult(outputRoot, fingerprint)
       if (cachedResult) {
         return { ...cachedResult, relativeRoots: roots }
       }
@@ -206,7 +207,7 @@ export class CodeIntelligenceCppSetup {
         compileCommandCount,
         warnings
       }
-      await writeCachedCodeIntelligenceSetupResult(outputRoot, result)
+      await writeCachedCodeIntelligenceSetupResult(outputRoot, fingerprint, result)
       return result
     } catch (error) {
       logs.push(

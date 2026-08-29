@@ -1,4 +1,6 @@
 import type { ExecutionHostId } from './execution-host'
+import { getRepoExecutionHostId } from './execution-host'
+import type { Repo } from './types'
 import {
   isRuntimePathAbsolute,
   normalizeRuntimePathForComparison,
@@ -6,6 +8,31 @@ import {
 } from './cross-platform-path'
 
 export type CodeIntelligenceLanguage = 'python' | 'cpp'
+
+export function getCodeIntelligenceWorkspaceKey(
+  repoId: string,
+  isFolder: boolean
+): CodeIntelligenceScope['workspaceKey'] {
+  return isFolder ? `folder:${repoId}` : `worktree:${repoId}`
+}
+
+export function getCodeIntelligenceScopeId(args: {
+  executionHostId: ExecutionHostId
+  workspaceKey: CodeIntelligenceScope['workspaceKey']
+  language: CodeIntelligenceLanguage
+}): string {
+  return `${encodeURIComponent(args.executionHostId)}:${args.workspaceKey}:${args.language}`
+}
+
+export function getCppScopeIdForRepo(
+  repo: Pick<Repo, 'id' | 'kind' | 'connectionId' | 'executionHostId'>
+): string {
+  return getCodeIntelligenceScopeId({
+    executionHostId: getRepoExecutionHostId(repo),
+    workspaceKey: getCodeIntelligenceWorkspaceKey(repo.id, repo.kind === 'folder'),
+    language: 'cpp'
+  })
+}
 export type CodeIntelligenceServerSource =
   | { type: 'automatic' }
   | { type: 'managed'; version?: string }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getCodeIntelligenceScopeId,
+  getCppScopeIdForRepo,
   normalizeCodeIntelligenceScope,
   type CodeIntelligenceScope
 } from './code-intelligence-scope'
@@ -149,5 +151,28 @@ describe('normalizeCodeIntelligenceScope member dedup', () => {
       })
     )
     expect(normalized.members).toHaveLength(2)
+  })
+})
+
+describe('getCodeIntelligenceScopeId', () => {
+  it('encodes the execution Host so the id stays free of path separators', () => {
+    expect(
+      getCodeIntelligenceScopeId({
+        executionHostId: 'ssh:user@host:2222',
+        workspaceKey: 'worktree:repo-1',
+        language: 'cpp'
+      })
+    ).toBe('ssh%3Auser%40host%3A2222:worktree:repo-1:cpp')
+  })
+})
+
+describe('getCppScopeIdForRepo', () => {
+  it('derives the deterministic cpp scope id for git and folder workspaces', () => {
+    expect(
+      getCppScopeIdForRepo({ id: 'repo-1', executionHostId: 'local', kind: 'git' })
+    ).toBe('local:worktree:repo-1:cpp')
+    expect(
+      getCppScopeIdForRepo({ id: 'folder-1', executionHostId: 'local', kind: 'folder' })
+    ).toBe('local:folder:folder-1:cpp')
   })
 })
