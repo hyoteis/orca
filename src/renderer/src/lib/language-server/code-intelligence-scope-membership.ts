@@ -1,4 +1,16 @@
-import type { CodeIntelligenceScopeMember } from '../../../../shared/code-intelligence-scope'
+import {
+  isRuntimePathAbsolute,
+  relativePathInsideRoot
+} from '../../../../shared/cross-platform-path'
+import type {
+  CodeIntelligenceScope,
+  CodeIntelligenceScopeMember
+} from '../../../../shared/code-intelligence-scope'
+
+export type CodeIntelligenceMemberScope = {
+  workspaceRoot: CodeIntelligenceScope['workspaceRoot']
+  members: readonly CodeIntelligenceScopeMember[]
+}
 
 function normalizeCandidatePath(value: string): string | null {
   const normalized = value
@@ -11,38 +23,58 @@ function normalizeCandidatePath(value: string): string | null {
   return normalized || '.'
 }
 
-function memberContains(member: CodeIntelligenceScopeMember, relativePath: string): boolean {
+function memberWorkspaceRelativePath(
+  scope: CodeIntelligenceMemberScope,
+  member: CodeIntelligenceScopeMember
+): string | null {
+  if (!isRuntimePathAbsolute(member.path)) {
+    return member.path
+  }
+  // Absolute members only govern workspace documents when they sit under the
+  // workspace root; members elsewhere on the Host never match workspace files.
+  const inside = relativePathInsideRoot(scope.workspaceRoot, member.path)
+  return inside === null ? null : inside || '.'
+}
+
+function pathContains(memberPath: string, relativePath: string): boolean {
   return (
-    member.relativePath === '.' ||
-    relativePath === member.relativePath ||
-    relativePath.startsWith(`${member.relativePath}/`)
+    memberPath === '.' || relativePath === memberPath || relativePath.startsWith(`${memberPath}/`)
   )
 }
 
 export function isDocumentInCodeIntelligenceScope(
-  scope: { members: readonly CodeIntelligenceScopeMember[] },
-  relativePath: string
-): boolean {
-  const normalized = normalizeCandidatePath(relativePath)
-  return normalized !== null && scope.members.some((member) => memberContains(member, normalized))
-}
-
-export function isCodeIntelligenceResultVisible(
-  scope: { members: readonly CodeIntelligenceScopeMember[] },
+  scope: CodeIntelligenceMemberScope,
   relativePath: string
 ): boolean {
   const normalized = normalizeCandidatePath(relativePath)
   if (normalized === null) {
     return false
   }
-  let mostSpecific: CodeIntelligenceScopeMember | null = null
+  return scope.members.some((member) => {
+    const memberPath = memberWorkspaceRelativePath(scope, member)
+    return memberPath !== null && pathContains(memberPath, normalized)
+  })
+}
+
+export function isCodeIntelligenceResultVisible(
+  scope: CodeIntelligenceMemberScope,
+  relativePath: string
+): boolean {
+  const normalized = normalizeCandidatePath(relativePath)
+  if (normalized === null) {
+    return false
+  }
+  let mostSpecificPath: string | null = null
+  let visibleResults = false
   for (const member of scope.members) {
-    if (
-      memberContains(member, normalized) &&
-      (!mostSpecific || member.relativePath.length > mostSpecific.relativePath.length)
-    ) {
-      mostSpecific = member
+    const memberPath = memberWorkspaceRelativePath(scope, member)
+    if (memberPath === null || !pathContains(memberPath, normalized)) {
+      continue
+    }
+    if (mostSpecificPath === null || memberPath.length > mostSpecificPath.length) {
+      mostSpecificPath = memberPath
+      visibleResults = member.visibleResults
     }
   }
-  return mostSpecific?.visibleResults ?? false
+  return visibleResults
 }

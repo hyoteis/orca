@@ -1,6 +1,10 @@
 import type { GlobalSettings } from '../../../../shared/types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import { isRuntimePathAbsolute } from '../../../../shared/cross-platform-path'
+import type {
+  CodeIntelligenceScope,
+  CodeIntelligenceScopeMember
+} from '../../../../shared/code-intelligence-scope'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
 
 export function getStatusBarCodeIntelligenceScopes(args: {
@@ -29,8 +33,11 @@ export function countCodeIntelligenceScopeFolders(
 
 export function getCodeIntelligenceMemberDisplayPath(
   scope: Pick<CodeIntelligenceScope, 'workspaceRoot'>,
-  relativePath: string
+  member: CodeIntelligenceScopeMember
 ): string {
+  if (isRuntimePathAbsolute(member.path)) {
+    return member.path
+  }
   const root = scope.workspaceRoot.replace(/[\\/]+$/, '')
-  return relativePath === '.' ? root : `${root}/${relativePath.replace(/^\.\/?/, '')}`
+  return member.path === '.' ? root : `${root}/${member.path.replace(/^\.\/?/, '')}`
 }

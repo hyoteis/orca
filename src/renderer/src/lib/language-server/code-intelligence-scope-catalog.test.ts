@@ -9,7 +9,7 @@ const scope: CodeIntelligenceScope = {
   workspaceKey: 'worktree:w',
   workspaceRoot: '/workspace',
   language: 'cpp',
-  members: [{ relativePath: 'repo-a', visibleResults: true }],
+  members: [{ path: 'repo-a', visibleResults: true }],
   serverSource: { type: 'automatic' },
   enabled: true,
   revision: 1
@@ -25,12 +25,12 @@ describe('CodeIntelligenceScopeCatalog', () => {
     catalog.subscribeRestart(restart)
     await catalog.upsert({
       ...scope,
-      members: [{ relativePath: 'repo-b/', visibleResults: true }],
+      members: [{ path: 'repo-b/', visibleResults: true }],
       revision: 2
     })
     expect(persistence.upsert).toHaveBeenCalled()
     expect(restart).toHaveBeenCalledWith('s')
-    expect(catalog.list()[0].members[0].relativePath).toBe('repo-b')
+    expect(catalog.list()[0].members[0].path).toBe('repo-b')
     expect(catalog.list()[0].consent).toBeUndefined()
   })
   it('preserves paths that differ only by case for case-sensitive Hosts', () => {
@@ -39,8 +39,8 @@ describe('CodeIntelligenceScopeCatalog', () => {
         {
           ...scope,
           members: [
-            { relativePath: 'Src', visibleResults: true },
-            { relativePath: 'src', visibleResults: true }
+            { path: 'Src', visibleResults: true },
+            { path: 'src', visibleResults: true }
           ]
         }
       ],
@@ -53,7 +53,7 @@ describe('CodeIntelligenceScopeCatalog', () => {
     expect(
       () =>
         new CodeIntelligenceScopeCatalog(
-          [{ ...scope, members: [{ relativePath: '../secret', visibleResults: true }] }],
+          [{ ...scope, members: [{ path: '../secret', visibleResults: true }] }],
           { upsert: vi.fn(), remove: vi.fn() }
         )
     ).toThrow('stay inside')

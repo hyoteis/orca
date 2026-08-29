@@ -12,7 +12,7 @@ const scope = (): CodeIntelligenceScope => ({
   workspaceKey: 'folder:w',
   workspaceRoot: '/workspace',
   language: 'cpp',
-  members: [{ relativePath: 'repo-a', visibleResults: true }],
+  members: [{ path: 'repo-a', visibleResults: true }],
   serverSource: { type: 'custom', executable: '/usr/bin/clangd', args: [] },
   enabled: true,
   revision: 1
@@ -24,7 +24,7 @@ describe('code intelligence consent', () => {
     current.consent = grantCodeIntelligenceConsent(current, 10)
     expect(current.consent.configurationFingerprint).toBe(fingerprint)
     expect(hasCurrentCodeIntelligenceConsent(current)).toBe(true)
-    current.members.push({ relativePath: 'repo-b', visibleResults: true })
+    current.members.push({ path: 'repo-b', visibleResults: true })
     expect(hasCurrentCodeIntelligenceConsent(current)).toBe(false)
   })
 })

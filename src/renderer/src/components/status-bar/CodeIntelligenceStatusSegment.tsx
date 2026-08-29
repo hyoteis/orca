@@ -162,19 +162,16 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
                 </div>
                 <div className="space-y-0.5">
                   {scope.members.map((member) => {
-                    const displayPath = getCodeIntelligenceMemberDisplayPath(
-                      scope,
-                      member.relativePath
-                    )
+                    const displayPath = getCodeIntelligenceMemberDisplayPath(scope, member)
                     return (
                       <div
-                        key={member.relativePath}
+                        key={member.path}
                         className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/50"
                         title={displayPath}
                       >
                         <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
-                          {member.relativePath}
+                          {member.path}
                         </span>
                         {!member.visibleResults ? (
                           <span className="shrink-0 text-[10px] text-muted-foreground">

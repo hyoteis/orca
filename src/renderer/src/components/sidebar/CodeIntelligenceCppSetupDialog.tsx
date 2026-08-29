@@ -100,7 +100,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
                 scope.executionHostId === getRepoExecutionHostId(repo) &&
                 scope.language === 'cpp'
             )
-            ?.members.map((member) => member.relativePath) ?? []
+            ?.members.map((member) => member.path) ?? []
         setRoots(detected)
         setSelected(expandConfiguredCodeIntelligenceDirectories(detected, existingMembers))
         setStage('idle')
@@ -198,8 +198,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         })
       const saved = await window.api.codeIntelligence.upsertScope({
         ...base,
-        members: setup.relativeRoots.map((relativePath) => ({
-          relativePath,
+        members: setup.relativeRoots.map((path) => ({
+          path,
           visibleResults: true
         })),
         serverSource: {

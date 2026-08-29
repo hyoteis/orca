@@ -20,7 +20,7 @@ describe('repository code intelligence scopes', () => {
       workspaceKey: 'folder:repo',
       workspaceRoot: '/workspace/engine',
       executionHostId: 'ssh:box',
-      members: [{ relativePath: '.', visibleResults: true }]
+      members: [{ path: '.', visibleResults: true }]
     })
   })
 
@@ -39,6 +39,6 @@ describe('repository code intelligence scopes', () => {
         languages: ['python'],
         markers: ['pyproject.toml']
       }).members
-    ).toContainEqual({ relativePath: 'packages/api', visibleResults: true })
+    ).toContainEqual({ path: 'packages/api', visibleResults: true })
   })
 })

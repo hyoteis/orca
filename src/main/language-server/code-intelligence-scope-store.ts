@@ -4,6 +4,7 @@ import type {
   CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
 import {
+  hasLegacyCodeIntelligenceMembers,
   normalizeCodeIntelligenceScope,
   scopeConfigurationPayload
 } from '../../shared/code-intelligence-scope'
@@ -59,9 +60,20 @@ export class CodeIntelligenceScopeStore {
   constructor(private readonly store: ScopeSettingsStore) {}
 
   list(): readonly CodeIntelligenceScope[] {
-    return (this.store.getSettings().codeIntelligenceScopes ?? []).map((scope) =>
-      structuredClone(normalizeCodeIntelligenceScope(scope))
+    const raw = this.store.getSettings().codeIntelligenceScopes ?? []
+    // Lazy no-compat migration: map legacy {relativePath} members to {path},
+    // drop the setupStatus (its compileCommandsDir points at a swept hash dir),
+    // and persist once so later reads never see the old shape again.
+    const migrated = raw.some(hasLegacyCodeIntelligenceMembers)
+    const scopes = raw.map((scope) =>
+      hasLegacyCodeIntelligenceMembers(scope)
+        ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
+        : normalizeCodeIntelligenceScope(scope)
     )
+    if (migrated) {
+      this.persist(scopes)
+    }
+    return scopes.map((scope) => structuredClone(scope))
   }
 
   upsert(input: CodeIntelligenceScope): CodeIntelligenceScopeMutation {

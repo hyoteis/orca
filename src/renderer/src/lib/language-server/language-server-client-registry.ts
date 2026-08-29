@@ -115,6 +115,7 @@ export class LanguageServerClientRegistry {
       handle: LanguageServerSessionHandle
       sync: LanguageServerDocumentSyncController
       members: readonly CodeIntelligenceScopeMember[]
+      workspaceRoot: string
     }
   >()
   private readonly unsubscribeScopeChanges: () => void
@@ -177,7 +178,8 @@ export class LanguageServerClientRegistry {
       connection,
       handle,
       sync,
-      members: launch.members
+      members: launch.members,
+      workspaceRoot: launch.workspaceRoot
     })
     return {
       generation,
@@ -189,7 +191,10 @@ export class LanguageServerClientRegistry {
   isResultVisible(key: LanguageServerClientKey, relativePath: string): boolean {
     const current = this.clients.get(JSON.stringify(key))
     return current
-      ? isCodeIntelligenceResultVisible({ members: current.members }, relativePath)
+      ? isCodeIntelligenceResultVisible(
+          { workspaceRoot: current.workspaceRoot, members: current.members },
+          relativePath
+        )
       : false
   }
   restartScope(scopeId: string, revision: number): void {

@@ -30,7 +30,7 @@ export function createRepositoryCodeIntelligenceScope(args: {
     workspaceKey,
     workspaceRoot: args.repoPath,
     language: args.language,
-    members: [{ relativePath: args.relativeRoot ?? '.', visibleResults: true }],
+    members: [{ path: args.relativeRoot ?? '.', visibleResults: true }],
     serverSource: { type: 'automatic' },
     enabled: true,
     revision: 0
@@ -44,11 +44,11 @@ export function addCandidateToCodeIntelligenceScope(
   if (!candidate.languages.includes(scope.language)) {
     return scope
   }
-  if (scope.members.some((member) => member.relativePath === candidate.relativeRoot)) {
+  if (scope.members.some((member) => member.path === candidate.relativeRoot)) {
     return scope
   }
   return {
     ...scope,
-    members: [...scope.members, { relativePath: candidate.relativeRoot, visibleResults: true }]
+    members: [...scope.members, { path: candidate.relativeRoot, visibleResults: true }]
   }
 }
