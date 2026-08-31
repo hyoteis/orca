@@ -11,13 +11,16 @@ async function isReadable(path: string): Promise<boolean> {
   }
 }
 
-export async function findGnRoot(workspaceRoot: string, sourceDir: string): Promise<string | null> {
+/** Walks up from `sourceDir` to `searchBound` (inclusive) looking for a `.gn`
+ * dotfile. Relative members bound at the workspace root, absolute members at
+ * the filesystem root. */
+export async function findGnRoot(searchBound: string, sourceDir: string): Promise<string | null> {
   let current = sourceDir
   for (;;) {
     if (await isReadable(join(current, '.gn'))) {
       return current
     }
-    if (current === workspaceRoot || relative(workspaceRoot, current).startsWith('..')) {
+    if (current === searchBound || relative(searchBound, current).startsWith('..')) {
       return null
     }
     const parent = dirname(current)

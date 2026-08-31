@@ -169,8 +169,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
       }
       const setup = await setupCpp({
         repoId: repo.id,
-        // Why: host-absolute members cannot flow into the generator yet (#55) — they persist as members only.
-        relativeRoots: relativeSelectedRoots,
+        // Dual-form members: workspace-relative and host-absolute selections alike.
+        relativeRoots: selectedRoots,
         workspaceDirectories: roots,
         installMissingTools: true,
         additionalIncludeDirectories: additionalIncludes
@@ -208,7 +208,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         })
       const saved = await window.api.codeIntelligence.upsertScope({
         ...base,
-        members: [...setup.relativeRoots, ...customRoots].map((path) => ({
+        members: setup.relativeRoots.map((path) => ({
           path,
           visibleResults: true
         })),

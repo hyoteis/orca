@@ -6,7 +6,7 @@ import type {
   CodeIntelligenceCppSetupResult
 } from '../../shared/code-intelligence-cpp-setup'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
-import { getCppScopeIdForRepo, normalizeScopeRelativePath } from '../../shared/code-intelligence-scope'
+import { getCppScopeIdForRepo, normalizeScopeMemberPath } from '../../shared/code-intelligence-scope'
 import {
   appendCppSetupLog,
   resolveCppSetupEnvironment,
@@ -21,6 +21,7 @@ import {
 } from './code-intelligence-compilation-database'
 import {
   coalesceCmakeBuildRoots,
+  cppUpwardSearchBound,
   detectCppBuildRoot,
   type CppBuildRoot
 } from './code-intelligence-cmake-root-selection'
@@ -75,7 +76,8 @@ export class CodeIntelligenceCppSetup {
       if (getRepoExecutionHostId(repo) !== 'local') {
         return fail('One-click C++ setup currently requires a local Host', roots)
       }
-      roots = [...new Set(request.relativeRoots.map(normalizeScopeRelativePath))]
+      // Dual-form members: workspace-relative and host-absolute strings coexist.
+      roots = [...new Set(request.relativeRoots.map(normalizeScopeMemberPath))]
       if (roots.length === 0) {
         return fail('Select at least one C++ build directory', roots)
       }
@@ -84,14 +86,16 @@ export class CodeIntelligenceCppSetup {
         roots.map((root) => detectCppBuildRoot(workspaceRoot, root))
       )
       const buildRoots = await coalesceCmakeBuildRoots(workspaceRoot, detectedBuildRoots)
+      // GN upward search is bounded by the member's form: relative members stop
+      // at the workspace root, absolute members at the filesystem root.
       const gnRootBySource = new Map<string, string | null>(
         await Promise.all(
           buildRoots
             .filter((root) => root.system === 'gn')
-            .map(
-              async (root) =>
-                [root.sourceDir, await findGnRoot(workspaceRoot, root.sourceDir)] as const
-            )
+            .map(async (root) => [
+              root.sourceDir,
+              await findGnRoot(cppUpwardSearchBound(root, workspaceRoot), root.sourceDir)
+            ] as const)
         )
       )
       const basicSourceRoots = buildRoots
@@ -141,6 +145,7 @@ export class CodeIntelligenceCppSetup {
         const basicDatabase = await createBasicCompilationDatabase({
           workspaceRoot,
           sourceRoots: basicSourceRoots,
+          includeDiscoveryRoots: buildRoots.map((root) => root.sourceDir),
           outputDirectory: join(outputRoot, 'basic'),
           additionalIncludeDirectories: request.additionalIncludeDirectories,
           defines: request.defines,
@@ -149,7 +154,7 @@ export class CodeIntelligenceCppSetup {
         compileCommandFiles.push(basicDatabase.filePath)
         generationModes.add('BASIC')
         logs.push(
-          `\n## Basic C++ indexing\nNo GN dotfile was found; generated minimal commands for ${basicDatabase.sourceFileCount} source files.`
+          `\n## Basic C++ indexing\nNo GN dotfile was found; generated minimal commands for ${basicDatabase.sourceFileCount} source files across: ${basicSourceRoots.join(', ')}`
         )
       }
       for (const [index, root] of buildRoots.entries()) {
@@ -184,6 +189,13 @@ export class CodeIntelligenceCppSetup {
         generationModes.add('GN')
       }
       const compileCommandCount = await mergeCompilationDatabases(compileCommandFiles, outputRoot)
+      if (compileCommandCount === 0) {
+        return fail(
+          'No compile commands were generated: no member folder contains C or C++ sources or a buildable project. Select a member with sources or generate its build directory, then retry.',
+          roots,
+          installedTools
+        )
+      }
       const systems = [...generationModes].join(' + ')
       const configurationMode =
         generationModes.size === 1
@@ -241,12 +253,12 @@ export class CodeIntelligenceCppSetup {
     const result = await this.runCommand(tools.cmake!, commandArgs, workspaceRoot, environment)
     appendCppSetupLog(
       logs,
-      `Configure ${root.relativeRoot}`,
+      `Configure ${root.memberLabel}`,
       [tools.cmake!, ...commandArgs],
       result
     )
     if (result.code !== 0) {
-      throw new Error(`CMake configuration failed for ${root.relativeRoot}`)
+      throw new Error(`CMake configuration failed for ${root.memberLabel}`)
     }
     return join(buildDir, 'compile_commands.json')
   }
@@ -280,13 +292,13 @@ export class CodeIntelligenceCppSetup {
     const result = await this.runCommand(gnExecutable, commandArgs, gnRoot, environment)
     appendCppSetupLog(
       logs,
-      `Configure ${root.relativeRoot}`,
+      `Configure ${root.memberLabel}`,
       [gnExecutable, ...commandArgs],
       result
     )
     if (result.code !== 0) {
       throw new Error(
-        `GN generation failed for ${root.relativeRoot}. Generate a GN output directory with the project's required args.gn, then retry.`
+        `GN generation failed for ${root.memberLabel}. Generate a GN output directory with the project's required args.gn, then retry.`
       )
     }
     return join(generatedOutputDir, 'compile_commands.json')
