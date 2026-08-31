@@ -38,7 +38,12 @@ export type CodeIntelligenceServerSource =
   | { type: 'managed'; version?: string }
   | { type: 'custom'; executable: string; args: string[] }
 export type CodeIntelligenceScopeMember = { path: string; visibleResults: boolean }
-export type CodeIntelligenceScopeConsent = { configurationFingerprint: string; grantedAt: number }
+export type CodeIntelligenceScopeConsent = {
+  configurationFingerprint: string
+  grantedAt: number
+  /** Member snapshot at authorization time; drives the re-consent banner diff. */
+  authorizedMembers?: CodeIntelligenceScopeMember[]
+}
 export type CodeIntelligenceProbeResult = {
   available: boolean
   version?: string
@@ -167,6 +172,42 @@ export function normalizeCodeIntelligenceScope(
   }
   return { ...scope, id: scope.id.trim(), name: scope.name.trim(), members }
 }
+/** Ordered member compare — mirrors the fingerprint's members coverage, so the
+ * banner and authorizeSession agree on when consent went stale. */
+export function isCodeIntelligenceConsentStale(
+  scope: Pick<CodeIntelligenceScope, 'members' | 'consent'>
+): boolean {
+  return (
+    scope.consent !== undefined &&
+    JSON.stringify(scope.consent.authorizedMembers) !== JSON.stringify(scope.members)
+  )
+}
+
+/** Symmetric difference of member paths since authorization (0 = config-only change). */
+export function countChangedCodeIntelligenceMembers(
+  scope: Pick<CodeIntelligenceScope, 'members' | 'consent'>
+): number {
+  // A snapshot-less consent (pre-upgrade data) has no diff to count; the banner
+  // falls back to its configuration-changed line instead of guessing.
+  if (!scope.consent?.authorizedMembers) {
+    return 0
+  }
+  const before = new Set(scope.consent.authorizedMembers.map((member) => member.path))
+  const after = new Set(scope.members.map((member) => member.path))
+  let changed = 0
+  for (const path of before) {
+    if (!after.has(path)) {
+      changed++
+    }
+  }
+  for (const path of after) {
+    if (!before.has(path)) {
+      changed++
+    }
+  }
+  return changed
+}
+
 export function scopeConfigurationPayload(scope: CodeIntelligenceScope): unknown {
   return {
     executionHostId: scope.executionHostId,

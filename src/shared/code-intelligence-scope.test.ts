@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  countChangedCodeIntelligenceMembers,
   getCodeIntelligenceScopeId,
+  isCodeIntelligenceConsentStale,
   getCppScopeIdForRepo,
   normalizeCodeIntelligenceScope,
   type CodeIntelligenceScope
@@ -174,5 +176,67 @@ describe('getCppScopeIdForRepo', () => {
     expect(
       getCppScopeIdForRepo({ id: 'folder-1', executionHostId: 'local', kind: 'folder' })
     ).toBe('local:folder:folder-1:cpp')
+  })
+})
+
+describe('consent staleness', () => {
+  const authorized = (members: CodeIntelligenceScope['members']): CodeIntelligenceScope =>
+    scope({
+      members,
+      consent: {
+        configurationFingerprint: 'irrelevant-to-diff',
+        grantedAt: 1,
+        authorizedMembers: [
+          { path: 'engine', visibleResults: true },
+          { path: 'fx', visibleResults: true }
+        ]
+      }
+    })
+
+  it('is current when authorized members match exactly', () => {
+    const current = authorized([
+      { path: 'engine', visibleResults: true },
+      { path: 'fx', visibleResults: true }
+    ])
+    expect(isCodeIntelligenceConsentStale(current)).toBe(false)
+    expect(countChangedCodeIntelligenceMembers(current)).toBe(0)
+  })
+
+  it('is stale after additions and removals, counting the symmetric difference', () => {
+    const stale = authorized([
+      { path: 'engine', visibleResults: true },
+      { path: 'audio', visibleResults: true }
+    ])
+    expect(isCodeIntelligenceConsentStale(stale)).toBe(true)
+    expect(countChangedCodeIntelligenceMembers(stale)).toBe(2)
+  })
+
+  it('is stale after a visibility-only change while counting zero folders', () => {
+    const stale = authorized([
+      { path: 'engine', visibleResults: true },
+      { path: 'fx', visibleResults: false }
+    ])
+    expect(isCodeIntelligenceConsentStale(stale)).toBe(true)
+    expect(countChangedCodeIntelligenceMembers(stale)).toBe(0)
+  })
+
+  it('treats missing consent as not stale and a snapshot-less consent as stale', () => {
+    expect(isCodeIntelligenceConsentStale(scope())).toBe(false)
+    expect(
+      isCodeIntelligenceConsentStale(
+        scope({
+          members: [{ path: 'engine', visibleResults: true }],
+          consent: { configurationFingerprint: 'f', grantedAt: 1 }
+        })
+      )
+    ).toBe(true)
+    // A pre-upgrade consent has no diff to count; the banner falls back to its
+    // configuration-changed line rather than reporting every member as new.
+    expect(
+      countChangedCodeIntelligenceMembers(
+        scope({ consent: { configurationFingerprint: 'f', grantedAt: 1 } })
+      )
+    ).toBe(0)
+    expect(countChangedCodeIntelligenceMembers(scope({ consent: undefined }))).toBe(0)
   })
 })

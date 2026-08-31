@@ -87,7 +87,10 @@ export class CodeIntelligenceScopeStore {
       ? {
           ...next,
           revision: restartRequired ? prior.revision + 1 : prior.revision,
-          consent: restartRequired ? undefined : prior.consent
+          // Keep the prior consent through changes: its fingerprint no longer
+          // matches (authorizeSession refuses it), while its member snapshot
+          // lets surfaces show what moved since authorization.
+          consent: prior.consent
         }
       : { ...next, revision: 1, consent: undefined }
     if (index !== -1) {

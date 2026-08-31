@@ -48,6 +48,7 @@ describe('CodeIntelligenceScopeStore', () => {
     const catalog = new CodeIntelligenceScopeStore(store)
     const granted = catalog.grantConsent('scope', 1, 10)
     expect(granted.consent?.grantedAt).toBe(10)
+    expect(granted.consent?.authorizedMembers).toEqual([{ path: 'engine', visibleResults: true }])
 
     const result = catalog.upsert({
       ...granted,
@@ -55,7 +56,14 @@ describe('CodeIntelligenceScopeStore', () => {
     })
     expect(result.restartRequired).toBe(true)
     expect(result.scope.revision).toBe(2)
-    expect(result.scope.consent).toBeUndefined()
+    // The stale consent survives so surfaces can diff against its member snapshot;
+    // its fingerprint no longer matches, so authorizeSession still refuses it.
+    expect(result.scope.consent?.authorizedMembers).toEqual([
+      { path: 'engine', visibleResults: true }
+    ])
+    expect(() =>
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
+    ).toThrow('consent')
   })
 
   it('authorizes only the persisted enabled scope with current consent and revision', () => {

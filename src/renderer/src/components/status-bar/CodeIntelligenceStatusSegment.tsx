@@ -1,5 +1,14 @@
 import React, { useMemo, useState } from 'react'
-import { AlertTriangle, Braces, CheckCircle2, Folder, FolderOpen, RefreshCw, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Braces,
+  CheckCircle2,
+  Folder,
+  FolderOpen,
+  RefreshCw,
+  ShieldCheck,
+  X
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -11,11 +20,16 @@ import { useWorktreeMap } from '@/store/selectors'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
+  countChangedCodeIntelligenceMembers,
+  isCodeIntelligenceConsentStale
+} from '../../../../shared/code-intelligence-scope'
+import {
   removeCodeIntelligenceMembers,
   setCodeIntelligenceMemberVisibility,
   writeCodeIntelligenceScopeEdit
 } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import { translate } from '@/i18n/i18n'
+import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS } from './status-bar-context-menu-policy'
 import {
   countCodeIntelligenceScopeFolders,
@@ -43,10 +57,18 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
     () => getStatusBarCodeIntelligenceScopes({ settings, activeWorktreeId, executionHostId }),
     [activeWorktreeId, executionHostId, settings]
   )
+  // All hooks must run before the empty-scopes early return below.
+  const staleScopes = useMemo(() => scopes.filter(isCodeIntelligenceConsentStale), [scopes])
+  const fetchSettings = useAppStore((state) => state.fetchSettings)
   if (scopes.length === 0) {
     return null
   }
   const folderCount = countCodeIntelligenceScopeFolders(scopes)
+  const pendingReconsent = staleScopes.length > 0
+  const changedFolderCount = staleScopes.reduce(
+    (count, scope) => count + countChangedCodeIntelligenceMembers(scope),
+    0
+  )
   const setupStatus = scopes.find((scope) => scope.language === 'cpp')?.setupStatus
   const healthLabel =
     setupStatus?.state === 'ready'
@@ -94,11 +116,40 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
       void writeCodeIntelligenceScopeEdit(next)
     }
   }
+  const handleReauthorize = async (): Promise<void> => {
+    try {
+      // Same grant entry the setup dialog uses — no separate trust path.
+      for (const scope of staleScopes) {
+        await window.api.codeIntelligence.grantConsent({
+          scopeId: scope.id,
+          revision: scope.revision
+        })
+      }
+    } catch (error) {
+      toast.error(
+        extractIpcErrorMessage(
+          error,
+          translate(
+            'settings.codeIntelligence.reauthorizeFailed',
+            'Could not reauthorize code intelligence folders'
+          )
+        )
+      )
+    }
+    // Refresh even on partial failure so already-granted scopes drop out of the banner.
+    await fetchSettings()
+  }
   const tooltip = translate(
     'settings.codeIntelligence.statusSummary',
     'Code intelligence: {{value0}} folders',
     { value0: folderCount }
   )
+  const triggerLabel = pendingReconsent
+    ? translate(
+        'settings.codeIntelligence.pendingReconsentSummary',
+        'Code intelligence folders changed since authorization'
+      )
+    : tooltip
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -108,10 +159,12 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
             <button
               type="button"
               {...STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS}
-              className={`inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-accent/70 hover:text-foreground ${healthColor}`}
-              aria-label={tooltip}
+              className={`inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-accent/70 hover:text-foreground ${
+                pendingReconsent ? 'text-amber-500' : healthColor
+              }`}
+              aria-label={triggerLabel}
             >
-              <Braces className="size-3" />
+              {pendingReconsent ? <AlertTriangle className="size-3" /> : <Braces className="size-3" />}
               {!iconOnly ? (
                 <span className="text-[11px] font-medium tabular-nums">{folderCount}</span>
               ) : null}
@@ -141,6 +194,39 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
             </div>
             <span className="text-[11px] tabular-nums text-muted-foreground">{folderCount}</span>
           </div>
+          {pendingReconsent ? (
+            <div
+              role="alert"
+              className="border-b border-amber-500/20 bg-amber-500/10 px-3 py-2"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {changedFolderCount > 0
+                      ? translate(
+                          'settings.codeIntelligence.foldersChangedSinceAuthorization',
+                          '{{value0}} folders changed since authorization',
+                          { value0: changedFolderCount }
+                        )
+                      : translate(
+                          'settings.codeIntelligence.configurationChangedSinceAuthorization',
+                          'Configuration changed since authorization'
+                        )}
+                  </span>
+                </span>
+                <Button
+                  type="button"
+                  size="xs"
+                  className="shrink-0 gap-1.5"
+                  onClick={() => void handleReauthorize()}
+                >
+                  <ShieldCheck className="size-3.5" />
+                  {translate('settings.codeIntelligence.reauthorize', 'Reauthorize')}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <div className="border-b border-border/60 px-3 py-2">
             <div className="truncate text-xs font-medium text-foreground">{projectName}</div>
             <div className="truncate font-mono text-[10px] text-muted-foreground">

@@ -156,6 +156,43 @@ test('status popover edits visibility inline and removes members, guarding the l
   await expect(orcaPage.getByRole('button', { name: 'Remove engine' })).toBeDisabled()
 })
 
+test('member edits pend re-consent with an amber segment and one-click reauthorize', async ({
+  orcaPage,
+  registerPostElectronShutdownCleanup
+}) => {
+  const root = await createCppFolderFixture(registerPostElectronShutdownCleanup)
+  await addFolderWorkspace(orcaPage, root)
+  await seedCppScope(orcaPage, root)
+
+  // Authorize the seeded membership, then change members through the popover.
+  await orcaPage.evaluate(async () => {
+    const scope = window.__store?.getState().settings?.codeIntelligenceScopes[0]
+    if (!scope) {
+      throw new Error('scope not found')
+    }
+    await window.api.codeIntelligence.grantConsent({ scopeId: scope.id, revision: scope.revision })
+    await window.__store?.getState().fetchSettings()
+  })
+
+  await orcaPage.getByRole('button', { name: /Code intelligence: 2 folders/ }).click()
+  await orcaPage.getByRole('button', { name: 'Remove fx' }).click()
+
+  // Pending: the segment trigger flips to the amber re-consent state.
+  const trigger = orcaPage.getByRole('button', {
+    name: 'Code intelligence folders changed since authorization'
+  })
+  await expect(trigger).toBeVisible()
+  await expect(trigger).toHaveClass(/text-amber-500/)
+
+  // The popover banner summarizes the diff; Reauthorize restores the authorized state.
+  await expect(orcaPage.getByRole('alert')).toContainText('1 folders changed since authorization')
+  await orcaPage.getByRole('button', { name: 'Reauthorize' }).click()
+  await expect(
+    orcaPage.getByRole('button', { name: /Code intelligence: 1 folders/ })
+  ).toBeVisible()
+  await expect(orcaPage.getByRole('alert')).toHaveCount(0)
+})
+
 test('setup dialog pre-checks members, filters, and takes custom absolute paths', async ({
   orcaPage,
   registerPostElectronShutdownCleanup

@@ -28,7 +28,10 @@ export function grantCodeIntelligenceConsent(
 ): CodeIntelligenceScopeConsent {
   return {
     configurationFingerprint: getCodeIntelligenceConfigurationFingerprint(scope),
-    grantedAt: now
+    grantedAt: now,
+    // Snapshot the normalized members so the renderer's diff uses the same
+    // shape the fingerprint hashes.
+    authorizedMembers: structuredClone(normalizeCodeIntelligenceScope(scope).members)
   }
 }
 export function hasCurrentCodeIntelligenceConsent(scope: CodeIntelligenceScope): boolean {
