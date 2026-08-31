@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises'
+import { access, readdir } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { dirname, isAbsolute, join, parse, relative, resolve } from 'node:path'
 import { isRuntimePathAbsolute } from '../../shared/cross-platform-path'
@@ -35,17 +35,40 @@ async function isReadablePath(path: string): Promise<boolean> {
   }
 }
 
+async function listSubdirectories(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(directory, entry.name))
+  } catch {
+    return []
+  }
+}
+
 /** Path/check seams: local setups use node fs; SSH setups pass posix + remote `test -r`. */
 export type CppBuildRootDetection = {
   join: typeof join
   resolve: typeof resolve
+  relative: typeof relative
+  dirname: typeof dirname
   isReadablePath: (path: string) => Promise<boolean>
+  /** Direct child directories; empty when the directory is missing or unreadable. */
+  listSubdirectories: (directory: string) => Promise<string[]>
+}
+
+export const localCppBuildRootDetection: CppBuildRootDetection = {
+  join,
+  resolve,
+  relative,
+  dirname,
+  isReadablePath,
+  listSubdirectories
 }
 
 export async function detectCppBuildRoot(
   workspaceRoot: string,
   memberRoot: string,
-  detection: CppBuildRootDetection = { join, resolve, isReadablePath }
+  detection: CppBuildRootDetection = localCppBuildRootDetection
 ): Promise<CppBuildRoot> {
   // Absolute members arrive with normalized forward slashes; resolve() restores
   // the host-native spelling so generator args and logs match the workspace form.
@@ -73,7 +96,8 @@ export async function detectCppBuildRoot(
 async function coalesceCmakeGroup(
   group: readonly CppBuildRoot[],
   bound: string,
-  rejectAtBound: boolean
+  rejectAtBound: boolean,
+  detection: CppBuildRootDetection
 ): Promise<CppBuildRoot[]> {
   if (group.length < 2) {
     return [...group]
@@ -85,17 +109,17 @@ async function coalesceCmakeGroup(
     }
     if (
       group.every((root) => pathContains(commonRoot, root.sourceDir)) &&
-      (await isReadablePath(join(commonRoot, 'CMakeLists.txt')))
+      (await detection.isReadablePath(detection.join(commonRoot, 'CMakeLists.txt')))
     ) {
       const memberLabel = rejectAtBound
         ? commonRoot
-        : relative(bound, commonRoot).replace(/\\/g, '/') || '.'
+        : detection.relative(bound, commonRoot).replace(/\\/g, '/') || '.'
       return [{ memberLabel, sourceDir: commonRoot, system: 'cmake' }]
     }
     if (commonRoot === bound) {
       break
     }
-    const parent = dirname(commonRoot)
+    const parent = detection.dirname(commonRoot)
     if (parent === commonRoot) {
       break
     }
@@ -106,7 +130,8 @@ async function coalesceCmakeGroup(
 
 export async function coalesceCmakeBuildRoots(
   workspaceRoot: string,
-  roots: readonly CppBuildRoot[]
+  roots: readonly CppBuildRoot[],
+  detection: CppBuildRootDetection = localCppBuildRootDetection
 ): Promise<CppBuildRoot[]> {
   // Forms never mix: a relative member's coalescing ceiling is the workspace
   // root, an absolute member's is the filesystem root.
@@ -118,11 +143,12 @@ export async function coalesceCmakeBuildRoots(
   const absoluteForm = cmakeRoots.filter((root) => isRuntimePathAbsolute(root.memberLabel))
   const others = roots.filter((root) => root.system !== 'cmake')
   return [
-    ...(await coalesceCmakeGroup(relativeForm, workspaceRoot, false)),
+    ...(await coalesceCmakeGroup(relativeForm, workspaceRoot, false, detection)),
     ...(await coalesceCmakeGroup(
       absoluteForm,
       absoluteForm.length > 0 ? cppUpwardSearchBound(absoluteForm[0], workspaceRoot) : workspaceRoot,
-      true
+      true,
+      detection
     )),
     ...others
   ]

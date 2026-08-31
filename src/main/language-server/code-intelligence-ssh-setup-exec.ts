@@ -30,6 +30,26 @@ export function buildRemoteDirectoryExistsCommand(directory: string): string {
   return `test -d ${shellEscape(directory)}`
 }
 
+/** Single-path readability probe (build-root detection). */
+export function buildRemoteReadablePathCommand(path: string): string {
+  return `test -r ${shellEscape(path)}`
+}
+
+/** PATH lookup for a setup tool executable. */
+export function buildRemoteToolLookupCommand(tool: string): string {
+  return `command -v ${shellEscape(tool)}`
+}
+
+/** Shard readback for the local single-source merge. */
+export function buildRemoteReadFileCommand(path: string): string {
+  return `cat ${shellEscape(path)}`
+}
+
+/** Direct child directories of `directory` (GN output scan). */
+export function buildRemoteListSubdirectoriesCommand(directory: string): string {
+  return `find ${shellEscape(directory)} -mindepth 1 -maxdepth 1 -type d -print`
+}
+
 const prunedNames = () =>
   [...IGNORED_DIRECTORIES].map((name) => `-name ${shellEscape(name)}`).join(' -o ')
 

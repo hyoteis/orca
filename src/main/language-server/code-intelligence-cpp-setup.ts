@@ -20,13 +20,9 @@ import {
   createBasicCompilationDatabase,
   mergeCompilationDatabases
 } from './code-intelligence-compilation-database'
-import {
-  coalesceCmakeBuildRoots,
-  cppUpwardSearchBound,
-  detectCppBuildRoot,
-  type CppBuildRoot
-} from './code-intelligence-cmake-root-selection'
-import { findGnOutputFile, findGnRoot } from './code-intelligence-gn-output'
+import { type CppBuildRoot } from './code-intelligence-cmake-root-selection'
+import { findGnOutputFile } from './code-intelligence-gn-output'
+import { classifyCppBuildRoots } from './code-intelligence-build-root-classification'
 import { provisionCppSetupTools } from './code-intelligence-cpp-tool-provisioning'
 import {
   cppScopeDirectoryPath,
@@ -83,28 +79,10 @@ export class CodeIntelligenceCppSetup {
         return fail('Select at least one C++ build directory', roots)
       }
       const workspaceRoot = resolve(repo.path)
-      const detectedBuildRoots = await Promise.all(
-        roots.map((root) => detectCppBuildRoot(workspaceRoot, root))
+      const { buildRoots, gnRootBySource, basicSourceRoots } = await classifyCppBuildRoots(
+        workspaceRoot,
+        roots
       )
-      const buildRoots = await coalesceCmakeBuildRoots(workspaceRoot, detectedBuildRoots)
-      // GN upward search is bounded by the member's form: relative members stop
-      // at the workspace root, absolute members at the filesystem root.
-      const gnRootBySource = new Map<string, string | null>(
-        await Promise.all(
-          buildRoots
-            .filter((root) => root.system === 'gn')
-            .map(async (root) => [
-              root.sourceDir,
-              await findGnRoot(cppUpwardSearchBound(root, workspaceRoot), root.sourceDir)
-            ] as const)
-        )
-      )
-      const basicSourceRoots = buildRoots
-        .filter(
-          (root) =>
-            root.system === 'basic' || (root.system === 'gn' && !gnRootBySource.get(root.sourceDir))
-        )
-        .map((root) => root.sourceDir)
       const fingerprint = await createCodeIntelligenceSetupFingerprint({
         repoId: repo.id,
         roots,

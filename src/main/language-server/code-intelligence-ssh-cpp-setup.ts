@@ -11,6 +11,7 @@ import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execu
 import { getCppScopeIdForRepo, normalizeScopeMemberPath } from '../../shared/code-intelligence-scope'
 import { shellEscape } from '../ssh/ssh-connection-utils'
 import {
+  appendCppSetupLog,
   type CppSetupToolName,
   installCppSetupTools,
   MAX_LOG_BYTES,
@@ -23,22 +24,23 @@ import {
   MAX_SOURCE_FILES,
   mergeCompilationDatabaseShards
 } from './code-intelligence-compilation-database'
-import {
-  type CppBuildRoot,
-  type CppBuildRootDetection,
-  detectCppBuildRoot
-} from './code-intelligence-cmake-root-selection'
+import { type CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
+import { classifyCppBuildRoots } from './code-intelligence-build-root-classification'
+import { findGnOutputFile } from './code-intelligence-gn-output'
 import { cppScopeDirectoryName } from './code-intelligence-setup-cache'
 import {
   buildRemoteClangdDiscoveryCommand,
   buildRemoteFindIncludeDirectoriesCommand,
   buildRemoteFindSourceFilesCommand,
+  buildRemoteListSubdirectoriesCommand,
   buildRemoteReadableDirectoriesCommand,
+  buildRemoteReadablePathCommand,
+  buildRemoteReadFileCommand,
+  buildRemoteToolLookupCommand,
   SshSetupConnectionError,
   SshSetupExecQueue
 } from './code-intelligence-ssh-setup-exec'
 
-const MISSING_CLANGD = ['clangd'] as const satisfies readonly CppSetupToolName[]
 const DARWIN_CLANGD_CANDIDATES = ['/opt/homebrew/opt/llvm/bin/clangd', '/usr/local/opt/llvm/bin/clangd']
 
 type Dependencies = {
@@ -50,8 +52,14 @@ function sshBuildRootDetection(queue: SshSetupExecQueue): CppBuildRootDetection 
   return {
     join: posix.join,
     resolve: posix.resolve,
+    relative: posix.relative,
+    dirname: posix.dirname,
     isReadablePath: async (path) =>
-      (await queue.exec(`test -r ${shellEscape(path)}`)).code === 0
+      (await queue.exec(buildRemoteReadablePathCommand(path))).code === 0,
+    listSubdirectories: async (directory) => {
+      const result = await queue.exec(buildRemoteListSubdirectoriesCommand(directory))
+      return result.code === 0 ? parseRemoteListing(result.stdout) : []
+    }
   }
 }
 
@@ -68,8 +76,11 @@ function sshCommandRunner(queue: SshSetupExecQueue): CppSetupCommandRunner {
   }
 }
 
-async function discoverRemoteClangd(queue: SshSetupExecQueue): Promise<string | null> {
-  const result = await queue.exec(buildRemoteClangdDiscoveryCommand(DARWIN_CLANGD_CANDIDATES))
+async function discoverRemoteExecutable(
+  queue: SshSetupExecQueue,
+  command: string
+): Promise<string | null> {
+  const result = await queue.exec(command)
   if (result.code !== 0) {
     return null
   }
@@ -92,6 +103,12 @@ function parseRemoteListing(output: string): string[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+}
+
+/** Reads a generated shard back for the local single-source merge;
+ * mergeCompilationDatabaseShards validates the array shape. */
+async function readRemoteShard(queue: SshSetupExecQueue, path: string): Promise<unknown[]> {
+  return JSON.parse(await queue.capture(buildRemoteReadFileCommand(path))) as unknown[]
 }
 
 export class CodeIntelligenceSshCppSetup {
@@ -147,27 +164,42 @@ export class CodeIntelligenceSshCppSetup {
         return fail('Could not resolve the home directory on the SSH Host')
       }
 
-      // Detection Promise.all degrades to serial through the exec queue (spec §4.2).
-      const buildRoots: CppBuildRoot[] = await Promise.all(
-        roots.map((root) => detectCppBuildRoot(workspaceRoot, root, sshBuildRootDetection(queue)))
+      // Detection Promise.all degrades to serial through the exec queue (spec §4.2);
+      // classification (coalescing, .gn upward search) probes the remote filesystem
+      // through the same serial channel with the shared form-boundary rules.
+      const detection = sshBuildRootDetection(queue)
+      const { buildRoots, gnRootBySource, basicSourceRoots } = await classifyCppBuildRoots(
+        workspaceRoot,
+        roots,
+        detection
       )
-      const unsupported = buildRoots.filter((root) => root.system !== 'basic')
-      if (unsupported.length > 0) {
-        return fail(
-          `SSH C++ setup currently covers plain source folders; CMake/GN members on SSH Hosts arrive in a later update: ${unsupported
-            .map((root) => root.memberLabel)
-            .join(', ')}`
-        )
-      }
 
-      let clangd = await discoverRemoteClangd(queue)
-      if (!clangd) {
+      const requiredTools: CppSetupToolName[] = ['clangd']
+      if (buildRoots.some((root) => root.system === 'cmake')) {
+        requiredTools.push('cmake', 'ninja')
+      }
+      if ([...gnRootBySource.values()].some(Boolean)) {
+        requiredTools.push('gn')
+      }
+      const discover = async (tool: CppSetupToolName): Promise<string | null> =>
+        tool === 'clangd'
+          ? await discoverRemoteExecutable(
+              queue,
+              buildRemoteClangdDiscoveryCommand(DARWIN_CLANGD_CANDIDATES)
+            )
+          : await discoverRemoteExecutable(queue, buildRemoteToolLookupCommand(tool))
+      const tools: Partial<Record<CppSetupToolName, string>> = {}
+      for (const tool of requiredTools) {
+        tools[tool] = (await discover(tool)) ?? undefined
+      }
+      const missing = requiredTools.filter((tool) => !tools[tool])
+      if (missing.length > 0) {
         if (!request.installMissingTools) {
-          return fail(`Missing tools: clangd`)
+          return fail(`Missing tools: ${missing.join(', ')}`)
         }
         try {
           installedTools = await installCppSetupTools({
-            missing: MISSING_CLANGD,
+            missing,
             platform,
             cwd: workspaceRoot,
             run: sshCommandRunner(queue),
@@ -178,60 +210,17 @@ export class CodeIntelligenceSshCppSetup {
             throw error
           }
           return fail(
-            `${error instanceof Error ? error.message : String(error)}. Install manually on the SSH Host: ${manualInstallCommand(platform, MISSING_CLANGD)}`
+            `${error instanceof Error ? error.message : String(error)}. Install manually on the SSH Host: ${manualInstallCommand(platform, missing)}`
           )
         }
-        clangd = await discoverRemoteClangd(queue)
-        if (!clangd) {
-          return fail('Installed tools were not found: clangd')
+        for (const tool of missing) {
+          tools[tool] = (await discover(tool)) ?? undefined
+          if (!tools[tool]) {
+            return fail(`Installed tools were not found: ${tool}`)
+          }
         }
       }
 
-      const sourceFiles: string[] = []
-      for (const root of buildRoots) {
-        sourceFiles.push(
-          ...parseRemoteListing(await queue.capture(buildRemoteFindSourceFilesCommand(root.sourceDir)))
-        )
-      }
-      if (sourceFiles.length === 0) {
-        return fail(NO_COMPILE_COMMANDS_MESSAGE)
-      }
-      if (sourceFiles.length > MAX_SOURCE_FILES) {
-        return fail(`Basic C++ indexing exceeds ${MAX_SOURCE_FILES} source files`)
-      }
-
-      const discoveredIncludes: string[] = []
-      for (const discoveryRoot of new Set([workspaceRoot, ...buildRoots.map((r) => r.sourceDir)])) {
-        discoveredIncludes.push(
-          ...parseRemoteListing(
-            await queue.capture(buildRemoteFindIncludeDirectoriesCommand(discoveryRoot))
-          )
-        )
-      }
-      const additionalIncludes = (request.additionalIncludeDirectories ?? []).map((path) =>
-        posix.isAbsolute(path) ? posix.resolve(path) : posix.resolve(workspaceRoot, path)
-      )
-      const includeCandidates = [
-        workspaceRoot,
-        ...additionalIncludes,
-        ...discoveredIncludes,
-        ...buildRoots.flatMap((root) => [
-          root.sourceDir,
-          posix.join(root.sourceDir, 'api'),
-          posix.join(root.sourceDir, 'include'),
-          posix.join(root.sourceDir, 'src')
-        ])
-      ]
-      const includeDirectories = parseRemoteListing(
-        await queue.capture(buildRemoteReadableDirectoriesCommand([...new Set(includeCandidates)]))
-      )
-
-      const defines = (request.defines ?? []).map((define) => define.trim()).filter(Boolean)
-      const database = sourceFiles.map((file) => ({
-        directory: workspaceRoot,
-        file,
-        arguments: compilerArguments(file, includeDirectories, defines, request.cppStandard ?? 'c++17')
-      }))
       const scopeDirectory = posix.join(
         home,
         '.orca',
@@ -240,37 +229,178 @@ export class CodeIntelligenceSshCppSetup {
         'scopes',
         cppScopeDirectoryName(getCppScopeIdForRepo(repo))
       )
-      const basicDirectory = posix.join(scopeDirectory, 'basic')
-      await queue.capture(`mkdir -p ${shellEscape(basicDirectory)}`)
-      await queue.writeFile(basicDirectory, 'compile_commands.json', JSON.stringify(database, null, 2))
-      logs.push(
-        `\n## Basic C++ indexing\nGenerated minimal commands for ${database.length} source files across: ${buildRoots
-          .map((root) => root.memberLabel)
-          .join(', ')}`
-      )
+      const shards: unknown[][] = []
+      const generationModes = new Set<string>()
 
-      // Shard is read back and merged locally (single-source dedupe), result written remotely.
-      const shard = JSON.parse(
-        await queue.capture(`cat ${shellEscape(posix.join(basicDirectory, 'compile_commands.json'))}`)
-      )
-      const merged = mergeCompilationDatabaseShards([shard])
+      if (basicSourceRoots.length > 0) {
+        // Zero-source members keep the BASIC mode locally (empty shard semantics)
+        // even when they contribute no commands of their own.
+        generationModes.add('BASIC')
+        const sourceFiles: string[] = []
+        for (const sourceRoot of basicSourceRoots) {
+          sourceFiles.push(
+            ...parseRemoteListing(await queue.capture(buildRemoteFindSourceFilesCommand(sourceRoot)))
+          )
+        }
+        if (sourceFiles.length > MAX_SOURCE_FILES) {
+          return fail(`Basic C++ indexing exceeds ${MAX_SOURCE_FILES} source files`)
+        }
+        if (sourceFiles.length > 0) {
+          const discoveredIncludes: string[] = []
+          for (const discoveryRoot of new Set([workspaceRoot, ...buildRoots.map((r) => r.sourceDir)])) {
+            discoveredIncludes.push(
+              ...parseRemoteListing(
+                await queue.capture(buildRemoteFindIncludeDirectoriesCommand(discoveryRoot))
+              )
+            )
+          }
+          const additionalIncludes = (request.additionalIncludeDirectories ?? []).map((path) =>
+            posix.isAbsolute(path) ? posix.resolve(path) : posix.resolve(workspaceRoot, path)
+          )
+          const includeCandidates = [
+            workspaceRoot,
+            ...additionalIncludes,
+            ...discoveredIncludes,
+            ...buildRoots.flatMap((root) => [
+              root.sourceDir,
+              posix.join(root.sourceDir, 'api'),
+              posix.join(root.sourceDir, 'include'),
+              posix.join(root.sourceDir, 'src')
+            ])
+          ]
+          const includeDirectories = parseRemoteListing(
+            await queue.capture(buildRemoteReadableDirectoriesCommand([...new Set(includeCandidates)]))
+          )
+
+          const defines = (request.defines ?? []).map((define) => define.trim()).filter(Boolean)
+          const database = sourceFiles.map((file) => ({
+            directory: workspaceRoot,
+            file,
+            arguments: compilerArguments(file, includeDirectories, defines, request.cppStandard ?? 'c++17')
+          }))
+          const basicDirectory = posix.join(scopeDirectory, 'basic')
+          await queue.capture(`mkdir -p ${shellEscape(basicDirectory)}`)
+          await queue.writeFile(
+            basicDirectory,
+            'compile_commands.json',
+            JSON.stringify(database, null, 2)
+          )
+          logs.push(
+            `\n## Basic C++ indexing\nGenerated minimal commands for ${database.length} source files across: ${basicSourceRoots.join(', ')}`
+          )
+          shards.push(await readRemoteShard(queue, posix.join(basicDirectory, 'compile_commands.json')))
+        }
+      }
+
+      const run = sshCommandRunner(queue)
+      for (const [index, root] of buildRoots.entries()) {
+        const buildDir = posix.join(scopeDirectory, `build-${index + 1}`)
+        if (root.system === 'cmake') {
+          await queue.capture(
+            `rm -rf ${shellEscape(buildDir)} && mkdir -p ${shellEscape(buildDir)}`
+          )
+          const commandArgs = [
+            '-S',
+            root.sourceDir,
+            '-B',
+            buildDir,
+            '-G',
+            'Ninja',
+            `-DCMAKE_MAKE_PROGRAM=${tools.ninja}`,
+            '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
+            '-DCMAKE_BUILD_TYPE=Debug'
+          ]
+          const result = await run(tools.cmake!, commandArgs, workspaceRoot)
+          appendCppSetupLog(
+            logs,
+            `Configure ${root.memberLabel}`,
+            [tools.cmake!, ...commandArgs],
+            result
+          )
+          if (result.code !== 0) {
+            throw new Error(`CMake configuration failed for ${root.memberLabel}`)
+          }
+          shards.push(await readRemoteShard(queue, posix.join(buildDir, 'compile_commands.json')))
+          generationModes.add('CMAKE')
+          continue
+        }
+        const gnRoot = gnRootBySource.get(root.sourceDir)
+        if (!gnRoot) {
+          continue
+        }
+        const existingCompileCommands = await findGnOutputFile(
+          gnRoot,
+          'compile_commands.json',
+          detection
+        )
+        if (existingCompileCommands) {
+          logs.push(`\n## Reuse GN compile commands\n${existingCompileCommands}`)
+          shards.push(await readRemoteShard(queue, existingCompileCommands))
+          generationModes.add('GN')
+          continue
+        }
+        const existingArgsFile = await findGnOutputFile(gnRoot, 'args.gn', detection)
+        const generatedOutputDir = existingArgsFile
+          ? posix.dirname(existingArgsFile)
+          : posix.join(
+              gnRoot,
+              'out',
+              `.orca-code-intelligence-${posix.basename(posix.dirname(buildDir))}-${posix.basename(buildDir)}`
+            )
+        const relativeOutputDir = posix.relative(gnRoot, generatedOutputDir)
+        if (!relativeOutputDir || relativeOutputDir.startsWith('../')) {
+          throw new Error('GN output directory resolved outside the project root')
+        }
+        const commandArgs = ['gen', relativeOutputDir, `--root=${gnRoot}`, '--export-compile-commands']
+        const result = await run(tools.gn!, commandArgs, gnRoot)
+        appendCppSetupLog(
+          logs,
+          `Configure ${root.memberLabel}`,
+          [tools.gn!, ...commandArgs],
+          result
+        )
+        if (result.code !== 0) {
+          throw new Error(
+            `GN generation failed for ${root.memberLabel}. Generate a GN output directory with the project's required args.gn, then retry.`
+          )
+        }
+        shards.push(
+          await readRemoteShard(queue, posix.join(generatedOutputDir, 'compile_commands.json'))
+        )
+        generationModes.add('GN')
+      }
+
+      // Shards are read back and merged locally (single-source dedupe), the merged
+      // CDB written back remotely.
+      const merged = mergeCompilationDatabaseShards(shards)
+      if (merged.length === 0) {
+        return fail(NO_COMPILE_COMMANDS_MESSAGE)
+      }
       await queue.writeFile(scopeDirectory, 'compile_commands.json', JSON.stringify(merged, null, 2))
       logs.push(`Merged ${merged.length} compile commands into ${scopeDirectory}`)
 
+      const systems = [...generationModes].join(' + ')
+      const configurationMode =
+        generationModes.size === 1
+          ? ([...generationModes][0].toLowerCase() as 'cmake' | 'gn' | 'basic')
+          : 'mixed'
+      const warnings = generationModes.has('BASIC')
+        ? [
+            'Basic indexing uses inferred include directories and may miss SDK headers, generated files, or build macros.'
+          ]
+        : []
       return {
         ok: true,
-        message: 'Generated compile commands with BASIC',
+        message: `Generated compile commands with ${systems}`,
         log: logs.join('\n').trim(),
         relativeRoots: roots,
         installedTools,
-        clangdExecutable: clangd,
+        clangdExecutable: tools.clangd,
         compileCommandsDir: scopeDirectory,
-        configurationMode: 'basic',
-        healthState: 'limited',
+        configurationMode,
+        healthState: warnings.length > 0 ? 'limited' : 'ready',
         compileCommandCount: merged.length,
-        warnings: [
-          'Basic indexing uses inferred include directories and may miss SDK headers, generated files, or build macros.'
-        ]
+        warnings
       }
     } catch (error) {
       if (error instanceof SshSetupConnectionError) {

@@ -1,29 +1,25 @@
-import { access, readdir } from 'node:fs/promises'
-import { constants } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
-
-async function isReadable(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.R_OK)
-    return true
-  } catch {
-    return false
-  }
-}
+import { localCppBuildRootDetection, type CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
 
 /** Walks up from `sourceDir` to `searchBound` (inclusive) looking for a `.gn`
  * dotfile. Relative members bound at the workspace root, absolute members at
  * the filesystem root. */
-export async function findGnRoot(searchBound: string, sourceDir: string): Promise<string | null> {
+export async function findGnRoot(
+  searchBound: string,
+  sourceDir: string,
+  detection: CppBuildRootDetection = localCppBuildRootDetection
+): Promise<string | null> {
   let current = sourceDir
   for (;;) {
-    if (await isReadable(join(current, '.gn'))) {
+    if (await detection.isReadablePath(detection.join(current, '.gn'))) {
       return current
     }
-    if (current === searchBound || relative(searchBound, current).startsWith('..')) {
+    if (
+      current === searchBound ||
+      detection.relative(searchBound, current).startsWith('..')
+    ) {
       return null
     }
-    const parent = dirname(current)
+    const parent = detection.dirname(current)
     if (parent === current) {
       return null
     }
@@ -31,32 +27,33 @@ export async function findGnRoot(searchBound: string, sourceDir: string): Promis
   }
 }
 
-async function gnOutputDirectories(gnRoot: string): Promise<string[]> {
+async function gnOutputDirectories(
+  gnRoot: string,
+  detection: CppBuildRootDetection
+): Promise<string[]> {
   const candidates: string[] = []
   for (const name of ['out', 'build']) {
-    const base = join(gnRoot, name)
-    try {
-      const entries = await readdir(base, { withFileTypes: true })
-      const directories = entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => join(base, entry.name))
-        .sort((left, right) => {
-          const leftDefault = /[\\/](default|debug)$/i.test(left) ? 0 : 1
-          const rightDefault = /[\\/](default|debug)$/i.test(right) ? 0 : 1
-          return leftDefault - rightDefault || left.localeCompare(right)
-        })
-      candidates.push(...directories)
-    } catch {
-      // Missing conventional output directories are expected before the first GN generation.
-    }
+    // Missing conventional output directories are expected before the first GN generation.
+    const directories = await detection.listSubdirectories(detection.join(gnRoot, name))
+    candidates.push(
+      ...directories.sort((left, right) => {
+        const leftDefault = /[\\/](default|debug)$/i.test(left) ? 0 : 1
+        const rightDefault = /[\\/](default|debug)$/i.test(right) ? 0 : 1
+        return leftDefault - rightDefault || left.localeCompare(right)
+      })
+    )
   }
   return candidates
 }
 
-export async function findGnOutputFile(gnRoot: string, name: string): Promise<string | null> {
-  for (const directory of await gnOutputDirectories(gnRoot)) {
-    const candidate = join(directory, name)
-    if (await isReadable(candidate)) {
+export async function findGnOutputFile(
+  gnRoot: string,
+  name: string,
+  detection: CppBuildRootDetection = localCppBuildRootDetection
+): Promise<string | null> {
+  for (const directory of await gnOutputDirectories(gnRoot, detection)) {
+    const candidate = detection.join(directory, name)
+    if (await detection.isReadablePath(candidate)) {
       return candidate
     }
   }

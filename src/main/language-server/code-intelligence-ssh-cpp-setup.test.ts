@@ -7,6 +7,7 @@ import type { RemoteOperatingSystem } from '../ssh/ssh-remote-platform'
 import { getCppScopeIdForRepo } from '../../shared/code-intelligence-scope'
 import { CodeIntelligenceSshCppSetup } from './code-intelligence-ssh-cpp-setup'
 import { cppScopeDirectoryName } from './code-intelligence-setup-cache'
+import { buildRemoteAtomicWriteCommand } from './code-intelligence-ssh-setup-exec'
 
 type RemoteResponse = { code?: number; stdout?: string; stderr?: string }
 
@@ -74,6 +75,12 @@ const DEFAULT_READABLE_PATHS = new Set([
 type HostScriptOptions = {
   readable?: Set<string>
   sourcesByRoot?: Record<string, string>
+  /** `command -v <tool>` answers for cmake/ninja/gn (clangd is built-in). */
+  toolPaths?: Record<string, string>
+  /** Answers for `find <root> -mindepth 1` subdirectory listings. */
+  subdirectoriesByRoot?: Record<string, string>
+  /** Exit answers for `exec cmake` / `exec gn` configure commands. */
+  configureResults?: Record<string, RemoteResponse>
 }
 
 function linuxHostScript(options: HostScriptOptions = {}) {
@@ -88,6 +95,19 @@ function linuxHostScript(options: HostScriptOptions = {}) {
     if (command.startsWith('command -v clangd')) {
       return { stdout: '/usr/bin/clangd' }
     }
+    if (/^command -v '\w+'$/.test(command)) {
+      const path = options.toolPaths?.[command.match(/^command -v '(\w+)'$/)?.[1] ?? '']
+      return path ? { stdout: path } : { code: 1 }
+    }
+    if (command.startsWith('rm -rf ')) {
+      return { code: 0 }
+    }
+    // Configure commands arrive as `cd '<cwd>' && exec '<executable>' ...`; answer by executable basename.
+    if (command.startsWith('cd ') && command.includes("&& exec '")) {
+      const executable = command.match(/exec '([^']+)' /)?.[1] ?? ''
+      const name = executable.split('/').pop() ?? ''
+      return options.configureResults?.[name] ?? { code: 0 }
+    }
     if (command.startsWith('test -r ')) {
       const path = command.match(/^test -r '(.*)'$/)?.[1] ?? ''
       return { code: readable.has(path) ? 0 : 1 }
@@ -95,6 +115,10 @@ function linuxHostScript(options: HostScriptOptions = {}) {
     if (command.startsWith('find') && command.includes('-type f')) {
       const root = command.match(/^find '([^']+)' /)?.[1] ?? ''
       return { stdout: options.sourcesByRoot?.[root] ?? '/srv/project/module/src/main.cpp\n' }
+    }
+    if (command.startsWith('find') && command.includes('-mindepth 1')) {
+      const root = command.match(/^find '([^']+)' /)?.[1] ?? ''
+      return { stdout: options.subdirectoriesByRoot?.[root] ?? '' }
     }
     if (command.startsWith('find')) {
       return { stdout: command.includes("'/srv/project'") ? '/srv/project/include\n' : '' }
@@ -152,7 +176,7 @@ describe('CodeIntelligenceSshCppSetup', () => {
 
     // Shard written under basic/, merged CDB swapped atomically in the scope root.
     expect(commands).toContainEqual(expect.stringContaining(`cd '${scopeDirectory}/basic'`))
-    const atomicWrite = `cd '${scopeDirectory}' && cat > '.compile_commands.json.tmp' && mv '.compile_commands.json.tmp' 'compile_commands.json'`
+    const atomicWrite = buildRemoteAtomicWriteCommand(scopeDirectory, 'compile_commands.json')
     const mergedWrite = commands.indexOf(atomicWrite)
     expect(mergedWrite).toBeGreaterThan(-1)
     const merged = JSON.parse(stdin[mergedWrite] ?? 'null')
@@ -234,10 +258,143 @@ describe('CodeIntelligenceSshCppSetup', () => {
     expect(result.message).not.toContain('sudo -n')
   })
 
-  it('fails when a member needs CMake or GN generation (later tickets)', async () => {
-    const { setup } = setupWith(
+  it('configures a CMake member remotely and lands the merged CDB in the stable scope directory', async () => {
+    const { setup, commands, stdin, files } = setupWith(
       linuxHostScript({
-        readable: new Set([...DEFAULT_READABLE_PATHS, '/srv/project/module/CMakeLists.txt'])
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/CMakeLists.txt'
+        ]),
+        toolPaths: { cmake: '/usr/bin/cmake', ninja: '/usr/bin/ninja' }
+      })
+    )
+    const cmakeShard = [
+      {
+        directory: '/srv/project/module',
+        file: '/srv/project/module/src/main.cpp',
+        arguments: ['clang++', '-c', '/srv/project/module/src/main.cpp']
+      }
+    ]
+    files.set(`${scopeDirectory}/build-1/compile_commands.json`, JSON.stringify(cmakeShard))
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      configurationMode: 'cmake',
+      healthState: 'ready',
+      compileCommandCount: 1,
+      clangdExecutable: '/usr/bin/clangd',
+      compileCommandsDir: scopeDirectory
+    })
+    expect(result.warnings).toEqual([])
+    // Build directory recreated fresh, configured with compile-command export.
+    expect(commands).toContainEqual(
+      `rm -rf '${scopeDirectory}/build-1' && mkdir -p '${scopeDirectory}/build-1'`
+    )
+    const configure = commands.find((command) => command.includes("exec '/usr/bin/cmake'"))
+    expect(configure).toEqual(expect.stringMatching(/CMAKE_EXPORT_COMPILE_COMMANDS=ON/))
+    expect(configure).toEqual(expect.stringContaining(`'-B' '${scopeDirectory}/build-1'`))
+    // CMake members do not go through the basic source walk.
+    expect(
+      commands.some(
+        (command) => command.startsWith("find '/srv/project/module'") && command.includes('-type f')
+      )
+    ).toBe(false)
+    // Shard is read back and merged locally, then swapped atomically at the scope root.
+    expect(commands).toContainEqual(`cat '${scopeDirectory}/build-1/compile_commands.json'`)
+    const mergedWrite = commands.indexOf(
+      buildRemoteAtomicWriteCommand(scopeDirectory, 'compile_commands.json')
+    )
+    expect(JSON.parse(stdin[mergedWrite] ?? 'null')).toEqual(cmakeShard)
+  })
+
+  it('reuses existing GN compile commands found via .gn upward search', async () => {
+    const gnShard = [
+      {
+        directory: '/srv/project',
+        file: '/srv/project/module/main.cc',
+        arguments: ['clang++', '-c', '/srv/project/module/main.cc']
+      }
+    ]
+    const { setup, commands, files } = setupWith(
+      linuxHostScript({
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/BUILD.gn',
+          '/srv/project/.gn',
+          '/srv/project/out/default/compile_commands.json'
+        ]),
+        subdirectoriesByRoot: { '/srv/project/out': '/srv/project/out/default\n' },
+        toolPaths: { gn: '/usr/bin/gn' }
+      })
+    )
+    files.set('/srv/project/out/default/compile_commands.json', JSON.stringify(gnShard))
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result).toMatchObject({
+      ok: true,
+      configurationMode: 'gn',
+      healthState: 'ready',
+      compileCommandCount: 1,
+      compileCommandsDir: scopeDirectory
+    })
+    expect(commands.some((command) => command.includes("exec '/usr/bin/gn'"))).toBe(false)
+    expect(commands).toContainEqual(`cat '/srv/project/out/default/compile_commands.json'`)
+  })
+
+  it('generates GN compile commands remotely when no output directory exists', async () => {
+    const outputDirectory = posix.join(
+      '/srv/project/out',
+      `.orca-code-intelligence-${posix.basename(scopeDirectory)}-build-1`
+    )
+    const gnShard = [
+      {
+        directory: outputDirectory,
+        file: '/srv/project/module/main.cc',
+        arguments: ['clang++', '-c', '/srv/project/module/main.cc']
+      }
+    ]
+    const { setup, commands, files } = setupWith(
+      linuxHostScript({
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/BUILD.gn',
+          '/srv/project/.gn'
+        ]),
+        toolPaths: { gn: '/usr/bin/gn' }
+      })
+    )
+    files.set(`${outputDirectory}/compile_commands.json`, JSON.stringify(gnShard))
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result).toMatchObject({ ok: true, configurationMode: 'gn', compileCommandCount: 1 })
+    const gnCommand = commands.find((command) => command.includes("exec '/usr/bin/gn'"))
+    expect(gnCommand).toEqual(expect.stringContaining('export-compile-commands'))
+    expect(gnCommand).toEqual(expect.stringContaining('--root=/srv/project'))
+    expect(commands).toContainEqual(`cat '${outputDirectory}/compile_commands.json'`)
+  })
+
+  it('maps a failed CMake configure to an atomic setup failure', async () => {
+    const { setup, commands } = setupWith(
+      linuxHostScript({
+        readable: new Set([...DEFAULT_READABLE_PATHS, '/srv/project/module/CMakeLists.txt']),
+        toolPaths: { cmake: '/usr/bin/cmake', ninja: '/usr/bin/ninja' },
+        configureResults: { cmake: { code: 1, stderr: 'CMake Error: no C++ compiler found' } }
       })
     )
 
@@ -248,8 +405,33 @@ describe('CodeIntelligenceSshCppSetup', () => {
     })
 
     expect(result.ok).toBe(false)
-    expect(result.message).toContain('CMake/GN members')
-    expect(result.message).toContain('module')
+    expect(result.message).toContain('CMake configuration failed for module')
+    expect(result.log).toContain('CMake Error: no C++ compiler found')
+    expect(commands.some((command) => command.startsWith(`cd '${scopeDirectory}' && cat >`))).toBe(
+      false
+    )
+  })
+
+  it('fails with a manual install hint when sudo -n cannot install CMake tools', async () => {
+    const { setup } = setupWith((command) => {
+      if (command.includes("'apt-get'")) {
+        return { code: 1, stderr: 'sudo: a password is required' }
+      }
+      return linuxHostScript({
+        readable: new Set([...DEFAULT_READABLE_PATHS, '/srv/project/module/CMakeLists.txt'])
+      })(command)
+    })
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Dependency installation failed')
+    expect(result.message).toContain('sudo apt-get update && sudo apt-get install -y cmake ninja')
+    expect(result.message).not.toContain('sudo -n')
   })
 
   it('accepts host-absolute members (dual form) against the remote filesystem', async () => {
