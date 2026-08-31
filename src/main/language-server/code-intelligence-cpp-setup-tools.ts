@@ -3,8 +3,10 @@ import { access } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { join } from 'node:path'
 
-const COMMAND_TIMEOUT_MS = 10 * 60 * 1000
-const MAX_LOG_BYTES = 1024 * 1024
+export const COMMAND_TIMEOUT_MS = 10 * 60 * 1000
+export const MAX_LOG_BYTES = 1024 * 1024
+export const NO_COMPILE_COMMANDS_MESSAGE =
+  'No compile commands were generated: no member folder contains C or C++ sources or a buildable project. Select a member with sources or generate its build directory, then retry.'
 
 export type CppSetupToolName = 'clangd' | 'cmake' | 'ninja' | 'gn'
 export type CppSetupCommandResult = { code: number | null; output: string }
@@ -128,7 +130,7 @@ export async function discoverBundledGn(
   return null
 }
 
-function packageInstallCommands(
+export function packageInstallCommands(
   platform: NodeJS.Platform,
   missing: readonly CppSetupToolName[]
 ): string[][] {

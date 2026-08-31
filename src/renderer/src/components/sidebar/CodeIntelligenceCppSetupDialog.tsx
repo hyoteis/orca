@@ -52,6 +52,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
   const open = activeModal === 'code-intelligence-cpp-setup'
   const setupHost = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
   const setupSupported = setupHost?.kind === 'local' || setupHost?.kind === 'ssh'
+  const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)
+  const setupHostLabel = setupHost?.kind === 'ssh' ? (sshTargetLabels.get(setupHost.targetId) ?? setupHost.targetId) : ''
 
   useEffect(() => {
     if (!open) {
@@ -253,6 +255,13 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     }
   }
 
+  const runningText =
+    stage === 'discovering'
+      ? translate('settings.codeIntelligence.scanningBuildFolders', 'Scanning CMake and GN build folders...')
+      : setupHost?.kind === 'ssh'
+        ? translate('settings.codeIntelligence.runningSetupOnHost', 'Installing tools and generating compile commands on {{host}}...', { host: setupHostLabel })
+        : translate('settings.codeIntelligence.runningSetup', 'Installing tools and generating compile commands...')
+
   if (!open || !repo) {
     return null
   }
@@ -268,7 +277,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
             {setupHost?.kind === 'ssh'
               ? translate(
                   'settings.codeIntelligence.sshSetupDescription',
-                  'Orca generates a BASIC compilation database on the connected SSH Host. clangd must already be installed there.'
+                  'Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.'
                 )
               : translate(
                   'settings.codeIntelligence.setupDescription',
@@ -330,15 +339,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
                 aria-live="polite"
               >
                 <Loader2 className="size-4 animate-spin" />
-                {stage === 'discovering'
-                  ? translate(
-                      'settings.codeIntelligence.scanningBuildFolders',
-                      'Scanning CMake and GN build folders...'
-                    )
-                  : translate(
-                      'settings.codeIntelligence.runningSetup',
-                      'Installing tools and generating compile commands...'
-                    )}
+                {runningText}
               </div>
             ) : null}
             {stage === 'success' ? (

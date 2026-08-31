@@ -19,7 +19,6 @@ import {
   probeSshLanguageServer
 } from '../ssh/ssh-language-server-session-manager'
 import { getSshConnectionManager } from './ssh'
-import { getSshFilesystemProvider } from '../providers/ssh-filesystem-dispatch'
 
 function broadcastScopeChange(change: CodeIntelligenceScopeChange): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -99,7 +98,6 @@ export function registerCodeIntelligenceHandlers(
   void sweepOrphanCppScopeDirectories(cppCacheRoot)
   const sshCppSetup = new CodeIntelligenceSshCppSetup(store, {
     getConnection: (targetId) => getSshConnectionManager()?.getConnection(targetId),
-    getProvider: (targetId) => getSshFilesystemProvider(targetId),
     getPlatform: (targetId) => getSshConnectionManager()?.getState(targetId)?.remotePlatform
   })
   ipcMain.handle('codeIntelligence:listScopes', () => scopes.list())

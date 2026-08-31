@@ -97,7 +97,8 @@
       "setupLimited": "Configured with limited BASIC indexing",
       "setupReady": "C++ code intelligence is ready",
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
-      "sshSetupDescription": "Orca generates a BASIC compilation database on the connected SSH Host. clangd must already be installed there."
+      "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.",
+      "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}..."
     },
     "appearance": {
       "language": {

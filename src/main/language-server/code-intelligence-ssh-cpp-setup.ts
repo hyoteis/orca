@@ -1,109 +1,97 @@
-import type { ClientChannel } from 'ssh2'
-import { posix, win32 } from 'node:path'
+import { posix } from 'node:path'
 import type { Store } from '../persistence'
-import type { IFilesystemProvider } from '../providers/types'
 import type { SshConnection } from '../ssh/ssh-connection'
 import type { RemoteOperatingSystem } from '../ssh/ssh-remote-platform'
+import { buildPosixLanguageServerCommand } from '../ssh/ssh-language-server-session-manager'
 import type {
   CodeIntelligenceCppSetupRequest,
   CodeIntelligenceCppSetupResult
 } from '../../shared/code-intelligence-cpp-setup'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
+import { getCppScopeIdForRepo, normalizeScopeMemberPath } from '../../shared/code-intelligence-scope'
+import { shellEscape } from '../ssh/ssh-connection-utils'
 import {
-  getCppScopeIdForRepo,
-  normalizeScopeRelativePath
-} from '../../shared/code-intelligence-scope'
+  type CppSetupToolName,
+  installCppSetupTools,
+  MAX_LOG_BYTES,
+  NO_COMPILE_COMMANDS_MESSAGE,
+  packageInstallCommands,
+  type CppSetupCommandRunner
+} from './code-intelligence-cpp-setup-tools'
+import {
+  compilerArguments,
+  MAX_SOURCE_FILES,
+  mergeCompilationDatabaseShards
+} from './code-intelligence-compilation-database'
+import {
+  type CppBuildRoot,
+  type CppBuildRootDetection,
+  detectCppBuildRoot
+} from './code-intelligence-cmake-root-selection'
 import { cppScopeDirectoryName } from './code-intelligence-setup-cache'
-import { buildWindowsLanguageServerCommand } from '../ssh/ssh-language-server-session-manager'
+import {
+  buildRemoteClangdDiscoveryCommand,
+  buildRemoteFindIncludeDirectoriesCommand,
+  buildRemoteFindSourceFilesCommand,
+  buildRemoteReadableDirectoriesCommand,
+  SshSetupConnectionError,
+  SshSetupExecQueue
+} from './code-intelligence-ssh-setup-exec'
 
-const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.m', '.mm'])
-const MAX_SOURCE_FILES = 50_000
+const MISSING_CLANGD = ['clangd'] as const satisfies readonly CppSetupToolName[]
+const DARWIN_CLANGD_CANDIDATES = ['/opt/homebrew/opt/llvm/bin/clangd', '/usr/local/opt/llvm/bin/clangd']
 
 type Dependencies = {
   getConnection: (targetId: string) => SshConnection | undefined
-  getProvider: (targetId: string) => IFilesystemProvider | undefined
   getPlatform: (targetId: string) => RemoteOperatingSystem | undefined
 }
 
-function quotePosix(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`
-}
-
-function remotePathApi(platform: RemoteOperatingSystem): typeof posix | typeof win32 {
-  return platform === 'win32' ? win32 : posix
-}
-
-function captureCommand(connection: SshConnection, command: string): Promise<string> {
-  return connection.exec(command).then(
-    (channel) =>
-      new Promise<string>((resolve, reject) => {
-        const stdout: Buffer[] = []
-        const stderr: Buffer[] = []
-        const stream = channel as ClientChannel
-        stream.on('data', (chunk: Buffer) => stdout.push(chunk))
-        stream.stderr.on('data', (chunk: Buffer) => stderr.push(chunk))
-        const timer = setTimeout(() => {
-          stream.close()
-          reject(new Error('Timed out preparing SSH code intelligence'))
-        }, 10_000)
-        timer.unref?.()
-        stream.once('error', (error) => {
-          clearTimeout(timer)
-          reject(error)
-        })
-        stream.once('close', (code: number | null) => {
-          clearTimeout(timer)
-          const output = Buffer.concat(stdout).toString('utf8').trim()
-          if (code && code !== 0) {
-            reject(new Error(Buffer.concat(stderr).toString('utf8').trim() || output))
-          } else {
-            resolve(output)
-          }
-        })
-      })
-  )
-}
-
-async function resolveRemoteEnvironment(args: {
-  connection: SshConnection
-  platform: RemoteOperatingSystem
-  workspaceRoot: string
-}): Promise<{ home: string; clangd: string }> {
-  if (args.platform === 'win32') {
-    const homeCommand = buildWindowsLanguageServerCommand({
-      executable: 'powershell.exe',
-      args: [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        '[Environment]::GetFolderPath("UserProfile")'
-      ],
-      cwd: args.workspaceRoot
-    })
-    const clangdCommand = buildWindowsLanguageServerCommand({
-      executable: 'where.exe',
-      args: ['clangd.exe'],
-      cwd: args.workspaceRoot
-    })
-    const [home, clangdOutput] = await Promise.all([
-      captureCommand(args.connection, homeCommand),
-      captureCommand(args.connection, clangdCommand)
-    ])
-    return { home, clangd: clangdOutput.split(/\r?\n/)[0] }
+function sshBuildRootDetection(queue: SshSetupExecQueue): CppBuildRootDetection {
+  return {
+    join: posix.join,
+    resolve: posix.resolve,
+    isReadablePath: async (path) =>
+      (await queue.exec(`test -r ${shellEscape(path)}`)).code === 0
   }
-  const [home, clangd] = await Promise.all([
-    captureCommand(args.connection, `printf %s "$HOME"`),
-    captureCommand(args.connection, `cd ${quotePosix(args.workspaceRoot)} && command -v clangd`)
-  ])
-  if (!clangd) {
-    throw new Error('clangd is not installed on the SSH Host')
-  }
-  return { home, clangd }
 }
 
-function isSourceFile(path: string): boolean {
-  const normalized = path.toLowerCase()
-  return [...SOURCE_EXTENSIONS].some((extension) => normalized.endsWith(extension))
+/** CppSetupCommandRunner over SSH; `env` is ignored (spec §4.2: no MSVC capture remotely). */
+function sshCommandRunner(queue: SshSetupExecQueue): CppSetupCommandRunner {
+  return async (executable, args, cwd) => {
+    const result = await queue.exec(buildPosixLanguageServerCommand({ executable, args, cwd }))
+    if (result.code === null) {
+      // Channel died mid-command: not an install failure, a disconnect.
+      throw new SshSetupConnectionError('SSH connection was interrupted')
+    }
+    const output = `${result.stdout}${result.stderr}`.slice(0, MAX_LOG_BYTES)
+    return { code: result.code, output }
+  }
+}
+
+async function discoverRemoteClangd(queue: SshSetupExecQueue): Promise<string | null> {
+  const result = await queue.exec(buildRemoteClangdDiscoveryCommand(DARWIN_CLANGD_CANDIDATES))
+  if (result.code !== 0) {
+    return null
+  }
+  const path = result.stdout.trim().split(/\r?\n/)[0]
+  return path || null
+}
+
+/** Human-runnable variant of the install commands (interactive sudo, no -n). */
+function manualInstallCommand(
+  platform: NodeJS.Platform,
+  missing: readonly CppSetupToolName[]
+): string {
+  return packageInstallCommands(platform, missing)
+    .map((command) => command.filter((arg) => arg !== '-n').join(' '))
+    .join(' && ')
+}
+
+function parseRemoteListing(output: string): string[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
 }
 
 export class CodeIntelligenceSshCppSetup {
@@ -113,13 +101,15 @@ export class CodeIntelligenceSshCppSetup {
   ) {}
 
   async run(request: CodeIntelligenceCppSetupRequest): Promise<CodeIntelligenceCppSetupResult> {
-    const roots = [...new Set(request.relativeRoots.map(normalizeScopeRelativePath))]
-    const fail = (message: string, log = ''): CodeIntelligenceCppSetupResult => ({
+    const logs: string[] = []
+    let roots: string[] = []
+    let installedTools: string[] = []
+    const fail = (message: string): CodeIntelligenceCppSetupResult => ({
       ok: false,
       message,
-      log,
+      log: logs.join('\n').trim(),
       relativeRoots: roots,
-      installedTools: []
+      installedTools
     })
     try {
       const repo = this.store.getRepo(request.repoId)
@@ -131,97 +121,165 @@ export class CodeIntelligenceSshCppSetup {
         return fail('SSH C++ setup requires an SSH project')
       }
       const connection = this.dependencies.getConnection(host.targetId)
-      const provider = this.dependencies.getProvider(host.targetId)
-      if (!connection || !provider) {
+      const platform = this.dependencies.getPlatform(host.targetId)
+      if (!connection || !platform) {
         return fail('SSH Host is not connected. Reconnect and retry.')
       }
-      const platform = this.dependencies.getPlatform(host.targetId) ?? 'linux'
-      const pathApi = remotePathApi(platform)
-      const environment = await resolveRemoteEnvironment({
-        connection,
-        platform,
-        workspaceRoot: repo.path
-      })
-      const sourceFiles = new Set<string>()
-      for (const root of roots) {
-        const absoluteRoot = root === '.' ? repo.path : pathApi.join(repo.path, root)
-        const relativeFiles = await provider.listFiles(absoluteRoot, {
-          maxResults: MAX_SOURCE_FILES + 1
-        })
-        for (const relativeFile of relativeFiles) {
-          if (isSourceFile(relativeFile)) {
-            sourceFiles.add(pathApi.join(absoluteRoot, relativeFile))
-          }
-        }
-      }
-      if (sourceFiles.size === 0) {
-        return fail('No C or C++ source files were found in the selected SSH folders')
-      }
-      if (sourceFiles.size > MAX_SOURCE_FILES) {
-        return fail(`SSH C++ indexing exceeds ${MAX_SOURCE_FILES} source files`)
-      }
-      const workspaceDirectories = request.workspaceDirectories ?? []
-      const includeDirectories = new Set<string>([
-        repo.path,
-        ...roots.map((root) => (root === '.' ? repo.path : pathApi.join(repo.path, root))),
-        ...workspaceDirectories
-          .filter((path) =>
-            ['api', 'include', 'interface'].includes(path.split('/').at(-1)?.toLowerCase() ?? '')
-          )
-          .map((path) => pathApi.join(repo.path, path)),
-        ...(request.additionalIncludeDirectories ?? []).map((path) =>
-          pathApi.isAbsolute(path) ? path : pathApi.join(repo.path, path)
+      if (platform === 'win32') {
+        return fail(
+          'C++ setup on Windows SSH Hosts is not supported; POSIX Hosts (Linux, macOS, WSL) only.'
         )
-      ])
-      const defines = (request.defines ?? []).map((define) => define.trim()).filter(Boolean)
-      const cppStandard = request.cppStandard ?? 'c++17'
-      const database = [...sourceFiles].map((file) => {
-        const extension = pathApi.extname(file).toLowerCase()
-        const isC = extension === '.c' || extension === '.m'
-        return {
-          directory: repo.path,
-          file,
-          arguments: [
-            isC ? 'clang' : 'clang++',
-            isC ? '-std=c11' : `-std=${cppStandard}`,
-            ...defines.map((define) => `-D${define}`),
-            ...[...includeDirectories].map((directory) => `-I${directory}`),
-            '-c',
-            file
-          ]
+      }
+      // Dual-form members: workspace-relative and host-absolute strings coexist.
+      roots = [...new Set(request.relativeRoots.map(normalizeScopeMemberPath))]
+      if (roots.length === 0) {
+        return fail('Select at least one C++ build directory')
+      }
+      const workspaceRoot = posix.resolve(repo.path)
+      const queue = new SshSetupExecQueue(connection)
+
+      const uname = await queue.capture('uname -s')
+      if (!/^(Linux|Darwin)/.test(uname)) {
+        return fail(`SSH Host is not a POSIX system (uname: ${uname || 'unknown'})`)
+      }
+      const home = await queue.capture('printf %s "$HOME"')
+      if (!home || !posix.isAbsolute(home)) {
+        return fail('Could not resolve the home directory on the SSH Host')
+      }
+
+      // Detection Promise.all degrades to serial through the exec queue (spec §4.2).
+      const buildRoots: CppBuildRoot[] = await Promise.all(
+        roots.map((root) => detectCppBuildRoot(workspaceRoot, root, sshBuildRootDetection(queue)))
+      )
+      const unsupported = buildRoots.filter((root) => root.system !== 'basic')
+      if (unsupported.length > 0) {
+        return fail(
+          `SSH C++ setup currently covers plain source folders; CMake/GN members on SSH Hosts arrive in a later update: ${unsupported
+            .map((root) => root.memberLabel)
+            .join(', ')}`
+        )
+      }
+
+      let clangd = await discoverRemoteClangd(queue)
+      if (!clangd) {
+        if (!request.installMissingTools) {
+          return fail(`Missing tools: clangd`)
         }
-      })
-      const cacheDirectory = pathApi.join(
-        environment.home,
+        try {
+          installedTools = await installCppSetupTools({
+            missing: MISSING_CLANGD,
+            platform,
+            cwd: workspaceRoot,
+            run: sshCommandRunner(queue),
+            logs
+          })
+        } catch (error) {
+          if (error instanceof SshSetupConnectionError) {
+            throw error
+          }
+          return fail(
+            `${error instanceof Error ? error.message : String(error)}. Install manually on the SSH Host: ${manualInstallCommand(platform, MISSING_CLANGD)}`
+          )
+        }
+        clangd = await discoverRemoteClangd(queue)
+        if (!clangd) {
+          return fail('Installed tools were not found: clangd')
+        }
+      }
+
+      const sourceFiles: string[] = []
+      for (const root of buildRoots) {
+        sourceFiles.push(
+          ...parseRemoteListing(await queue.capture(buildRemoteFindSourceFilesCommand(root.sourceDir)))
+        )
+      }
+      if (sourceFiles.length === 0) {
+        return fail(NO_COMPILE_COMMANDS_MESSAGE)
+      }
+      if (sourceFiles.length > MAX_SOURCE_FILES) {
+        return fail(`Basic C++ indexing exceeds ${MAX_SOURCE_FILES} source files`)
+      }
+
+      const discoveredIncludes: string[] = []
+      for (const discoveryRoot of new Set([workspaceRoot, ...buildRoots.map((r) => r.sourceDir)])) {
+        discoveredIncludes.push(
+          ...parseRemoteListing(
+            await queue.capture(buildRemoteFindIncludeDirectoriesCommand(discoveryRoot))
+          )
+        )
+      }
+      const additionalIncludes = (request.additionalIncludeDirectories ?? []).map((path) =>
+        posix.isAbsolute(path) ? posix.resolve(path) : posix.resolve(workspaceRoot, path)
+      )
+      const includeCandidates = [
+        workspaceRoot,
+        ...additionalIncludes,
+        ...discoveredIncludes,
+        ...buildRoots.flatMap((root) => [
+          root.sourceDir,
+          posix.join(root.sourceDir, 'api'),
+          posix.join(root.sourceDir, 'include'),
+          posix.join(root.sourceDir, 'src')
+        ])
+      ]
+      const includeDirectories = parseRemoteListing(
+        await queue.capture(buildRemoteReadableDirectoriesCommand([...new Set(includeCandidates)]))
+      )
+
+      const defines = (request.defines ?? []).map((define) => define.trim()).filter(Boolean)
+      const database = sourceFiles.map((file) => ({
+        directory: workspaceRoot,
+        file,
+        arguments: compilerArguments(file, includeDirectories, defines, request.cppStandard ?? 'c++17')
+      }))
+      const scopeDirectory = posix.join(
+        home,
         '.orca',
         'code-intelligence',
         'cpp',
         'scopes',
         cppScopeDirectoryName(getCppScopeIdForRepo(repo))
       )
-      await provider.createDir(cacheDirectory)
-      await provider.writeFile(
-        pathApi.join(cacheDirectory, 'compile_commands.json'),
-        JSON.stringify(database, null, 2)
+      const basicDirectory = posix.join(scopeDirectory, 'basic')
+      await queue.capture(`mkdir -p ${shellEscape(basicDirectory)}`)
+      await queue.writeFile(basicDirectory, 'compile_commands.json', JSON.stringify(database, null, 2))
+      logs.push(
+        `\n## Basic C++ indexing\nGenerated minimal commands for ${database.length} source files across: ${buildRoots
+          .map((root) => root.memberLabel)
+          .join(', ')}`
       )
+
+      // Shard is read back and merged locally (single-source dedupe), result written remotely.
+      const shard = JSON.parse(
+        await queue.capture(`cat ${shellEscape(posix.join(basicDirectory, 'compile_commands.json'))}`)
+      )
+      const merged = mergeCompilationDatabaseShards([shard])
+      await queue.writeFile(scopeDirectory, 'compile_commands.json', JSON.stringify(merged, null, 2))
+      logs.push(`Merged ${merged.length} compile commands into ${scopeDirectory}`)
+
       return {
         ok: true,
-        message: 'Generated SSH BASIC compile commands',
-        log: `Generated ${database.length} SSH compile commands in ${cacheDirectory}`,
+        message: 'Generated compile commands with BASIC',
+        log: logs.join('\n').trim(),
         relativeRoots: roots,
-        installedTools: [],
-        clangdExecutable: environment.clangd,
-        compileCommandsDir: cacheDirectory,
+        installedTools,
+        clangdExecutable: clangd,
+        compileCommandsDir: scopeDirectory,
         configurationMode: 'basic',
         healthState: 'limited',
-        compileCommandCount: database.length,
+        compileCommandCount: merged.length,
         warnings: [
-          'SSH BASIC indexing infers include paths and may miss SDK headers, generated files, or build macros.'
+          'Basic indexing uses inferred include directories and may miss SDK headers, generated files, or build macros.'
         ]
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      return fail(message, message)
+      if (error instanceof SshSetupConnectionError) {
+        return fail('SSH connection was interrupted. Reconnect and retry.')
+      }
+      logs.push(
+        `\n## Error\n${error instanceof Error ? (error.stack ?? error.message) : String(error)}`
+      )
+      return fail(error instanceof Error ? error.message : String(error))
     }
   }
 }

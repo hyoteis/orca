@@ -35,25 +35,33 @@ async function isReadablePath(path: string): Promise<boolean> {
   }
 }
 
+/** Path/check seams: local setups use node fs; SSH setups pass posix + remote `test -r`. */
+export type CppBuildRootDetection = {
+  join: typeof join
+  resolve: typeof resolve
+  isReadablePath: (path: string) => Promise<boolean>
+}
+
 export async function detectCppBuildRoot(
   workspaceRoot: string,
-  memberRoot: string
+  memberRoot: string,
+  detection: CppBuildRootDetection = { join, resolve, isReadablePath }
 ): Promise<CppBuildRoot> {
   // Absolute members arrive with normalized forward slashes; resolve() restores
   // the host-native spelling so generator args and logs match the workspace form.
   const absolute = isRuntimePathAbsolute(memberRoot)
-  const sourceDir = absolute ? resolve(memberRoot) : join(workspaceRoot, memberRoot)
+  const sourceDir = absolute ? detection.resolve(memberRoot) : detection.join(workspaceRoot, memberRoot)
   const memberLabel = absolute ? sourceDir : memberRoot
-  if (await isReadablePath(join(sourceDir, 'CMakeLists.txt'))) {
+  if (await detection.isReadablePath(detection.join(sourceDir, 'CMakeLists.txt'))) {
     return { memberLabel, sourceDir, system: 'cmake' }
   }
   if (
-    (await isReadablePath(join(sourceDir, 'BUILD.gn'))) ||
-    (await isReadablePath(join(sourceDir, '.gn')))
+    (await detection.isReadablePath(detection.join(sourceDir, 'BUILD.gn'))) ||
+    (await detection.isReadablePath(detection.join(sourceDir, '.gn')))
   ) {
     return { memberLabel, sourceDir, system: 'gn' }
   }
-  if (await isReadablePath(sourceDir)) {
+  if (await detection.isReadablePath(sourceDir)) {
     return { memberLabel, sourceDir, system: 'basic' }
   }
   throw new Error(`Selected folder is no longer available: ${memberRoot}`)

@@ -9,6 +9,7 @@ import { getRepoExecutionHostId } from '../../shared/execution-host'
 import { getCppScopeIdForRepo, normalizeScopeMemberPath } from '../../shared/code-intelligence-scope'
 import {
   appendCppSetupLog,
+  NO_COMPILE_COMMANDS_MESSAGE,
   resolveCppSetupEnvironment,
   runCppSetupCommand,
   type CppSetupCommandRunner,
@@ -191,7 +192,7 @@ export class CodeIntelligenceCppSetup {
       const compileCommandCount = await mergeCompilationDatabases(compileCommandFiles, outputRoot)
       if (compileCommandCount === 0) {
         return fail(
-          'No compile commands were generated: no member folder contains C or C++ sources or a buildable project. Select a member with sources or generate its build directory, then retry.',
+          NO_COMPILE_COMMANDS_MESSAGE,
           roots,
           installedTools
         )

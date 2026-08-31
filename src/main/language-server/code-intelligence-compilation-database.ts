@@ -3,9 +3,9 @@ import { constants } from 'node:fs'
 import { extname, isAbsolute, join, resolve } from 'node:path'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 
-const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.m', '.mm'])
-const IGNORED_DIRECTORIES = new Set(['.git', '.hg', '.svn', 'build', 'node_modules', 'out'])
-const MAX_SOURCE_FILES = 50_000
+export const SOURCE_EXTENSIONS = new Set(['.c', '.cc', '.cpp', '.cxx', '.m', '.mm'])
+export const IGNORED_DIRECTORIES = new Set(['.git', '.hg', '.svn', 'build', 'node_modules', 'out'])
+export const MAX_SOURCE_FILES = 50_000
 
 async function isReadableDirectory(path: string): Promise<boolean> {
   try {
@@ -57,7 +57,7 @@ async function collectSourceFiles(root: string, files: string[]): Promise<void> 
   }
 }
 
-function compilerArguments(
+export function compilerArguments(
   file: string,
   includeDirectories: readonly string[],
   defines: readonly string[],
@@ -136,14 +136,11 @@ function compileCommandFile(entry: unknown): string | undefined {
   return typeof file === 'string' ? file : undefined
 }
 
-export async function mergeCompilationDatabases(
-  files: readonly string[],
-  destination: string
-): Promise<number> {
+/** Single-source merge/dedupe for CDB shards (local and SSH setups alike). */
+export function mergeCompilationDatabaseShards(shards: readonly unknown[][]): unknown[] {
   const entries: unknown[] = []
   const indexByFile = new Map<string, number>()
-  for (const file of files) {
-    const parsed = JSON.parse(await readFile(file, 'utf8'))
+  for (const parsed of shards) {
     if (!Array.isArray(parsed)) {
       throw new Error('Build setup produced an invalid compile_commands.json')
     }
@@ -166,6 +163,18 @@ export async function mergeCompilationDatabases(
       entries[existingIndex] = entry
     }
   }
+  return entries
+}
+
+export async function mergeCompilationDatabases(
+  files: readonly string[],
+  destination: string
+): Promise<number> {
+  const shards: unknown[][] = []
+  for (const file of files) {
+    shards.push(JSON.parse(await readFile(file, 'utf8')))
+  }
+  const entries = mergeCompilationDatabaseShards(shards)
   if (entries.length === 0) {
     // An empty merged CDB is never a valid artifact (setup fails all-zero);
     // keep the previous merged file intact for the still-live scope.
