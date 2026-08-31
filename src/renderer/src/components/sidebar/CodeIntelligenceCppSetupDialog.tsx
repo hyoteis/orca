@@ -5,7 +5,10 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
-import type { CodeIntelligenceCppSetupResult } from '../../../../shared/code-intelligence-cpp-setup'
+import {
+  clangdCompileCommandsDirArg,
+  type CodeIntelligenceCppSetupResult
+} from '../../../../shared/code-intelligence-cpp-setup'
 import { listRuntimeFiles } from '../../runtime/runtime-file-client'
 import { getCachedCodeIntelligenceDirectories } from '../../lib/language-server/code-intelligence-directory-scan-cache'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
@@ -217,7 +220,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         serverSource: {
           type: 'custom',
           executable: setup.clangdExecutable,
-          args: [`--compile-commands-dir=${setup.compileCommandsDir}`]
+          args: [clangdCompileCommandsDirArg(setup.compileCommandsDir)]
         },
         enabled: true,
         ...(setup.configurationMode && setup.healthState

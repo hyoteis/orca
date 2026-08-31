@@ -25,6 +25,11 @@ export function buildRemoteAtomicWriteCommand(directory: string, fileName: strin
   )} ${shellEscape(fileName)}`
 }
 
+/** clangd spawn-time --compile-commands-dir existence probe. */
+export function buildRemoteDirectoryExistsCommand(directory: string): string {
+  return `test -d ${shellEscape(directory)}`
+}
+
 const prunedNames = () =>
   [...IGNORED_DIRECTORIES].map((name) => `-name ${shellEscape(name)}`).join(' -o ')
 

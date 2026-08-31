@@ -4,7 +4,8 @@ import type { SshConnection } from '../ssh/ssh-connection'
 import {
   SshSetupConnectionError,
   SshSetupExecQueue,
-  buildRemoteAtomicWriteCommand
+  buildRemoteAtomicWriteCommand,
+  buildRemoteDirectoryExistsCommand
 } from './code-intelligence-ssh-setup-exec'
 
 type FakeChannel = EventEmitter & {
@@ -177,5 +178,14 @@ describe('SshSetupExecQueue', () => {
     await expect(
       queue.writeFile('/home/dev/.orca/code-intelligence/cpp/scopes/abc', 'compile_commands.json', '[]')
     ).rejects.toThrow('mkdir: permission denied')
+  })
+})
+
+describe('buildRemoteDirectoryExistsCommand', () => {
+  it('quotes the directory for a POSIX test', () => {
+    expect(buildRemoteDirectoryExistsCommand('/home/dev/.orca/cdb')).toBe(
+      "test -d '/home/dev/.orca/cdb'"
+    )
+    expect(buildRemoteDirectoryExistsCommand("/path/it's")).toBe("test -d '/path/it'\\''s'")
   })
 })
