@@ -22,7 +22,7 @@ import { SettingsSegmentedControl } from '../settings/SettingsFormControls'
 import { CodeIntelligenceBasicOptions } from './CodeIntelligenceBasicOptions'
 import { CodeIntelligenceDirectoryPicker } from './CodeIntelligenceDirectoryPicker'
 import {
-  expandConfiguredCodeIntelligenceDirectories,
+  getCodeIntelligenceCustomPaths,
   getMinimalCodeIntelligenceDirectories
 } from './code-intelligence-directory-list'
 
@@ -102,7 +102,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
             )
             ?.members.map((member) => member.path) ?? []
         setRoots(detected)
-        setSelected(expandConfiguredCodeIntelligenceDirectories(detected, existingMembers))
+        // Why: flat rows are literal members — pre-check exactly what the scope holds.
+        setSelected(new Set(existingMembers))
         setStage('idle')
       })
       .catch((error) => {
@@ -126,7 +127,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     }
   }, [open, repo, scanGeneration])
 
-  const selectedRoots = useMemo(
+  const relativeSelectedRoots = useMemo(
     () =>
       mode === 'all'
         ? roots.includes('.')
@@ -134,6 +135,14 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
           : roots
         : getMinimalCodeIntelligenceDirectories(roots, selected),
     [mode, roots, selected]
+  )
+  const customRoots = useMemo(
+    () => getCodeIntelligenceCustomPaths(roots, selected),
+    [roots, selected]
+  )
+  const selectedRoots = useMemo(
+    () => [...relativeSelectedRoots, ...customRoots],
+    [relativeSelectedRoots, customRoots]
   )
 
   const runSetup = async (): Promise<void> => {
@@ -160,7 +169,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
       }
       const setup = await setupCpp({
         repoId: repo.id,
-        relativeRoots: selectedRoots,
+        // Why: host-absolute members cannot flow into the generator yet (#55) — they persist as members only.
+        relativeRoots: relativeSelectedRoots,
         workspaceDirectories: roots,
         installMissingTools: true,
         additionalIncludeDirectories: additionalIncludes
@@ -198,7 +208,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         })
       const saved = await window.api.codeIntelligence.upsertScope({
         ...base,
-        members: setup.relativeRoots.map((path) => ({
+        members: [...setup.relativeRoots, ...customRoots].map((path) => ({
           path,
           visibleResults: true
         })),

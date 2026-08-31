@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
+  getCodeIntelligenceMembershipAction,
   isCodeIntelligenceResultVisible,
   isDocumentInCodeIntelligenceScope
 } from './code-intelligence-scope-membership'
@@ -37,5 +38,31 @@ describe('code intelligence scope membership', () => {
     ])
     expect(isCodeIntelligenceResultVisible(mixed, 'engine/core/main.cpp')).toBe(true)
     expect(isCodeIntelligenceResultVisible(mixed, 'engine/util.cpp')).toBe(false)
+  })
+})
+
+describe('getCodeIntelligenceMembershipAction (three-state tree rule)', () => {
+  it('reports remove for an exact member and disabled for a strict subpath', () => {
+    const members = scope([{ path: 'engine', visibleResults: true }])
+    expect(getCodeIntelligenceMembershipAction(members, 'engine')).toBe('remove')
+    expect(getCodeIntelligenceMembershipAction(members, 'engine/core')).toBe('disabled')
+  })
+
+  it('reports add outside every member and for a parent of a member', () => {
+    const members = scope([{ path: 'engine/core', visibleResults: true }])
+    expect(getCodeIntelligenceMembershipAction(members, 'fx')).toBe('add')
+    expect(getCodeIntelligenceMembershipAction(members, 'engine')).toBe('add')
+  })
+
+  it('treats the workspace-root member as covering every relative path', () => {
+    const members = scope([{ path: '.', visibleResults: true }])
+    expect(getCodeIntelligenceMembershipAction(members, '.')).toBe('remove')
+    expect(getCodeIntelligenceMembershipAction(members, 'engine')).toBe('disabled')
+  })
+
+  it('counts absolute members inside the workspace root through their relative form', () => {
+    const members = scope([{ path: '/workspace/engine', visibleResults: true }])
+    expect(getCodeIntelligenceMembershipAction(members, 'engine/core')).toBe('disabled')
+    expect(getCodeIntelligenceMembershipAction(members, 'fx')).toBe('add')
   })
 })

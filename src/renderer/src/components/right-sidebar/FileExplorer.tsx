@@ -4,11 +4,19 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useAppStore } from '@/store'
 import { useActiveWorktree, useRepoById } from '@/store/selectors'
 import { basename, dirname } from '@/lib/path'
+import { toast } from 'sonner'
+import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import { isFolderRepo, isGitRepoKind } from '../../../../shared/repo-kind'
+import {
+  addCodeIntelligenceMembers,
+  findCodeIntelligenceScopeForWorkspace,
+  removeCodeIntelligenceMembers,
+  writeCodeIntelligenceScopeEdit
+} from '@/lib/language-server/code-intelligence-scope-member-edit'
 import { useRuntimeFileListForWorktree } from '@/components/quick-open-file-list'
 import { folderRelativePathToIncludeGlob } from './file-search-include-pattern'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import { isGitRepoKind } from '../../../../shared/repo-kind'
 import {
   getVisibleFileExplorerWorktreePath,
   shouldResetFileExplorerForVisibleWorktree
@@ -108,6 +116,7 @@ function FileExplorerFiles(): React.JSX.Element {
   const openFiles = useAppStore((s) => s.openFiles)
   const closeFile = useAppStore((s) => s.closeFile)
   const openModal = useAppStore((s) => s.openModal)
+  const settings = useAppStore((s) => s.settings)
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const showDotfiles = useAppStore((s) =>
     activeWorktreeId ? (s.showDotfilesByWorktree[activeWorktreeId] ?? true) : true
@@ -614,6 +623,56 @@ function FileExplorerFiles(): React.JSX.Element {
     },
     [activeRepo, openModal]
   )
+  const cppCodeIntelligenceScope = useMemo(
+    () =>
+      activeRepo
+        ? findCodeIntelligenceScopeForWorkspace({
+            settings,
+            repoId: activeRepo.id,
+            isFolder: isFolderRepo(activeRepo),
+            executionHostId: getRepoExecutionHostId(activeRepo),
+            language: 'cpp'
+          })
+        : null,
+    [activeRepo, settings]
+  )
+  const handleToggleCodeIntelligenceMembers = useCallback(
+    (paths: readonly string[], action: 'add' | 'remove') => {
+      const state = useAppStore.getState()
+      const repo = state.repos.find((candidate) => candidate.id === activeWorktree?.repoId)
+      if (!repo) {
+        return
+      }
+      const scope = findCodeIntelligenceScopeForWorkspace({
+        settings: state.settings,
+        repoId: repo.id,
+        isFolder: isFolderRepo(repo),
+        executionHostId: getRepoExecutionHostId(repo),
+        language: 'cpp'
+      })
+      if (!scope) {
+        return
+      }
+      const relativePaths = paths
+        .map((path) => rowProjection.getRowByPath(path))
+        .filter((node): node is TreeNode => Boolean(node?.isDirectory))
+        .map((node) => node.relativePath)
+      const next =
+        action === 'add'
+          ? addCodeIntelligenceMembers(scope, relativePaths)
+          : removeCodeIntelligenceMembers(scope, relativePaths)
+      if (next === null) {
+        toast.info(
+          translate('settings.codeIntelligence.cannotRemoveLastFolder', 'Keep at least one folder')
+        )
+        return
+      }
+      if (next !== scope) {
+        void writeCodeIntelligenceScopeEdit(next)
+      }
+    },
+    [activeWorktree?.repoId, rowProjection]
+  )
   const handleOpenInTerminal = useCallback(
     (node: TreeNode) => {
       if (!activeWorktreeId || !node.isDirectory) {
@@ -792,6 +851,8 @@ function FileExplorerFiles(): React.JSX.Element {
                 onDuplicate={handleDuplicate}
                 onAddFolderAsProject={handleAddFolderAsProject}
                 canAddFolderAsProject={(node) => canShowAddAsProjectAction(node, activeRepo)}
+                codeIntelligenceScope={cppCodeIntelligenceScope}
+                onToggleCodeIntelligenceMembers={handleToggleCodeIntelligenceMembers}
                 onOpenInTerminal={handleOpenInTerminal}
                 onRequestDelete={handleContextMenuDelete}
                 onCollapseFolderSubtree={handleCollapseFolderSubtree}

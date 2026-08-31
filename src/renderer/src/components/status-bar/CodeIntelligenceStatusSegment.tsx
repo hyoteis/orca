@@ -1,12 +1,20 @@
 import React, { useMemo, useState } from 'react'
-import { AlertTriangle, Braces, CheckCircle2, Folder, FolderOpen, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Braces, CheckCircle2, Folder, FolderOpen, RefreshCw, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { SelectedTextCopyMenu } from '@/components/SelectedTextCopyMenu'
 import { useAppStore } from '@/store'
 import { useWorktreeMap } from '@/store/selectors'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import {
+  removeCodeIntelligenceMembers,
+  setCodeIntelligenceMemberVisibility,
+  writeCodeIntelligenceScopeEdit
+} from '@/lib/language-server/code-intelligence-scope-member-edit'
 import { translate } from '@/i18n/i18n'
 import { STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS } from './status-bar-context-menu-policy'
 import {
@@ -64,6 +72,28 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
           ? 'text-destructive'
           : 'text-muted-foreground'
   const projectName = activeRepo?.displayName ?? scopes[0].name
+  const handleMemberVisibilityChange = (
+    scope: CodeIntelligenceScope,
+    memberPath: string,
+    visible: boolean
+  ): void => {
+    const next = setCodeIntelligenceMemberVisibility(scope, memberPath, visible)
+    if (next !== scope) {
+      void writeCodeIntelligenceScopeEdit(next)
+    }
+  }
+  const handleMemberRemove = (scope: CodeIntelligenceScope, memberPath: string): void => {
+    const next = removeCodeIntelligenceMembers(scope, [memberPath])
+    if (next === null) {
+      toast.info(
+        translate('settings.codeIntelligence.cannotRemoveLastFolder', 'Keep at least one folder')
+      )
+      return
+    }
+    if (next !== scope) {
+      void writeCodeIntelligenceScopeEdit(next)
+    }
+  }
   const tooltip = translate(
     'settings.codeIntelligence.statusSummary',
     'Code intelligence: {{value0}} folders',
@@ -166,21 +196,39 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
                     return (
                       <div
                         key={member.path}
-                        className="flex items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/50"
+                        className="group flex items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/50"
                         title={displayPath}
                       >
+                        <Checkbox
+                          checked={member.visibleResults}
+                          aria-label={translate(
+                            'settings.codeIntelligence.memberVisibility',
+                            'Show results for {{value0}}',
+                            { value0: member.path }
+                          )}
+                          onCheckedChange={(checked) =>
+                            handleMemberVisibilityChange(scope, member.path, checked === true)
+                          }
+                        />
                         <Folder className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
                           {member.path}
                         </span>
-                        {!member.visibleResults ? (
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {translate(
-                              'settings.codeIntelligence.statusResultsHidden',
-                              'Results hidden'
-                            )}
-                          </span>
-                        ) : null}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                          disabled={scope.members.length === 1}
+                          aria-label={translate(
+                            'settings.codeIntelligence.removeMember',
+                            'Remove {{value0}}',
+                            { value0: member.path }
+                          )}
+                          onClick={() => handleMemberRemove(scope, member.path)}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
                       </div>
                     )
                   })}

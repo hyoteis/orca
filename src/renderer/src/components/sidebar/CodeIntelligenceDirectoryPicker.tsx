@@ -1,16 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Folder, RefreshCw, Search, X } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { Folder, Plus, RefreshCw, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { translate } from '@/i18n/i18n'
+import { normalizeScopeMemberPath } from '../../../../shared/code-intelligence-scope'
+import { isRuntimePathAbsolute } from '../../../../shared/cross-platform-path'
 import {
-  buildCodeIntelligenceDirectoryTree,
-  flattenCodeIntelligenceDirectoryTree,
-  getCodeIntelligenceDirectorySelectionState,
-  getDefaultCollapsedCodeIntelligenceDirectories,
-  getMinimalCodeIntelligenceDirectories,
-  toggleCodeIntelligenceDirectorySelection
+  filterCodeIntelligenceDirectories,
+  getCodeIntelligenceCustomPaths,
+  getMinimalCodeIntelligenceDirectories
 } from './code-intelligence-directory-list'
 
 type Props = {
@@ -32,86 +33,91 @@ export function CodeIntelligenceDirectoryPicker({
   onSelectedChange,
   onRescan
 }: Props): React.JSX.Element {
-  const fullTree = useMemo(
-    () =>
-      buildCodeIntelligenceDirectoryTree({
-        directories,
-        query: ''
-      }),
-    [directories]
-  )
-  const [collapsed, setCollapsed] = useState<Set<string>>(
-    getDefaultCollapsedCodeIntelligenceDirectories(fullTree)
-  )
-  useEffect(() => {
-    setCollapsed(getDefaultCollapsedCodeIntelligenceDirectories(fullTree))
-  }, [fullTree])
-
+  const [customPath, setCustomPath] = useState('')
   const selectedDirectories = useMemo(
     () => getMinimalCodeIntelligenceDirectories(directories, selected),
     [directories, selected]
   )
-  const availableTree = useMemo(
-    () => buildCodeIntelligenceDirectoryTree({ directories, query }),
+  const customPaths = useMemo(
+    () => getCodeIntelligenceCustomPaths(directories, selected),
+    [directories, selected]
+  )
+  const matchedDirectories = useMemo(
+    () => filterCodeIntelligenceDirectories(directories, query),
     [directories, query]
   )
-  const rows = useMemo(
-    () =>
-      flattenCodeIntelligenceDirectoryTree({
-        tree: availableTree,
-        collapsed,
-        expandAll: Boolean(query.trim())
-      }),
-    [availableTree, collapsed, query]
+  const matchedCustomPaths = useMemo(
+    () => filterCodeIntelligenceDirectories(customPaths, query),
+    [customPaths, query]
   )
-  const availableCount = directories.length
+  const rows = [...matchedDirectories, ...matchedCustomPaths]
+  const availableCount = directories.length + customPaths.length
 
-  const toggleCollapsed = (path: string): void => {
-    setCollapsed((current) => {
-      const next = new Set(current)
-      if (next.has(path)) {
-        next.delete(path)
-      } else {
-        next.add(path)
-      }
-      return next
-    })
+  const togglePath = (path: string, checked: boolean): void => {
+    const next = new Set(selected)
+    if (checked) {
+      next.add(path)
+    } else {
+      next.delete(path)
+    }
+    onSelectedChange(next)
   }
+
+  const handleAddCustomPath = (): void => {
+    try {
+      // Why: ~ and .. must be rejected here — members persist exactly as typed.
+      const path = normalizeScopeMemberPath(customPath.trim())
+      if (!isRuntimePathAbsolute(path)) {
+        throw new Error('not-absolute')
+      }
+      if (!selected.has(path)) {
+        onSelectedChange(new Set(selected).add(path))
+      }
+      setCustomPath('')
+    } catch {
+      toast.error(
+        translate(
+          'settings.codeIntelligence.customPathInvalid',
+          'Enter an absolute Host path (~ and .. are not expanded)'
+        )
+      )
+    }
+  }
+
+  const renderRow = (path: string, custom: boolean): React.JSX.Element => (
+    <label
+      key={path}
+      className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/50"
+      title={path}
+    >
+      <Checkbox
+        checked={selected.has(path)}
+        aria-label={path}
+        onCheckedChange={(checked) => togglePath(path, checked === true)}
+      />
+      <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{path}</span>
+      {custom ? (
+        <Badge variant="outline" className="px-1.5 py-0 text-[11px] font-normal">
+          {translate('settings.codeIntelligence.customPathBadge', 'custom')}
+        </Badge>
+      ) : null}
+    </label>
+  )
 
   return (
     <div className="space-y-2">
-      {selectedDirectories.length > 0 ? (
+      {selectedDirectories.length > 0 || customPaths.length > 0 ? (
         <section className="rounded-md border border-border bg-muted/20">
           <div className="flex items-center justify-between border-b border-border/60 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
             <span>
               {translate('settings.codeIntelligence.selectedFoldersPinned', 'Selected folders')}
             </span>
-            <span className="tabular-nums">{selectedDirectories.length}</span>
+            <span className="tabular-nums">{selectedDirectories.length + customPaths.length}</span>
           </div>
           <div className="max-h-28 overflow-y-auto p-1.5 scrollbar-sleek">
-            {selectedDirectories.map((path) => (
-              <label
-                key={path}
-                className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/60"
-                title={path}
-              >
-                <Checkbox
-                  checked
-                  onCheckedChange={() =>
-                    onSelectedChange(
-                      toggleCodeIntelligenceDirectorySelection({
-                        directories,
-                        selected,
-                        path,
-                        checked: false
-                      })
-                    )
-                  }
-                />
-                <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{path}</span>
-              </label>
-            ))}
+            {selectedDirectories.map((path) => renderRow(path, false))}
+            {customPaths.map((path) => renderRow(path, true))}
           </div>
         </section>
       ) : null}
@@ -170,11 +176,13 @@ export function CodeIntelligenceDirectoryPicker({
 
       <section className="rounded-md border border-border">
         <div className="flex items-center justify-between border-b border-border/60 px-2.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
-          <span>{translate('settings.codeIntelligence.folderTree', 'Folder tree')}</span>
+          <span>
+            {translate('settings.codeIntelligence.availableFolders', 'Available folders')}
+          </span>
           <span className="tabular-nums">{availableCount}</span>
         </div>
-        <div role="tree" className="max-h-64 overflow-y-auto p-1.5 scrollbar-sleek">
-          {directories.length === 0 && !discovering ? (
+        <div className="max-h-64 overflow-y-auto p-1.5 scrollbar-sleek">
+          {directories.length === 0 && customPaths.length === 0 && !discovering ? (
             <p className="px-1.5 py-2 text-xs text-muted-foreground">
               {translate(
                 'settings.codeIntelligence.noBuildFolders',
@@ -182,7 +190,9 @@ export function CodeIntelligenceDirectoryPicker({
               )}
             </p>
           ) : null}
-          {directories.length > 0 && rows.length === 0 ? (
+          {rows.length === 0 &&
+          (directories.length > 0 || customPaths.length > 0) &&
+          !discovering ? (
             <p className="px-1.5 py-2 text-xs text-muted-foreground">
               {translate(
                 'settings.codeIntelligence.noDirectorySearchMatches',
@@ -190,81 +200,43 @@ export function CodeIntelligenceDirectoryPicker({
               )}
             </p>
           ) : null}
-          {rows.map((row) => {
-            const hasChildren = row.children.length > 0
-            const expanded = query.trim() ? true : !collapsed.has(row.path)
-            const selectionState = getCodeIntelligenceDirectorySelectionState({
-              directories,
-              selected,
-              path: row.path
-            })
-            return (
-              <div
-                key={row.path}
-                role="treeitem"
-                aria-level={row.depth + 1}
-                aria-expanded={hasChildren ? expanded : undefined}
-                className="flex h-7 items-center rounded pr-1 text-xs hover:bg-accent/50"
-                style={{ paddingLeft: `${row.depth * 16 + 2}px` }}
-              >
-                {hasChildren ? (
-                  <button
-                    type="button"
-                    className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                    aria-label={
-                      expanded
-                        ? translate('settings.codeIntelligence.collapseFolder', 'Collapse folder')
-                        : translate('settings.codeIntelligence.expandFolder', 'Expand folder')
-                    }
-                    onClick={() => toggleCollapsed(row.path)}
-                  >
-                    {expanded ? (
-                      <ChevronDown className="size-3.5" />
-                    ) : (
-                      <ChevronRight className="size-3.5" />
-                    )}
-                  </button>
-                ) : (
-                  <span className="size-5 shrink-0" />
-                )}
-                {row.selectable ? (
-                  <label
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
-                    title={row.path}
-                  >
-                    <Checkbox
-                      checked={selectionState}
-                      aria-label={row.path}
-                      onCheckedChange={(checked) =>
-                        onSelectedChange(
-                          toggleCodeIntelligenceDirectorySelection({
-                            directories,
-                            selected,
-                            path: row.path,
-                            checked: checked === true
-                          })
-                        )
-                      }
-                    />
-                    <Folder className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate font-mono text-[11px]">{row.name}</span>
-                  </label>
-                ) : (
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left text-muted-foreground"
-                    title={row.path}
-                    onClick={() => hasChildren && toggleCollapsed(row.path)}
-                  >
-                    <Folder className="size-3.5 shrink-0" />
-                    <span className="truncate font-mono text-[11px]">{row.name}</span>
-                  </button>
-                )}
-              </div>
-            )
-          })}
+          {rows.map((path) => renderRow(path, customPaths.includes(path)))}
         </div>
       </section>
+
+      <div className="flex items-center gap-2">
+        <Input
+          type="text"
+          value={customPath}
+          aria-label={translate(
+            'settings.codeIntelligence.customPathPlaceholder',
+            'Add a folder outside this workspace (Host absolute path)'
+          )}
+          placeholder={translate(
+            'settings.codeIntelligence.customPathPlaceholder',
+            'Add a folder outside this workspace (Host absolute path)'
+          )}
+          className="h-8 bg-background text-xs shadow-none"
+          onChange={(event) => setCustomPath(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && customPath.trim()) {
+              event.preventDefault()
+              handleAddCustomPath()
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8"
+          disabled={!customPath.trim()}
+          onClick={handleAddCustomPath}
+        >
+          <Plus className="size-3.5" />
+          {translate('settings.codeIntelligence.addCustomPath', 'Add')}
+        </Button>
+      </div>
     </div>
   )
 }

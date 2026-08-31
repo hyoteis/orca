@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildCodeIntelligenceDirectoryTree,
   discoverCodeIntelligenceDirectories,
   filterCodeIntelligenceDirectories,
-  expandConfiguredCodeIntelligenceDirectories,
-  flattenCodeIntelligenceDirectoryTree,
-  getCodeIntelligenceDirectorySelectionState,
-  getDefaultCollapsedCodeIntelligenceDirectories,
+  getCodeIntelligenceCustomPaths,
   getMinimalCodeIntelligenceDirectories,
-  sortCodeIntelligenceDirectories,
-  toggleCodeIntelligenceDirectorySelection
+  sortCodeIntelligenceDirectories
 } from './code-intelligence-directory-list'
 
 describe('code intelligence directory list', () => {
@@ -35,74 +30,6 @@ describe('code intelligence directory list', () => {
     ).toEqual(['DiligentCore/Graphics'])
   })
 
-  it('builds ancestor rows for all selectable folders', () => {
-    const tree = buildCodeIntelligenceDirectoryTree({
-      directories: ['lume/LumeBase', 'lume/LumeRender', 'lume/LumeRender/test/unit', 'kits/ets'],
-      query: ''
-    })
-
-    expect(tree).toEqual([
-      {
-        name: 'kits',
-        path: 'kits',
-        selectable: false,
-        children: [{ name: 'ets', path: 'kits/ets', selectable: true, children: [] }]
-      },
-      {
-        name: 'lume',
-        path: 'lume',
-        selectable: false,
-        children: [
-          {
-            name: 'LumeBase',
-            path: 'lume/LumeBase',
-            selectable: true,
-            children: []
-          },
-          {
-            name: 'LumeRender',
-            path: 'lume/LumeRender',
-            selectable: true,
-            children: [
-              {
-                name: 'test',
-                path: 'lume/LumeRender/test',
-                selectable: false,
-                children: [
-                  {
-                    name: 'unit',
-                    path: 'lume/LumeRender/test/unit',
-                    selectable: true,
-                    children: []
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    ])
-  })
-
-  it('collapses nested branches but expands all matching search ancestors', () => {
-    const tree = buildCodeIntelligenceDirectoryTree({
-      directories: ['lume/LumeRender', 'lume/LumeRender/test/unit'],
-      query: ''
-    })
-    const collapsed = getDefaultCollapsedCodeIntelligenceDirectories(tree)
-
-    expect(
-      flattenCodeIntelligenceDirectoryTree({ tree, collapsed, expandAll: false }).map(
-        (row) => row.path
-      )
-    ).toEqual(['lume'])
-    expect(
-      flattenCodeIntelligenceDirectoryTree({ tree, collapsed, expandAll: true }).map(
-        (row) => row.path
-      )
-    ).toEqual(['lume', 'lume/LumeRender', 'lume/LumeRender/test', 'lume/LumeRender/test/unit'])
-  })
-
   it('derives every real parent directory from the project file list', () => {
     expect(
       discoverCodeIntelligenceDirectories([
@@ -124,71 +51,21 @@ describe('code intelligence directory list', () => {
     ])
   })
 
-  it('selects a full subtree and reports partial parents as indeterminate', () => {
-    const directories = [
-      '.',
-      'lume',
-      'lume/LumeBase',
-      'lume/LumeBase/api',
-      'lume/LumeBase/src',
-      'lume/LumeRender'
-    ]
-    const fullySelected = toggleCodeIntelligenceDirectorySelection({
-      directories,
-      selected: new Set(),
-      path: 'lume/LumeBase',
-      checked: true
-    })
-    expect([...fullySelected]).toEqual(['lume/LumeBase', 'lume/LumeBase/api', 'lume/LumeBase/src'])
-    expect(
-      getCodeIntelligenceDirectorySelectionState({
-        directories,
-        selected: fullySelected,
-        path: 'lume/LumeBase'
-      })
-    ).toBe(true)
-    expect(
-      getCodeIntelligenceDirectorySelectionState({
-        directories,
-        selected: fullySelected,
-        path: 'lume'
-      })
-    ).toBe('indeterminate')
+  it('compresses fully covered subtrees to their topmost selected directory', () => {
+    const directories = ['.', 'lume', 'lume/LumeBase', 'lume/LumeBase/api', 'lume/LumeRender']
+    const selected = new Set(['lume/LumeBase', 'lume/LumeBase/api'])
 
-    const partial = toggleCodeIntelligenceDirectorySelection({
-      directories,
-      selected: fullySelected,
-      path: 'lume/LumeBase/src',
-      checked: false
-    })
-    expect(
-      getCodeIntelligenceDirectorySelectionState({
-        directories,
-        selected: partial,
-        path: 'lume/LumeBase'
-      })
-    ).toBe('indeterminate')
-
-    const restored = toggleCodeIntelligenceDirectorySelection({
-      directories,
-      selected: partial,
-      path: 'lume/LumeBase/src',
-      checked: true
-    })
-    expect(
-      getCodeIntelligenceDirectorySelectionState({
-        directories,
-        selected: restored,
-        path: 'lume/LumeBase'
-      })
-    ).toBe(true)
+    expect(getMinimalCodeIntelligenceDirectories(directories, selected)).toEqual(['lume/LumeBase'])
   })
 
-  it('expands persisted parent scopes and compresses fully selected trees', () => {
-    const directories = ['.', 'lume', 'lume/LumeBase', 'lume/LumeBase/api', 'lume/LumeRender']
-    const selected = expandConfiguredCodeIntelligenceDirectories(directories, ['lume/LumeBase'])
+  it('keeps custom host-absolute selections separate from detected directories', () => {
+    const directories = ['.', 'lume', 'lume/LumeRender']
+    const selected = new Set(['lume', '/opt/sdk', 'D:\\other\\project', 'lume/LumeRender'])
 
-    expect([...selected]).toEqual(['lume/LumeBase', 'lume/LumeBase/api'])
-    expect(getMinimalCodeIntelligenceDirectories(directories, selected)).toEqual(['lume/LumeBase'])
+    expect(getCodeIntelligenceCustomPaths(directories, selected)).toEqual([
+      '/opt/sdk',
+      'D:\\other\\project'
+    ])
+    expect(getMinimalCodeIntelligenceDirectories(directories, selected)).toEqual(['lume'])
   })
 })

@@ -78,3 +78,28 @@ export function isCodeIntelligenceResultVisible(
   }
   return visibleResults
 }
+
+/** Three-state tree-menu rule: exact member → 'remove', strict subpath → 'disabled', else 'add'. */
+export type CodeIntelligenceMembershipAction = 'add' | 'remove' | 'disabled'
+
+export function getCodeIntelligenceMembershipAction(
+  scope: CodeIntelligenceMemberScope,
+  relativePath: string
+): CodeIntelligenceMembershipAction {
+  const normalized = normalizeCandidatePath(relativePath)
+  if (normalized === null) {
+    return 'disabled'
+  }
+  let contains = false
+  for (const member of scope.members) {
+    const memberPath = memberWorkspaceRelativePath(scope, member)
+    if (memberPath === null || !pathContains(memberPath, normalized)) {
+      continue
+    }
+    if (memberPath === normalized) {
+      return 'remove'
+    }
+    contains = true
+  }
+  return contains ? 'disabled' : 'add'
+}
