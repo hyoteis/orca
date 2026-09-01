@@ -138,9 +138,16 @@ export class CodeIntelligenceSshCppSetup {
         return fail('SSH C++ setup requires an SSH project')
       }
       const connection = this.dependencies.getConnection(host.targetId)
-      const platform = this.dependencies.getPlatform(host.targetId)
-      if (!connection || !platform) {
+      if (!connection) {
+        logs.push(`SSH target ${host.targetId} has no live connection`)
         return fail('SSH Host is not connected. Reconnect and retry.')
+      }
+      const platform = this.dependencies.getPlatform(host.targetId)
+      if (!platform) {
+        logs.push(`SSH target ${host.targetId} is connected but its platform is not known yet`)
+        return fail(
+          'SSH Host is connected but its platform is not known yet. Reconnect the Host and retry.'
+        )
       }
       if (platform === 'win32') {
         return fail(

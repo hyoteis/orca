@@ -30,7 +30,7 @@ import {
   buildWindowsLanguageServerCommand,
   probeSshLanguageServer
 } from '../ssh/ssh-language-server-session-manager'
-import { getSshConnectionManager } from './ssh'
+import { getSshConnectionManager, getRegisteredSshState } from './ssh'
 import { subscribeSshTransportConnected } from './ssh-transport-connected'
 
 function broadcastScopeChange(change: CodeIntelligenceScopeChange): void {
@@ -196,7 +196,9 @@ export function registerCodeIntelligenceHandlers(
   )
   const sshCppSetup = new CodeIntelligenceSshCppSetup(store, {
     getConnection: (targetId) => getSshConnectionManager()?.getConnection(targetId),
-    getPlatform: (targetId) => getSshConnectionManager()?.getState(targetId)?.remotePlatform
+    // Why: remotePlatform lives on the relay session; the raw manager state never
+    // carries it, so the enriched registered state is the only truthful source.
+    getPlatform: (targetId) => getRegisteredSshState(targetId)?.remotePlatform
   })
   // Reconnect sweep = deferred delete for scopes removed while offline.
   subscribeSshTransportConnected((targetId) => {

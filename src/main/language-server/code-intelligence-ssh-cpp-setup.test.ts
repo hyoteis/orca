@@ -235,6 +235,25 @@ describe('CodeIntelligenceSshCppSetup', () => {
     expect(commands).toEqual([])
   })
 
+  it('names the real cause when the connection is live but the platform is unknown', async () => {
+    const remote = scriptedConnection(linuxHostScript())
+    const setup = new CodeIntelligenceSshCppSetup(fakeStore(), {
+      getConnection: () => remote.connection,
+      getPlatform: () => undefined
+    })
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('platform is not known')
+    expect(result.log).toContain('connected but its platform is not known')
+    expect(remote.commands).toEqual([])
+  })
+
   it('fails atomically with a manual install hint when sudo -n cannot install', async () => {
     const { setup } = setupWith((command) => {
       if (command.startsWith('command -v clangd')) {
