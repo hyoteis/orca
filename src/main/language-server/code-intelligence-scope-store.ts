@@ -4,6 +4,7 @@ import type {
   CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
 import {
+  hasLegacyCodeIntelligenceMembers,
   normalizeCodeIntelligenceScope,
   scopeConfigurationPayload
 } from '../../shared/code-intelligence-scope'
@@ -32,6 +33,8 @@ type ScopeSettingsStore = {
 export type CodeIntelligenceScopeMutation = {
   scope: CodeIntelligenceScope
   scopes: readonly CodeIntelligenceScope[]
+  /** Launch changed → running sessions must restart. Member-only edits keep
+   * sessions alive (spec §5); revision/consent still move via `scope`. */
   restartRequired: boolean
 }
 
@@ -40,6 +43,22 @@ function sameConfiguration(left: CodeIntelligenceScope, right: CodeIntelligenceS
     JSON.stringify(scopeConfigurationPayload(left)) ===
     JSON.stringify(scopeConfigurationPayload(right))
   )
+}
+
+/** Config payload without members — member-only edits keep the clangd session
+ * alive (spec §5: the atomic CDB rewrite is picked up lazily), while any other
+ * change alters the launch and must restart it. */
+function sameLaunchConfiguration(
+  left: CodeIntelligenceScope,
+  right: CodeIntelligenceScope
+): boolean {
+  const { members: _leftMembers, ...leftPayload } = scopeConfigurationPayload(
+    left
+  ) as Record<string, unknown>
+  const { members: _rightMembers, ...rightPayload } = scopeConfigurationPayload(
+    right
+  ) as Record<string, unknown>
+  return JSON.stringify(leftPayload) === JSON.stringify(rightPayload)
 }
 
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {
@@ -59,9 +78,20 @@ export class CodeIntelligenceScopeStore {
   constructor(private readonly store: ScopeSettingsStore) {}
 
   list(): readonly CodeIntelligenceScope[] {
-    return (this.store.getSettings().codeIntelligenceScopes ?? []).map((scope) =>
-      structuredClone(normalizeCodeIntelligenceScope(scope))
+    const raw = this.store.getSettings().codeIntelligenceScopes ?? []
+    // Lazy no-compat migration: map legacy {relativePath} members to {path},
+    // drop the setupStatus (its compileCommandsDir points at a swept hash dir),
+    // and persist once so later reads never see the old shape again.
+    const migrated = raw.some(hasLegacyCodeIntelligenceMembers)
+    const scopes = raw.map((scope) =>
+      hasLegacyCodeIntelligenceMembers(scope)
+        ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
+        : normalizeCodeIntelligenceScope(scope)
     )
+    if (migrated) {
+      this.persist(scopes)
+    }
+    return scopes.map((scope) => structuredClone(scope))
   }
 
   upsert(input: CodeIntelligenceScope): CodeIntelligenceScopeMutation {
@@ -70,12 +100,20 @@ export class CodeIntelligenceScopeStore {
     const scopes = [...this.list()]
     const index = scopes.findIndex((scope) => scope.id === next.id)
     const prior = index !== -1 ? scopes[index] : null
-    const restartRequired = prior ? !sameConfiguration(prior, next) : false
+    const configurationChanged = prior ? !sameConfiguration(prior, next) : false
+    // Restart only when the launch itself changed; member-only changes bump the
+    // revision (consent chain) while the running clangd session stays up.
+    const restartRequired = prior
+      ? configurationChanged && !sameLaunchConfiguration(prior, next)
+      : false
     next = prior
       ? {
           ...next,
-          revision: restartRequired ? prior.revision + 1 : prior.revision,
-          consent: restartRequired ? undefined : prior.consent
+          revision: configurationChanged ? prior.revision + 1 : prior.revision,
+          // Keep the prior consent through changes: its fingerprint no longer
+          // matches (authorizeSession refuses it), while its member snapshot
+          // lets surfaces show what moved since authorization.
+          consent: prior.consent
         }
       : { ...next, revision: 1, consent: undefined }
     if (index !== -1) {

@@ -1,14 +1,16 @@
 import { createHash } from 'node:crypto'
-import { access, readFile, stat, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { join } from 'node:path'
+import { join, posix } from 'node:path'
 import type {
   CodeIntelligenceCppSetupRequest,
   CodeIntelligenceCppSetupResult
 } from '../../shared/code-intelligence-cpp-setup'
 import type { CppBuildRoot } from './code-intelligence-cmake-root-selection'
 
-const CACHE_RESULT_FILE = 'setup-result.json'
+const SETUP_MANIFEST_FILE = 'setup-manifest.json'
+// Structural cache-root children; everything else is a legacy hash directory.
+const RETAINED_CPP_CACHE_DIRECTORIES = new Set(['tools', 'scopes'])
 
 async function modifiedAt(path: string): Promise<number> {
   try {
@@ -18,7 +20,25 @@ async function modifiedAt(path: string): Promise<number> {
   }
 }
 
-export async function createCodeIntelligenceSetupCacheKey(args: {
+export function cppScopeDirectoryName(scopeId: string): string {
+  return createHash('sha256').update(scopeId).digest('hex').slice(0, 16)
+}
+
+export function cppScopeDirectoryPath(cacheRoot: string, scopeId: string): string {
+  return join(cacheRoot, 'scopes', cppScopeDirectoryName(scopeId))
+}
+
+/** Remote scope layout mirror (spec §2): ~/.orca/code-intelligence/cpp/scopes/<dirName>. */
+export function remoteCppScopesRootPath(home: string): string {
+  return posix.join(home, '.orca', 'code-intelligence', 'cpp', 'scopes')
+}
+
+export function remoteCppScopeDirectoryPath(home: string, scopeId: string): string {
+  // posix.join: the remote layout is POSIX regardless of the local platform.
+  return posix.join(remoteCppScopesRootPath(home), cppScopeDirectoryName(scopeId))
+}
+
+export async function createCodeIntelligenceSetupFingerprint(args: {
   repoId: string
   roots: readonly string[]
   request: CodeIntelligenceCppSetupRequest
@@ -46,24 +66,28 @@ export async function createCodeIntelligenceSetupCacheKey(args: {
       })
     )
     .digest('hex')
-    .slice(0, 16)
 }
 
 export async function readCachedCodeIntelligenceSetupResult(
-  outputRoot: string
+  scopeDirectory: string,
+  fingerprint: string
 ): Promise<CodeIntelligenceCppSetupResult | null> {
   try {
-    await access(join(outputRoot, 'compile_commands.json'), constants.R_OK)
-    const parsed = JSON.parse(
-      await readFile(join(outputRoot, CACHE_RESULT_FILE), 'utf8')
-    ) as CodeIntelligenceCppSetupResult
-    if (!parsed.ok || !parsed.clangdExecutable || !parsed.compileCommandsDir) {
+    const manifest = JSON.parse(
+      await readFile(join(scopeDirectory, SETUP_MANIFEST_FILE), 'utf8')
+    ) as { fingerprint?: unknown; result?: CodeIntelligenceCppSetupResult }
+    if (manifest.fingerprint !== fingerprint || !manifest.result?.ok) {
       return null
     }
-    await access(parsed.clangdExecutable, constants.X_OK)
+    const cached = manifest.result
+    if (!cached.clangdExecutable || !cached.compileCommandsDir) {
+      return null
+    }
+    await access(join(scopeDirectory, 'compile_commands.json'), constants.R_OK)
+    await access(cached.clangdExecutable, constants.X_OK)
     return {
-      ...parsed,
-      message: `Reused cached ${parsed.configurationMode?.toUpperCase() ?? 'C++'} compile commands`
+      ...cached,
+      message: `Reused cached ${cached.configurationMode?.toUpperCase() ?? 'C++'} compile commands`
     }
   } catch {
     return null
@@ -71,8 +95,38 @@ export async function readCachedCodeIntelligenceSetupResult(
 }
 
 export async function writeCachedCodeIntelligenceSetupResult(
-  outputRoot: string,
+  scopeDirectory: string,
+  fingerprint: string,
   result: CodeIntelligenceCppSetupResult
 ): Promise<void> {
-  await writeFile(join(outputRoot, CACHE_RESULT_FILE), JSON.stringify(result, null, 2))
+  await writeFile(
+    join(scopeDirectory, SETUP_MANIFEST_FILE),
+    JSON.stringify({ fingerprint, result }, null, 2)
+  )
+}
+
+export async function sweepOrphanCppScopeDirectories(
+  cacheRoot: string,
+  liveScopeIds: readonly string[]
+): Promise<void> {
+  try {
+    const retained = new Set(liveScopeIds.map(cppScopeDirectoryName))
+    const entries = await readdir(cacheRoot, { withFileTypes: true })
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory() && !RETAINED_CPP_CACHE_DIRECTORIES.has(entry.name))
+        .map((entry) => rm(join(cacheRoot, entry.name), { recursive: true, force: true }))
+    )
+    // Scope-level sweep (spec §6): directories under scopes/ owned by no live
+    // scope are stale caches — e.g. removed while the host was offline.
+    const scopesRoot = join(cacheRoot, 'scopes')
+    const scopeEntries = await readdir(scopesRoot, { withFileTypes: true })
+    await Promise.all(
+      scopeEntries
+        .filter((entry) => entry.isDirectory() && !retained.has(entry.name))
+        .map((entry) => rm(join(scopesRoot, entry.name), { recursive: true, force: true }))
+    )
+  } catch {
+    // Best-effort startup sweep; a missing or unreadable cache root is fine.
+  }
 }

@@ -2,6 +2,8 @@
 import React, { useCallback, useRef } from 'react'
 import { basename } from '@/lib/path'
 import {
+  Braces,
+  Check,
   ChevronRight,
   CircleSlash,
   Copy,
@@ -44,6 +46,9 @@ import {
   WORKSPACE_FILE_PATHS_MIME
 } from '@/lib/workspace-file-drag'
 import type { GitFileStatus } from '../../../../shared/types'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import { getCodeIntelligenceMembershipAction } from '@/lib/language-server/code-intelligence-scope-membership'
+import { getCodeIntelligenceMenuTargetPaths } from './file-explorer-code-intelligence-action'
 import { STATUS_LABELS } from './status-display'
 import { RENAME_HOTSPOT_ATTR } from './file-explorer-dir-toggle-timing'
 import type { TreeNode } from './file-explorer-types'
@@ -286,6 +291,8 @@ type FileExplorerRowProps = {
   onDuplicate: (node: TreeNode) => void
   onAddFolderAsProject: () => void
   canAddAsProject: boolean
+  codeIntelligenceScope?: CodeIntelligenceScope | null
+  onToggleCodeIntelligenceMembers?: (paths: readonly string[], action: 'add' | 'remove') => void
   onOpenInTerminal: () => void
   onRequestDelete: () => void
   onCollapseFolderSubtree: () => void
@@ -501,6 +508,8 @@ export function FileExplorerRow({
   onDuplicate,
   onAddFolderAsProject,
   canAddAsProject,
+  codeIntelligenceScope = null,
+  onToggleCodeIntelligenceMembers,
   onOpenInTerminal,
   onRequestDelete,
   onCollapseFolderSubtree,
@@ -526,6 +535,10 @@ export function FileExplorerRow({
     supportsFolderDownload
   )
   const showCopyFileAction = shouldShowCopyFileAction(node, connectionId, selectionSize)
+  const codeIntelligenceAction =
+    codeIntelligenceScope && onToggleCodeIntelligenceMembers && node.isDirectory
+      ? getCodeIntelligenceMembershipAction(codeIntelligenceScope, node.relativePath)
+      : null
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useFileExplorerRowDrag({
       rowDropDir,
@@ -779,6 +792,37 @@ export function FileExplorerRow({
               'auto.components.right.sidebar.FileExplorerRow.1bb9be455c',
               'Add as Project...'
             )}
+          </ContextMenuItem>
+        )}
+        {codeIntelligenceAction === 'disabled' && (
+          <ContextMenuItem disabled>
+            {/* Why: leading Check instead of a shortcut chip — STYLEGUIDE reserves chips for real shortcuts. */}
+            <Check />
+            {translate(
+              'auto.components.right.sidebar.FileExplorerRow.codeIntelligenceInScope',
+              'In Code Intelligence'
+            )}
+          </ContextMenuItem>
+        )}
+        {(codeIntelligenceAction === 'add' || codeIntelligenceAction === 'remove') && (
+          <ContextMenuItem
+            onSelect={() =>
+              onToggleCodeIntelligenceMembers!(
+                getCodeIntelligenceMenuTargetPaths(node, selectedPaths),
+                codeIntelligenceAction
+              )
+            }
+          >
+            <Braces />
+            {codeIntelligenceAction === 'remove'
+              ? translate(
+                  'auto.components.right.sidebar.FileExplorerRow.codeIntelligenceRemove',
+                  'Remove from Code Intelligence'
+                )
+              : translate(
+                  'auto.components.right.sidebar.FileExplorerRow.codeIntelligenceAdd',
+                  'Add to Code Intelligence'
+                )}
           </ContextMenuItem>
         )}
         {shouldShowOpenInTerminalAction(node) && (

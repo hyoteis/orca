@@ -15,8 +15,9 @@ const scopes: CodeIntelligenceScope[] = [
     workspaceRoot: 'C:\\repo',
     language: 'cpp',
     members: [
-      { relativePath: 'Core', visibleResults: true },
-      { relativePath: 'FX', visibleResults: true }
+      { path: 'Core', visibleResults: true },
+      { path: 'FX', visibleResults: true },
+      { path: 'D:\\sdk\\external', visibleResults: false }
     ],
     serverSource: { type: 'automatic' },
     enabled: true,
@@ -29,7 +30,7 @@ const scopes: CodeIntelligenceScope[] = [
     workspaceKey: 'worktree:repo-1',
     workspaceRoot: '/repo',
     language: 'cpp',
-    members: [{ relativePath: '.', visibleResults: true }],
+    members: [{ path: '.', visibleResults: true }],
     serverSource: { type: 'automatic' },
     enabled: true,
     revision: 1
@@ -45,11 +46,16 @@ describe('code intelligence status scopes', () => {
     })
 
     expect(result.map((scope) => scope.id)).toEqual(['cpp-local'])
-    expect(countCodeIntelligenceScopeFolders(result)).toBe(2)
+    expect(countCodeIntelligenceScopeFolders(result)).toBe(3)
   })
 
-  it('formats relative members below the workspace root', () => {
-    expect(getCodeIntelligenceMemberDisplayPath(scopes[0], 'Core')).toBe('C:\\repo/Core')
-    expect(getCodeIntelligenceMemberDisplayPath(scopes[1], '.')).toBe('/repo')
+  it('formats relative members below the workspace root and absolute members as-is', () => {
+    expect(getCodeIntelligenceMemberDisplayPath(scopes[0], scopes[0].members[0])).toBe(
+      'C:\\repo/Core'
+    )
+    expect(getCodeIntelligenceMemberDisplayPath(scopes[1], scopes[1].members[0])).toBe('/repo')
+    expect(getCodeIntelligenceMemberDisplayPath(scopes[0], scopes[0].members[2])).toBe(
+      'D:\\sdk\\external'
+    )
   })
 })

@@ -140,13 +140,12 @@ class CppCodeIntelligence {
 
   private async ensureClient(scope: CodeIntelligenceScope): Promise<ActiveClient> {
     const current = this.clients.get(scope.id)
-    if (current?.key.revision === scope.revision) {
+    if (current) {
+      // Member-only edits keep the clangd session alive (spec §5): the running
+      // process picks up the atomically rewritten CDB lazily. Only a launch
+      // change restarts, and that arrives via the registry's restart broadcast.
       this.registry.markActive(current.key)
       return current
-    }
-    if (current) {
-      this.registry.disposeKey(current.key)
-      this.clients.delete(scope.id)
     }
     const key: LanguageServerClientKey = {
       executionHostId: scope.executionHostId,

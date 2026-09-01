@@ -3,6 +3,7 @@ import type { Virtualizer } from '@tanstack/react-virtual'
 import { dirname, normalizeRelativePath } from '@/lib/path'
 import { cn } from '@/lib/utils'
 import type { GitFileStatus } from '../../../../shared/types'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import { FileExplorerRow, InlineInputRow, type InlineInput } from './FileExplorerRow'
 import { shouldShowIgnoredDecoration, STATUS_COLORS } from './status-display'
 import type { DirCache, TreeNode } from './file-explorer-types'
@@ -40,6 +41,8 @@ type FileExplorerVirtualRowsProps = {
   onDuplicate: (node: TreeNode) => void
   onAddFolderAsProject: (node: TreeNode) => void
   canAddFolderAsProject: (node: TreeNode) => boolean
+  codeIntelligenceScope?: CodeIntelligenceScope | null
+  onToggleCodeIntelligenceMembers?: (paths: readonly string[], action: 'add' | 'remove') => void
   onOpenInTerminal: (node: TreeNode) => void
   onRequestDelete: (node: TreeNode) => void
   onCollapseFolderSubtree: (node: TreeNode) => void
@@ -87,6 +90,8 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
     onDuplicate,
     onAddFolderAsProject,
     canAddFolderAsProject,
+    codeIntelligenceScope = null,
+    onToggleCodeIntelligenceMembers,
     onOpenInTerminal,
     onRequestDelete,
     onCollapseFolderSubtree,
@@ -196,6 +201,8 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onDuplicate={onDuplicate}
               onAddFolderAsProject={() => onAddFolderAsProject(n)}
               canAddAsProject={canAddFolderAsProject(n)}
+              codeIntelligenceScope={codeIntelligenceScope}
+              onToggleCodeIntelligenceMembers={onToggleCodeIntelligenceMembers}
               onOpenInTerminal={() => onOpenInTerminal(n)}
               onRequestDelete={() => onRequestDelete(n)}
               onCollapseFolderSubtree={() => onCollapseFolderSubtree(n)}

@@ -66,10 +66,16 @@
       "definitionHoverHint": "{{value0}}+Click or F12 to go to definition",
       "statusSummary": "Code intelligence: {{value0}} folders",
       "statusTitle": "Code intelligence folders",
-      "statusResultsHidden": "Results hidden",
+      "changeFailed": "Could not update code intelligence folders",
+      "cannotRemoveLastFolder": "Keep at least one folder",
+      "memberVisibility": "Show results for {{value0}}",
+      "removeMember": "Remove {{value0}}",
+      "customPathPlaceholder": "Add a folder outside this workspace (Host absolute path)",
+      "customPathInvalid": "Enter an absolute Host path (~ and .. are not expanded)",
+      "customPathBadge": "custom",
+      "addCustomPath": "Add",
       "selectedFoldersPinned": "Selected folders",
       "availableFolders": "Available folders",
-      "folderTree": "Folder tree",
       "collapseFolder": "Collapse folder",
       "expandFolder": "Expand folder",
       "healthReady": "Ready",
@@ -79,6 +85,11 @@
       "compileCommandCount": "{{value0}} compile commands",
       "openDatabase": "Open database",
       "reconfigure": "Reconfigure",
+      "pendingReconsentSummary": "Code intelligence folders changed since authorization",
+      "foldersChangedSinceAuthorization": "{{value0}} folders changed since authorization",
+      "configurationChangedSinceAuthorization": "Configuration changed since authorization",
+      "reauthorize": "Reauthorize",
+      "reauthorizeFailed": "Could not reauthorize code intelligence folders",
       "rescanFolders": "Rescan folders",
       "basicAdvanced": "Advanced BASIC indexing options",
       "basicAdvancedDescription": "Used only when no complete CMake or GN build root is available.",
@@ -91,7 +102,8 @@
       "setupLimited": "Configured with limited BASIC indexing",
       "setupReady": "C++ code intelligence is ready",
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
-      "sshSetupDescription": "Orca generates a BASIC compilation database on the connected SSH Host. clangd must already be installed there."
+      "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.",
+      "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}..."
     },
     "appearance": {
       "language": {
@@ -10857,7 +10869,10 @@
             "3161c4e425": "folder",
             "e887fa4b2e": "Open in Terminal",
             "1d8e182c32": "View File",
-            "clipboardStagingUnavailable": "Could not copy the file because Orca's temporary storage is unavailable"
+            "clipboardStagingUnavailable": "Could not copy the file because Orca's temporary storage is unavailable",
+            "codeIntelligenceInScope": "In Code Intelligence",
+            "codeIntelligenceRemove": "Remove from Code Intelligence",
+            "codeIntelligenceAdd": "Add to Code Intelligence"
           },
           "FileExplorerToolbar": {
             "d238264654": "Show Git Ignored Files",

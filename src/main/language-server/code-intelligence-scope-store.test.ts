@@ -1,4 +1,5 @@
 ﻿import { describe, expect, it, vi } from 'vitest'
+import { createHash } from 'node:crypto'
 import type { GlobalSettings } from '../../shared/types'
 import type { CodeIntelligenceScope } from '../../shared/code-intelligence-scope'
 import { CodeIntelligenceScopeStore } from './code-intelligence-scope-store'
@@ -10,7 +11,7 @@ const scope = (overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligence
   workspaceKey: 'folder:w',
   workspaceRoot: '/workspace',
   language: 'cpp',
-  members: [{ relativePath: 'engine', visibleResults: true }],
+  members: [{ path: 'engine', visibleResults: true }],
   serverSource: { type: 'custom', executable: '/usr/bin/clangd', args: ['--background-index'] },
   enabled: true,
   revision: 1,
@@ -47,14 +48,41 @@ describe('CodeIntelligenceScopeStore', () => {
     const catalog = new CodeIntelligenceScopeStore(store)
     const granted = catalog.grantConsent('scope', 1, 10)
     expect(granted.consent?.grantedAt).toBe(10)
+    expect(granted.consent?.authorizedMembers).toEqual([{ path: 'engine', visibleResults: true }])
 
     const result = catalog.upsert({
       ...granted,
-      members: [{ relativePath: 'src', visibleResults: true }]
+      members: [{ path: 'src', visibleResults: true }]
     })
-    expect(result.restartRequired).toBe(true)
+    // Member-only change (spec §5): the clangd session must NOT restart — the
+    // atomic CDB rewrite is picked up lazily — but revision and consent still
+    // move so the trust chain has no member-change bypass.
+    expect(result.restartRequired).toBe(false)
     expect(result.scope.revision).toBe(2)
-    expect(result.scope.consent).toBeUndefined()
+    // The stale consent survives so surfaces can diff against its member snapshot;
+    // its fingerprint no longer matches, so authorizeSession still refuses it.
+    expect(result.scope.consent?.authorizedMembers).toEqual([
+      { path: 'engine', visibleResults: true }
+    ])
+    expect(() =>
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
+    ).toThrow('consent')
+  })
+
+  it('requires a session restart only for changes beyond members', () => {
+    const upsert = (next: CodeIntelligenceScope): boolean =>
+      new CodeIntelligenceScopeStore(createStore([scope()])).upsert(next).restartRequired
+    expect(upsert({ ...scope(), enabled: false })).toBe(true)
+    expect(
+      upsert({
+        ...scope(),
+        serverSource: { type: 'custom', executable: '/opt/clangd', args: [] }
+      })
+    ).toBe(true)
+    // Visibility-only member edits are still member-only: no restart.
+    expect(
+      upsert({ ...scope(), members: [{ path: 'engine', visibleResults: false }] })
+    ).toBe(false)
   })
 
   it('authorizes only the persisted enabled scope with current consent and revision', () => {
@@ -92,5 +120,105 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(() =>
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
     ).toThrow('disabled')
+  })
+
+  it('lazily migrates legacy {relativePath} members on read and drops setupStatus', () => {
+    const setupStatus: CodeIntelligenceScope['setupStatus'] = {
+      state: 'ready',
+      mode: 'cmake',
+      generatedAt: 1
+    }
+    const legacy = {
+      ...scope(),
+      members: [
+        { relativePath: 'engine', visibleResults: true }
+      ] as unknown as CodeIntelligenceScope['members'],
+      setupStatus,
+      consent: { configurationFingerprint: 'stale', grantedAt: 1 }
+    } as CodeIntelligenceScope
+    const store = createStore([legacy])
+    const catalog = new CodeIntelligenceScopeStore(store)
+
+    const scopes = catalog.list()
+
+    expect(scopes[0].members).toEqual([{ path: 'engine', visibleResults: true }])
+    expect(scopes[0].setupStatus).toBeUndefined()
+    // Migration persists the new shape so later reads never re-migrate.
+    const persisted = store.getSettings().codeIntelligenceScopes
+    expect(persisted?.[0].members).toEqual([{ path: 'engine', visibleResults: true }])
+    expect(store.updateSettings).toHaveBeenCalledTimes(1)
+    // The stale fingerprint no longer matches, so consent must be re-granted.
+    expect(() =>
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+    ).toThrow('consent')
+  })
+
+  it('keeps setupStatus for scopes that already use {path} members', () => {
+    const setupStatus: CodeIntelligenceScope['setupStatus'] = {
+      state: 'ready',
+      mode: 'cmake',
+      generatedAt: 1
+    }
+    const store = createStore([scope({ setupStatus })])
+    const catalog = new CodeIntelligenceScopeStore(store)
+
+    expect(catalog.list()[0].setupStatus).toEqual(setupStatus)
+    expect(store.updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('round-trips a scope with mixed relative and absolute members', () => {
+    const catalog = new CodeIntelligenceScopeStore(createStore())
+    const mixed = scope({
+      members: [
+        { path: 'engine', visibleResults: true },
+        { path: '/opt/sdk/include', visibleResults: true }
+      ]
+    })
+    const { scope: saved } = catalog.upsert(mixed)
+    expect(saved.members).toEqual(mixed.members)
+    expect(catalog.list()[0].members).toEqual(mixed.members)
+  })
+
+  it('invalidates a consent fingerprint granted over the legacy member shape', () => {
+    // A pre-upgrade fingerprint hashed the payload with the {relativePath} key
+    // (canonical() from the shipped code-intelligence-scope-consent.ts), so
+    // rebuild that value to prove migration — not a hand-picked stale string —
+    // is what breaks consent.
+    const legacyPayload = {
+      executionHostId: 'ssh:box',
+      workspaceKey: 'folder:w',
+      workspaceRoot: '/workspace',
+      language: 'cpp',
+      members: [{ relativePath: 'engine', visibleResults: true }],
+      serverSource: { type: 'custom', executable: '/usr/bin/clangd', args: ['--background-index'] },
+      enabled: true
+    }
+    const canonical = (value: unknown): string => {
+      if (Array.isArray(value)) {
+        return `[${value.map(canonical).join(',')}]`
+      }
+      if (value && typeof value === 'object') {
+        return `{${Object.entries(value as Record<string, unknown>)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
+          .join(',')}}`
+      }
+      return JSON.stringify(value) ?? 'null'
+    }
+    const preUpgradeFingerprint = createHash('sha256')
+      .update(canonical(legacyPayload))
+      .digest('hex')
+    const legacy = {
+      ...scope(),
+      members: [
+        { relativePath: 'engine', visibleResults: true }
+      ] as unknown as CodeIntelligenceScope['members'],
+      consent: { configurationFingerprint: preUpgradeFingerprint, grantedAt: 1 }
+    } as CodeIntelligenceScope
+    const catalog = new CodeIntelligenceScopeStore(createStore([legacy]))
+
+    expect(() =>
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+    ).toThrow('consent')
   })
 })

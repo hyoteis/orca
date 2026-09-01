@@ -5,7 +5,10 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
-import type { CodeIntelligenceCppSetupResult } from '../../../../shared/code-intelligence-cpp-setup'
+import {
+  clangdCompileCommandsDirArg,
+  type CodeIntelligenceCppSetupResult
+} from '../../../../shared/code-intelligence-cpp-setup'
 import { listRuntimeFiles } from '../../runtime/runtime-file-client'
 import { getCachedCodeIntelligenceDirectories } from '../../lib/language-server/code-intelligence-directory-scan-cache'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
@@ -22,7 +25,7 @@ import { SettingsSegmentedControl } from '../settings/SettingsFormControls'
 import { CodeIntelligenceBasicOptions } from './CodeIntelligenceBasicOptions'
 import { CodeIntelligenceDirectoryPicker } from './CodeIntelligenceDirectoryPicker'
 import {
-  expandConfiguredCodeIntelligenceDirectories,
+  getCodeIntelligenceCustomPaths,
   getMinimalCodeIntelligenceDirectories
 } from './code-intelligence-directory-list'
 
@@ -52,6 +55,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
   const open = activeModal === 'code-intelligence-cpp-setup'
   const setupHost = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
   const setupSupported = setupHost?.kind === 'local' || setupHost?.kind === 'ssh'
+  const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)
+  const setupHostLabel = setupHost?.kind === 'ssh' ? (sshTargetLabels.get(setupHost.targetId) ?? setupHost.targetId) : ''
 
   useEffect(() => {
     if (!open) {
@@ -100,9 +105,10 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
                 scope.executionHostId === getRepoExecutionHostId(repo) &&
                 scope.language === 'cpp'
             )
-            ?.members.map((member) => member.relativePath) ?? []
+            ?.members.map((member) => member.path) ?? []
         setRoots(detected)
-        setSelected(expandConfiguredCodeIntelligenceDirectories(detected, existingMembers))
+        // Why: flat rows are literal members — pre-check exactly what the scope holds.
+        setSelected(new Set(existingMembers))
         setStage('idle')
       })
       .catch((error) => {
@@ -126,7 +132,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     }
   }, [open, repo, scanGeneration])
 
-  const selectedRoots = useMemo(
+  const relativeSelectedRoots = useMemo(
     () =>
       mode === 'all'
         ? roots.includes('.')
@@ -134,6 +140,14 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
           : roots
         : getMinimalCodeIntelligenceDirectories(roots, selected),
     [mode, roots, selected]
+  )
+  const customRoots = useMemo(
+    () => getCodeIntelligenceCustomPaths(roots, selected),
+    [roots, selected]
+  )
+  const selectedRoots = useMemo(
+    () => [...relativeSelectedRoots, ...customRoots],
+    [relativeSelectedRoots, customRoots]
   )
 
   const runSetup = async (): Promise<void> => {
@@ -160,6 +174,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
       }
       const setup = await setupCpp({
         repoId: repo.id,
+        // Dual-form members: workspace-relative and host-absolute selections alike.
         relativeRoots: selectedRoots,
         workspaceDirectories: roots,
         installMissingTools: true,
@@ -198,14 +213,14 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         })
       const saved = await window.api.codeIntelligence.upsertScope({
         ...base,
-        members: setup.relativeRoots.map((relativePath) => ({
-          relativePath,
+        members: setup.relativeRoots.map((path) => ({
+          path,
           visibleResults: true
         })),
         serverSource: {
           type: 'custom',
           executable: setup.clangdExecutable,
-          args: [`--compile-commands-dir=${setup.compileCommandsDir}`]
+          args: [clangdCompileCommandsDirArg(setup.compileCommandsDir)]
         },
         enabled: true,
         ...(setup.configurationMode && setup.healthState
@@ -243,6 +258,13 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     }
   }
 
+  const runningText =
+    stage === 'discovering'
+      ? translate('settings.codeIntelligence.scanningBuildFolders', 'Scanning CMake and GN build folders...')
+      : setupHost?.kind === 'ssh'
+        ? translate('settings.codeIntelligence.runningSetupOnHost', 'Installing tools and generating compile commands on {{host}}...', { host: setupHostLabel })
+        : translate('settings.codeIntelligence.runningSetup', 'Installing tools and generating compile commands...')
+
   if (!open || !repo) {
     return null
   }
@@ -258,7 +280,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
             {setupHost?.kind === 'ssh'
               ? translate(
                   'settings.codeIntelligence.sshSetupDescription',
-                  'Orca generates a BASIC compilation database on the connected SSH Host. clangd must already be installed there.'
+                  'Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.'
                 )
               : translate(
                   'settings.codeIntelligence.setupDescription',
@@ -320,15 +342,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
                 aria-live="polite"
               >
                 <Loader2 className="size-4 animate-spin" />
-                {stage === 'discovering'
-                  ? translate(
-                      'settings.codeIntelligence.scanningBuildFolders',
-                      'Scanning CMake and GN build folders...'
-                    )
-                  : translate(
-                      'settings.codeIntelligence.runningSetup',
-                      'Installing tools and generating compile commands...'
-                    )}
+                {runningText}
               </div>
             ) : null}
             {stage === 'success' ? (

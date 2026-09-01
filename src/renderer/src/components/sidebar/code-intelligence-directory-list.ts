@@ -1,3 +1,5 @@
+import { isRuntimePathAbsolute } from '../../../../shared/cross-platform-path'
+
 const directoryCollator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: 'base'
@@ -63,114 +65,6 @@ export function discoverCodeIntelligenceDirectories(relativeFiles: readonly stri
   return sortCodeIntelligenceDirectories([...directories])
 }
 
-export type CodeIntelligenceDirectoryTreeNode = {
-  name: string
-  path: string
-  selectable: boolean
-  children: CodeIntelligenceDirectoryTreeNode[]
-}
-
-export type CodeIntelligenceDirectoryTreeRow = CodeIntelligenceDirectoryTreeNode & {
-  depth: number
-}
-
-function sortDirectoryTreeNodes(nodes: CodeIntelligenceDirectoryTreeNode[]): void {
-  nodes.sort((left, right) => {
-    if (left.path === '.') {
-      return -1
-    }
-    if (right.path === '.') {
-      return 1
-    }
-    return directoryCollator.compare(left.name, right.name)
-  })
-  nodes.forEach((node) => sortDirectoryTreeNodes(node.children))
-}
-
-export function buildCodeIntelligenceDirectoryTree(args: {
-  directories: readonly string[]
-  query: string
-}): CodeIntelligenceDirectoryTreeNode[] {
-  const matches = filterCodeIntelligenceDirectories(
-    sortCodeIntelligenceDirectories(args.directories),
-    args.query
-  )
-  const matchedPaths = new Set(matches.map(normalizeDirectoryPath))
-  const roots: CodeIntelligenceDirectoryTreeNode[] = []
-  const nodes = new Map<string, CodeIntelligenceDirectoryTreeNode>()
-
-  for (const directory of matches) {
-    const normalized = normalizeDirectoryPath(directory)
-    if (normalized === '.') {
-      const node = { name: '.', path: '.', selectable: true, children: [] }
-      roots.push(node)
-      nodes.set('.', node)
-      continue
-    }
-    let parent: CodeIntelligenceDirectoryTreeNode | null = null
-    let currentPath = ''
-    for (const segment of normalized.split('/')) {
-      currentPath = currentPath ? `${currentPath}/${segment}` : segment
-      let node = nodes.get(currentPath)
-      if (!node) {
-        node = {
-          name: segment,
-          path: currentPath,
-          selectable: matchedPaths.has(currentPath),
-          children: []
-        }
-        nodes.set(currentPath, node)
-        if (parent) {
-          parent.children.push(node)
-        } else {
-          roots.push(node)
-        }
-      }
-      parent = node
-    }
-  }
-  sortDirectoryTreeNodes(roots)
-  return roots
-}
-
-export function getDefaultCollapsedCodeIntelligenceDirectories(
-  tree: readonly CodeIntelligenceDirectoryTreeNode[]
-): Set<string> {
-  const collapsed = new Set<string>()
-  const visit = (nodes: readonly CodeIntelligenceDirectoryTreeNode[], depth: number): void => {
-    for (const node of nodes) {
-      if (node.children.length > 0) {
-        collapsed.add(node.path)
-      }
-      visit(node.children, depth + 1)
-    }
-  }
-  visit(tree, 0)
-  return collapsed
-}
-
-export function flattenCodeIntelligenceDirectoryTree(args: {
-  tree: readonly CodeIntelligenceDirectoryTreeNode[]
-  collapsed: ReadonlySet<string>
-  expandAll: boolean
-}): CodeIntelligenceDirectoryTreeRow[] {
-  const rows: CodeIntelligenceDirectoryTreeRow[] = []
-  const visit = (nodes: readonly CodeIntelligenceDirectoryTreeNode[], depth: number): void => {
-    for (const node of nodes) {
-      rows.push({ ...node, depth })
-      if (args.expandAll || !args.collapsed.has(node.path)) {
-        visit(node.children, depth + 1)
-      }
-    }
-  }
-  visit(args.tree, 0)
-  return rows
-}
-
-function isDirectoryInside(path: string, parent: string): boolean {
-  return parent === '.' || path === parent || path.startsWith(`${parent}/`)
-}
-
 function directoryAncestors(path: string): string[] {
   if (path === '.') {
     return []
@@ -181,60 +75,6 @@ function directoryAncestors(path: string): string[] {
     ancestors.push(segments.slice(0, index).join('/'))
   }
   return ancestors
-}
-
-export type CodeIntelligenceDirectorySelectionState = boolean | 'indeterminate'
-
-export function getCodeIntelligenceDirectorySelectionState(args: {
-  directories: readonly string[]
-  selected: ReadonlySet<string>
-  path: string
-}): CodeIntelligenceDirectorySelectionState {
-  const subtree = args.directories.filter((directory) => isDirectoryInside(directory, args.path))
-  const selectedCount = subtree.filter((directory) => args.selected.has(directory)).length
-  if (selectedCount === 0) {
-    return false
-  }
-  return selectedCount === subtree.length ? true : 'indeterminate'
-}
-
-export function toggleCodeIntelligenceDirectorySelection(args: {
-  directories: readonly string[]
-  selected: ReadonlySet<string>
-  path: string
-  checked: boolean
-}): Set<string> {
-  const next = new Set(args.selected)
-  const subtree = args.directories.filter((directory) => isDirectoryInside(directory, args.path))
-  if (args.checked) {
-    subtree.forEach((directory) => next.add(directory))
-    const ancestors = directoryAncestors(args.path).toReversed()
-    for (const ancestor of ancestors) {
-      const ancestorSubtree = args.directories.filter(
-        (directory) => directory !== ancestor && isDirectoryInside(directory, ancestor)
-      )
-      if (ancestorSubtree.length > 0 && ancestorSubtree.every((directory) => next.has(directory))) {
-        next.add(ancestor)
-      }
-    }
-  } else {
-    subtree.forEach((directory) => next.delete(directory))
-    directoryAncestors(args.path).forEach((ancestor) => next.delete(ancestor))
-  }
-  return next
-}
-
-export function expandConfiguredCodeIntelligenceDirectories(
-  directories: readonly string[],
-  configured: readonly string[]
-): Set<string> {
-  const selected = new Set<string>()
-  for (const configuredPath of configured) {
-    directories
-      .filter((directory) => isDirectoryInside(directory, configuredPath))
-      .forEach((directory) => selected.add(directory))
-  }
-  return selected
 }
 
 export function getMinimalCodeIntelligenceDirectories(
@@ -248,4 +88,14 @@ export function getMinimalCodeIntelligenceDirectories(
         !directoryAncestors(directory).some((ancestor) => selected.has(ancestor))
     )
   )
+}
+
+/** Host-absolute selections the workspace scan cannot know about — typed in by hand. */
+export function getCodeIntelligenceCustomPaths(
+  directories: readonly string[],
+  selected: ReadonlySet<string>
+): string[] {
+  return [...selected]
+    .filter((path) => isRuntimePathAbsolute(path) && !directories.includes(path))
+    .sort((left, right) => directoryCollator.compare(left, right))
 }

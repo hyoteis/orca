@@ -11,8 +11,8 @@ const scope: CodeIntelligenceScope = {
   workspaceRoot: '/repo',
   language: 'python',
   members: [
-    { relativePath: 'src', visibleResults: true },
-    { relativePath: 'generated', visibleResults: false }
+    { path: 'src', visibleResults: true },
+    { path: 'generated', visibleResults: false }
   ],
   serverSource: { type: 'automatic' },
   enabled: true,
@@ -61,9 +61,10 @@ describe('collectEditorLanguageServerDocuments', () => {
     expect(
       isCodeIntelligenceResultVisible(
         {
+          workspaceRoot: '/repo',
           members: [
-            { relativePath: '.', visibleResults: true },
-            { relativePath: 'generated', visibleResults: false }
+            { path: '.', visibleResults: true },
+            { path: 'generated', visibleResults: false }
           ]
         },
         'generated/a.py'

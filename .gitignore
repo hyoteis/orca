@@ -96,6 +96,8 @@ docs/**
 !docs/STYLEGUIDE.md
 !docs/ai-vault-process-isolation-plan.md
 !docs/mobile-terminal-shortcut-bar.md
+!docs/spec/
+!docs/spec/**
 !docs/reference/
 !docs/reference/git-compatibility.md
 !docs/reference/headless-linux-server.md

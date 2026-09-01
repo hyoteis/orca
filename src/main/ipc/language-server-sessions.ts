@@ -14,6 +14,15 @@ import {
   SshLanguageServerSessionManager
 } from '../ssh/ssh-language-server-session-manager'
 import { getSshConnectionManager } from './ssh'
+import {
+  assertClangdCompileCommandsDirExists,
+  localDirectoryExists
+} from '../language-server/clangd-compile-commands-dir'
+import {
+  buildRemoteDirectoryExistsCommand,
+  SshSetupConnectionError,
+  SshSetupExecQueue
+} from '../language-server/code-intelligence-ssh-setup-exec'
 
 type SessionRoute = {
   send: (bytes: Uint8Array<ArrayBufferLike>) => boolean
@@ -68,12 +77,22 @@ export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceSc
             connectionManager?.getState(host.targetId)?.remotePlatform === 'win32'
               ? buildWindowsLanguageServerCommand
               : undefined
+          const queue = new SshSetupExecQueue(connection)
+          await assertClangdCompileCommandsDirExists(launch, async (directory) => {
+            const result = await queue.exec(buildRemoteDirectoryExistsCommand(directory))
+            // A close without an exit status is a dead transport, not a missing directory.
+            if (result.code === null) {
+              throw new SshSetupConnectionError('SSH connection was interrupted')
+            }
+            return result.code === 0
+          })
           await sshManager.open(connection, launch, buildCommand)
           routes.set(request.sessionId, {
             send: (bytes) => sshManager.send(request.sessionId, bytes),
             close: () => sshManager.close(request.sessionId)
           })
         } else {
+          await assertClangdCompileCommandsDirExists(launch, localDirectoryExists)
           localManager.open(launch)
           routes.set(request.sessionId, {
             send: (bytes) => localManager.send(request.sessionId, bytes),
