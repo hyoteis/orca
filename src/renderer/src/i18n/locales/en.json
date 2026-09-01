@@ -104,7 +104,8 @@
       "setupReady": "C++ code intelligence is ready",
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
       "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.",
-      "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}..."
+      "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}...",
+      "toggleFolderTree": "Expand folder"
     },
     "appearance": {
       "language": {

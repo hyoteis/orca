@@ -77,6 +77,28 @@ function directoryAncestors(path: string): string[] {
   return ancestors
 }
 
+export { directoryAncestors }
+
+/** Parent path ('.' for top level) → sorted direct child paths, for tree rendering. */
+export function buildCodeIntelligenceDirectoryTree(
+  directories: readonly string[]
+): Map<string, string[]> {
+  const tree = new Map<string, string[]>()
+  for (const directory of directories) {
+    const normalized = normalizeDirectoryPath(directory)
+    if (normalized === '.') {
+      continue
+    }
+    const lastSlash = normalized.lastIndexOf('/')
+    const parent = lastSlash === -1 ? '.' : normalized.slice(0, lastSlash)
+    tree.set(parent, [...(tree.get(parent) ?? []), normalized])
+  }
+  for (const children of tree.values()) {
+    children.sort(directoryCollator.compare)
+  }
+  return tree
+}
+
 export function getMinimalCodeIntelligenceDirectories(
   directories: readonly string[],
   selected: ReadonlySet<string>

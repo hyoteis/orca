@@ -78,7 +78,7 @@ test('keeps code intelligence out of settings and exposes one-click setup in pro
   const folderSearch = setupDialog.getByRole('textbox', { name: 'Search code folders' })
   await folderSearch.fill('alpha')
   const alphaCheckboxes = setupDialog.getByRole('checkbox')
-  await expect(setupDialog.getByRole('checkbox', { name: 'Alpha' })).toBeVisible()
+  await expect(setupDialog.getByRole('checkbox', { name: 'Alpha', exact: true })).toBeVisible()
   await expect(setupDialog.getByRole('checkbox', { name: 'Alpha/Nested' })).toBeVisible()
   expect(
     await alphaCheckboxes.evaluateAll((checkboxes) =>
@@ -89,12 +89,16 @@ test('keeps code intelligence out of settings and exposes one-click setup in pro
   ).toEqual(['Alpha', 'Alpha/Nested'])
 
   await folderSearch.fill('zeta')
-  const zetaCheckbox = setupDialog.getByRole('checkbox', { name: 'Zeta' })
+  // Scope to the Available section — checked folders also render in the pinned Selected section.
+  const availableSection = setupDialog.locator('section').filter({ hasText: 'Available folders' })
+  const zetaCheckbox = availableSection.getByRole('checkbox', { name: 'Zeta' })
   await expect(zetaCheckbox).toBeVisible()
   await zetaCheckbox.click()
-  await expect(setupDialog.getByText('Selected folders')).toBeVisible()
+  await expect(
+    setupDialog.locator('span').filter({ hasText: 'Selected folders' })
+  ).toBeVisible()
   await expect(zetaCheckbox).toBeChecked()
   await setupDialog.getByRole('button', { name: 'Clear folder search' }).click()
-  await expect(setupDialog.getByRole('checkbox', { name: 'Zeta' })).toBeChecked()
+  await expect(availableSection.getByRole('checkbox', { name: 'Zeta' })).toBeChecked()
   await captureSettings(cdp, testInfo, 'code-intelligence-setup-en')
 })

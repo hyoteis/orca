@@ -107,7 +107,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
             )
             ?.members.map((member) => member.path) ?? []
         setRoots(detected)
-        // Why: flat rows are literal members — pre-check exactly what the scope holds.
+        // Why: tree rows map 1:1 to members — pre-check exactly what the scope holds.
         setSelected(new Set(existingMembers))
         setStage('idle')
       })

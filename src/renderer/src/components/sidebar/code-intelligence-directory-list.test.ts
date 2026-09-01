@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildCodeIntelligenceDirectoryTree,
+  directoryAncestors,
   discoverCodeIntelligenceDirectories,
   filterCodeIntelligenceDirectories,
   getCodeIntelligenceCustomPaths,
@@ -67,5 +69,21 @@ describe('code intelligence directory list', () => {
       'D:\\other\\project'
     ])
     expect(getMinimalCodeIntelligenceDirectories(directories, selected)).toEqual(['lume'])
+  })
+
+  it('maps each directory under its parent with sorted siblings', () => {
+    expect(
+      buildCodeIntelligenceDirectoryTree(['.', 'lume', 'lume/LumeBase', 'kits', 'kits/ets'])
+    ).toEqual(
+      new Map([
+        ['.', ['kits', 'lume']],
+        ['kits', ['kits/ets']],
+        ['lume', ['lume/LumeBase']]
+      ])
+    )
+  })
+
+  it('lists ancestors root-first for default tree expansion', () => {
+    expect(directoryAncestors('lume/LumeBase/api')).toEqual(['.', 'lume', 'lume/LumeBase'])
   })
 })

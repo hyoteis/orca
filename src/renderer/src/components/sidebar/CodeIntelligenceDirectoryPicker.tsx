@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react'
-import { Folder, Plus, RefreshCw, Search, X } from 'lucide-react'
+import React, { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Folder, Plus, RefreshCw, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,8 @@ import { translate } from '@/i18n/i18n'
 import { normalizeScopeMemberPath } from '../../../../shared/code-intelligence-scope'
 import { isRuntimePathAbsolute } from '../../../../shared/cross-platform-path'
 import {
+  buildCodeIntelligenceDirectoryTree,
+  directoryAncestors,
   filterCodeIntelligenceDirectories,
   getCodeIntelligenceCustomPaths,
   getMinimalCodeIntelligenceDirectories
@@ -34,6 +36,7 @@ export function CodeIntelligenceDirectoryPicker({
   onRescan
 }: Props): React.JSX.Element {
   const [customPath, setCustomPath] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['.']))
   const selectedDirectories = useMemo(
     () => getMinimalCodeIntelligenceDirectories(directories, selected),
     [directories, selected]
@@ -50,8 +53,27 @@ export function CodeIntelligenceDirectoryPicker({
     () => filterCodeIntelligenceDirectories(customPaths, query),
     [customPaths, query]
   )
-  const rows = [...matchedDirectories, ...matchedCustomPaths]
+  const tree = useMemo(() => buildCodeIntelligenceDirectoryTree(directories), [directories])
+  const searching = query.trim().length > 0
   const availableCount = directories.length + customPaths.length
+
+  // Keep selected folders visible: expand ancestors once they gain a selected descendant.
+  useEffect(() => {
+    setExpanded((current) => {
+      const missing = new Set<string>()
+      for (const path of selected) {
+        if (isRuntimePathAbsolute(path)) {
+          continue
+        }
+        for (const ancestor of directoryAncestors(path)) {
+          if (!current.has(ancestor)) {
+            missing.add(ancestor)
+          }
+        }
+      }
+      return missing.size === 0 ? current : new Set([...current, ...missing])
+    })
+  }, [selected])
 
   const togglePath = (path: string, checked: boolean): void => {
     const next = new Set(selected)
@@ -104,6 +126,75 @@ export function CodeIntelligenceDirectoryPicker({
       ) : null}
     </label>
   )
+
+  const toggleExpanded = (path: string): void => {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (current.has(path)) {
+        next.delete(path)
+      } else {
+        next.add(path)
+      }
+      return next
+    })
+  }
+
+  const renderTreeRow = (
+    path: string,
+    depth: number,
+    hasChildren: boolean,
+    isExpanded: boolean
+  ): React.JSX.Element => (
+    <label
+      key={path}
+      className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-xs text-foreground hover:bg-accent/50"
+      style={{ paddingLeft: `${depth * 14}px` }}
+      title={path}
+    >
+      {hasChildren ? (
+        <button
+          type="button"
+          className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+          aria-expanded={isExpanded}
+          aria-label={translate('settings.codeIntelligence.toggleFolderTree', 'Expand folder')}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            toggleExpanded(path)
+          }}
+        >
+          {isExpanded ? (
+            <ChevronDown className="size-3.5" />
+          ) : (
+            <ChevronRight className="size-3.5" />
+          )}
+        </button>
+      ) : (
+        <span className="size-4 shrink-0" />
+      )}
+      <Checkbox
+        checked={selected.has(path)}
+        aria-label={path}
+        onCheckedChange={(checked) => togglePath(path, checked === true)}
+      />
+      <Folder className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+        {path.split('/').pop() ?? path}
+      </span>
+    </label>
+  )
+
+  const renderTreeNodes = (parent: string, depth: number): React.JSX.Element[] =>
+    (tree.get(parent) ?? []).map((path) => {
+      const hasChildren = tree.has(path)
+      const isExpanded = expanded.has(path)
+      return (
+        <div key={path}>
+          {renderTreeRow(path, depth, hasChildren, isExpanded)}
+          {hasChildren && isExpanded ? renderTreeNodes(path, depth + 1) : null}
+        </div>
+      )
+    })
 
   return (
     <div className="space-y-2">
@@ -190,8 +281,9 @@ export function CodeIntelligenceDirectoryPicker({
               )}
             </p>
           ) : null}
-          {rows.length === 0 &&
-          (directories.length > 0 || customPaths.length > 0) &&
+          {searching &&
+          matchedDirectories.length === 0 &&
+          matchedCustomPaths.length === 0 &&
           !discovering ? (
             <p className="px-1.5 py-2 text-xs text-muted-foreground">
               {translate(
@@ -200,7 +292,16 @@ export function CodeIntelligenceDirectoryPicker({
               )}
             </p>
           ) : null}
-          {rows.map((path) => renderRow(path, customPaths.includes(path)))}
+          {searching
+            ? [
+                ...matchedDirectories.map((path) => renderRow(path, false)),
+                ...matchedCustomPaths.map((path) => renderRow(path, true))
+              ]
+            : [
+                renderTreeRow('.', 0, tree.has('.'), expanded.has('.')),
+                ...(expanded.has('.') ? renderTreeNodes('.', 1) : []),
+                ...customPaths.map((path) => renderRow(path, true))
+              ]}
         </div>
       </section>
 
