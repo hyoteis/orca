@@ -9,6 +9,7 @@ import {
 } from '../ssh/ssh-config-host-picker'
 import type { SshConnection, SshConnectionCallbacks } from '../ssh/ssh-connection'
 import { SshConnectionManager } from '../ssh/ssh-connection-manager'
+import { notifySshTransportConnected } from './ssh-transport-connected'
 import type { SshChannelMultiplexer } from '../ssh/ssh-channel-multiplexer'
 import { SshRelaySession, type SshRelayAiVaultHostInfo } from '../ssh/ssh-relay-session'
 import type {
@@ -683,6 +684,11 @@ function createSshConnectionCallbacks(): SshConnectionCallbacks {
       return requestCredential(getCurrentMainWindow, targetId, kind, detail)
     },
     onStateChange: (targetId: string, state: SshConnectionState) => {
+      if (state.status === 'connected') {
+        // Why: transport-level fan-out for per-host lazy work (e.g. remote
+        // code-intelligence orphan sweep) without coupling this state machine.
+        notifySshTransportConnected(targetId)
+      }
       if (testingTargets.has(targetId)) {
         return
       }

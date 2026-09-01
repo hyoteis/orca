@@ -27,7 +27,7 @@ import {
 import { type CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
 import { classifyCppBuildRoots } from './code-intelligence-build-root-classification'
 import { findGnOutputFile } from './code-intelligence-gn-output'
-import { cppScopeDirectoryName } from './code-intelligence-setup-cache'
+import { remoteCppScopeDirectoryPath } from './code-intelligence-setup-cache'
 import {
   buildRemoteClangdDiscoveryCommand,
   buildRemoteFindIncludeDirectoriesCommand,
@@ -221,14 +221,7 @@ export class CodeIntelligenceSshCppSetup {
         }
       }
 
-      const scopeDirectory = posix.join(
-        home,
-        '.orca',
-        'code-intelligence',
-        'cpp',
-        'scopes',
-        cppScopeDirectoryName(getCppScopeIdForRepo(repo))
-      )
+      const scopeDirectory = remoteCppScopeDirectoryPath(home, getCppScopeIdForRepo(repo))
       const shards: unknown[][] = []
       const generationModes = new Set<string>()
 

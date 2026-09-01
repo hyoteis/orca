@@ -54,7 +54,10 @@ describe('CodeIntelligenceScopeStore', () => {
       ...granted,
       members: [{ path: 'src', visibleResults: true }]
     })
-    expect(result.restartRequired).toBe(true)
+    // Member-only change (spec §5): the clangd session must NOT restart — the
+    // atomic CDB rewrite is picked up lazily — but revision and consent still
+    // move so the trust chain has no member-change bypass.
+    expect(result.restartRequired).toBe(false)
     expect(result.scope.revision).toBe(2)
     // The stale consent survives so surfaces can diff against its member snapshot;
     // its fingerprint no longer matches, so authorizeSession still refuses it.
@@ -64,6 +67,22 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(() =>
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
     ).toThrow('consent')
+  })
+
+  it('requires a session restart only for changes beyond members', () => {
+    const upsert = (next: CodeIntelligenceScope): boolean =>
+      new CodeIntelligenceScopeStore(createStore([scope()])).upsert(next).restartRequired
+    expect(upsert({ ...scope(), enabled: false })).toBe(true)
+    expect(
+      upsert({
+        ...scope(),
+        serverSource: { type: 'custom', executable: '/opt/clangd', args: [] }
+      })
+    ).toBe(true)
+    // Visibility-only member edits are still member-only: no restart.
+    expect(
+      upsert({ ...scope(), members: [{ path: 'engine', visibleResults: false }] })
+    ).toBe(false)
   })
 
   it('authorizes only the persisted enabled scope with current consent and revision', () => {

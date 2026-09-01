@@ -14,8 +14,6 @@ import {
 } from 'vscode-languageserver-protocol'
 import { LanguageServerDocumentRegistry } from './language-server-document-registry'
 import { LanguageServerDocumentSyncController } from './language-server-document-sync-controller'
-import { isCodeIntelligenceResultVisible } from './code-intelligence-scope-membership'
-import type { CodeIntelligenceScopeMember } from '../../../../shared/code-intelligence-scope'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   LanguageServerSessionLifecycle,
@@ -114,8 +112,6 @@ export class LanguageServerClientRegistry {
       connection: MessageConnection
       handle: LanguageServerSessionHandle
       sync: LanguageServerDocumentSyncController
-      members: readonly CodeIntelligenceScopeMember[]
-      workspaceRoot: string
     }
   >()
   private readonly unsubscribeScopeChanges: () => void
@@ -154,7 +150,9 @@ export class LanguageServerClientRegistry {
     this.close(key)
     const reader = new ByteReader()
     let handle: LanguageServerSessionHandle | null = null
-    const launch = await this.scopeAuthority.authorizeSession(request)
+    // authorizeSession validates revision + consent; the resolved launch feeds
+    // the main-process spawn, not this client.
+    await this.scopeAuthority.authorizeSession(request)
     handle = await this.api.open(request, {
       onEvent: (event: LanguageServerSessionEvent) => {
         if (event.type === 'stdout') {
@@ -177,9 +175,7 @@ export class LanguageServerClientRegistry {
       requestGeneration: 0,
       connection,
       handle,
-      sync,
-      members: launch.members,
-      workspaceRoot: launch.workspaceRoot
+      sync
     })
     return {
       generation,
@@ -187,15 +183,6 @@ export class LanguageServerClientRegistry {
       sync,
       initialize: (params) => connection.sendRequest(InitializeRequest.type, params)
     }
-  }
-  isResultVisible(key: LanguageServerClientKey, relativePath: string): boolean {
-    const current = this.clients.get(JSON.stringify(key))
-    return current
-      ? isCodeIntelligenceResultVisible(
-          { workspaceRoot: current.workspaceRoot, members: current.members },
-          relativePath
-        )
-      : false
   }
   restartScope(scopeId: string, revision: number): void {
     for (const [id, current] of this.clients) {

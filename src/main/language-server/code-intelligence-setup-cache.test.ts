@@ -104,7 +104,7 @@ describe('sweepOrphanCppScopeDirectories', () => {
       await mkdir(join(cacheRoot, '.gn-install-orphan'), { recursive: true })
       await writeFile(join(cacheRoot, 'loose-file.txt'), 'keep me')
 
-      await sweepOrphanCppScopeDirectories(cacheRoot)
+      await sweepOrphanCppScopeDirectories(cacheRoot, ['scope-1'])
 
       expect(await readdir(cacheRoot)).toEqual(['loose-file.txt', 'scopes', 'tools'])
       expect(await readdir(join(cacheRoot, 'tools'))).toContain('gn')
@@ -113,9 +113,24 @@ describe('sweepOrphanCppScopeDirectories', () => {
     }
   })
 
+  it('deletes scope directories no live scope owns (spec §6)', async () => {
+    const cacheRoot = await mkdtemp(join(tmpdir(), 'orca-sweep-'))
+    try {
+      await mkdir(join(cacheRoot, 'scopes', cppScopeDirectoryName('live')), { recursive: true })
+      const orphan = join(cacheRoot, 'scopes', cppScopeDirectoryName('deleted-scope'))
+      await mkdir(join(orphan, '.cache', 'clangd', 'index'), { recursive: true })
+
+      await sweepOrphanCppScopeDirectories(cacheRoot, ['live'])
+
+      expect(await readdir(join(cacheRoot, 'scopes'))).toEqual([cppScopeDirectoryName('live')])
+    } finally {
+      await rm(cacheRoot, { recursive: true, force: true })
+    }
+  })
+
   it('stays silent when the cache root does not exist yet', async () => {
     await expect(
-      sweepOrphanCppScopeDirectories(join(tmpdir(), 'orca-sweep-missing'))
+      sweepOrphanCppScopeDirectories(join(tmpdir(), 'orca-sweep-missing'), [])
     ).resolves.toBeUndefined()
   })
 })

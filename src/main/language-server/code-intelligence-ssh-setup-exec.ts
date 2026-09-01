@@ -50,6 +50,11 @@ export function buildRemoteListSubdirectoriesCommand(directory: string): string 
   return `find ${shellEscape(directory)} -mindepth 1 -maxdepth 1 -type d -print`
 }
 
+/** Best-effort scope-directory teardown (spec §5). */
+export function buildRemoteScopeDirectoryDeleteCommand(directory: string): string {
+  return `rm -rf -- ${shellEscape(directory)}`
+}
+
 const prunedNames = () =>
   [...IGNORED_DIRECTORIES].map((name) => `-name ${shellEscape(name)}`).join(' -o ')
 

@@ -33,6 +33,8 @@ type ScopeSettingsStore = {
 export type CodeIntelligenceScopeMutation = {
   scope: CodeIntelligenceScope
   scopes: readonly CodeIntelligenceScope[]
+  /** Launch changed → running sessions must restart. Member-only edits keep
+   * sessions alive (spec §5); revision/consent still move via `scope`. */
   restartRequired: boolean
 }
 
@@ -41,6 +43,22 @@ function sameConfiguration(left: CodeIntelligenceScope, right: CodeIntelligenceS
     JSON.stringify(scopeConfigurationPayload(left)) ===
     JSON.stringify(scopeConfigurationPayload(right))
   )
+}
+
+/** Config payload without members — member-only edits keep the clangd session
+ * alive (spec §5: the atomic CDB rewrite is picked up lazily), while any other
+ * change alters the launch and must restart it. */
+function sameLaunchConfiguration(
+  left: CodeIntelligenceScope,
+  right: CodeIntelligenceScope
+): boolean {
+  const { members: _leftMembers, ...leftPayload } = scopeConfigurationPayload(
+    left
+  ) as Record<string, unknown>
+  const { members: _rightMembers, ...rightPayload } = scopeConfigurationPayload(
+    right
+  ) as Record<string, unknown>
+  return JSON.stringify(leftPayload) === JSON.stringify(rightPayload)
 }
 
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {
@@ -82,11 +100,16 @@ export class CodeIntelligenceScopeStore {
     const scopes = [...this.list()]
     const index = scopes.findIndex((scope) => scope.id === next.id)
     const prior = index !== -1 ? scopes[index] : null
-    const restartRequired = prior ? !sameConfiguration(prior, next) : false
+    const configurationChanged = prior ? !sameConfiguration(prior, next) : false
+    // Restart only when the launch itself changed; member-only changes bump the
+    // revision (consent chain) while the running clangd session stays up.
+    const restartRequired = prior
+      ? configurationChanged && !sameLaunchConfiguration(prior, next)
+      : false
     next = prior
       ? {
           ...next,
-          revision: restartRequired ? prior.revision + 1 : prior.revision,
+          revision: configurationChanged ? prior.revision + 1 : prior.revision,
           // Keep the prior consent through changes: its fingerprint no longer
           // matches (authorizeSession refuses it), while its member snapshot
           // lets surfaces show what moved since authorization.
