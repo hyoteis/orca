@@ -18,11 +18,11 @@ export type CppSetupCommandRunner = (
   env?: NodeJS.ProcessEnv
 ) => Promise<CppSetupCommandResult>
 
-function executableName(tool: CppSetupToolName, platform: NodeJS.Platform): string {
+export function executableName(tool: CppSetupToolName, platform: NodeJS.Platform): string {
   return platform === 'win32' ? `${tool}.exe` : tool
 }
 
-async function isExecutable(path: string): Promise<boolean> {
+export async function isExecutable(path: string): Promise<boolean> {
   try {
     await access(path, constants.X_OK)
     return true
@@ -102,32 +102,6 @@ export async function discoverCppSetupTools(
     }
   }
   return result
-}
-
-export async function discoverBundledGn(
-  workspaceRoot: string,
-  platform: NodeJS.Platform
-): Promise<string | null> {
-  const executable = executableName('gn', platform)
-  const platformDirectories =
-    platform === 'win32'
-      ? ['win', 'win64']
-      : platform === 'darwin'
-        ? ['mac', 'mac_arm64']
-        : ['linux64', 'linux']
-  const candidates = [
-    ...platformDirectories.map((directory) =>
-      join(workspaceRoot, 'buildtools', directory, executable)
-    ),
-    join(workspaceRoot, 'buildtools', executable),
-    join(workspaceRoot, 'tools', executable)
-  ]
-  for (const candidate of candidates) {
-    if (await isExecutable(candidate)) {
-      return candidate
-    }
-  }
-  return null
 }
 
 export function packageInstallCommands(

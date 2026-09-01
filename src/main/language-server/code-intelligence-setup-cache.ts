@@ -8,7 +8,7 @@ import type {
 } from '../../shared/code-intelligence-cpp-setup'
 import type { CppBuildRoot } from './code-intelligence-cmake-root-selection'
 
-const SETUP_MANIFEST_FILE = 'setup-manifest.json'
+export const SETUP_MANIFEST_FILE = 'setup-manifest.json'
 // Structural cache-root children; everything else is a legacy hash directory.
 const RETAINED_CPP_CACHE_DIRECTORIES = new Set(['tools', 'scopes'])
 
@@ -54,6 +54,25 @@ export async function createCodeIntelligenceSetupFingerprint(args: {
       dotGnModifiedAt: await modifiedAt(join(root.sourceDir, '.gn'))
     }))
   )
+  return codeIntelligenceSetupFingerprintDigest({ ...args, buildInputs })
+}
+
+export type CppSetupFingerprintBuildInput = {
+  path: string
+  system: CppBuildRoot['system']
+  directoryModifiedAt: number
+  cmakeModifiedAt: number
+  gnModifiedAt: number
+  dotGnModifiedAt: number
+}
+
+/** Pure fingerprint core shared by the local (fs stat) and SSH (remote stat) flows. */
+export function codeIntelligenceSetupFingerprintDigest(args: {
+  repoId: string
+  roots: readonly string[]
+  request: CodeIntelligenceCppSetupRequest
+  buildInputs: readonly CppSetupFingerprintBuildInput[]
+}): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -62,20 +81,21 @@ export async function createCodeIntelligenceSetupFingerprint(args: {
         additionalIncludeDirectories: args.request.additionalIncludeDirectories ?? [],
         defines: args.request.defines ?? [],
         cppStandard: args.request.cppStandard ?? 'c++17',
-        buildInputs
+        buildInputs: args.buildInputs
       })
     )
     .digest('hex')
 }
 
-export async function readCachedCodeIntelligenceSetupResult(
-  scopeDirectory: string,
+export function parseCachedCodeIntelligenceSetupResult(
+  manifestText: string,
   fingerprint: string
-): Promise<CodeIntelligenceCppSetupResult | null> {
+): CodeIntelligenceCppSetupResult | null {
   try {
-    const manifest = JSON.parse(
-      await readFile(join(scopeDirectory, SETUP_MANIFEST_FILE), 'utf8')
-    ) as { fingerprint?: unknown; result?: CodeIntelligenceCppSetupResult }
+    const manifest = JSON.parse(manifestText) as {
+      fingerprint?: unknown
+      result?: CodeIntelligenceCppSetupResult
+    }
     if (manifest.fingerprint !== fingerprint || !manifest.result?.ok) {
       return null
     }
@@ -83,12 +103,31 @@ export async function readCachedCodeIntelligenceSetupResult(
     if (!cached.clangdExecutable || !cached.compileCommandsDir) {
       return null
     }
-    await access(join(scopeDirectory, 'compile_commands.json'), constants.R_OK)
-    await access(cached.clangdExecutable, constants.X_OK)
     return {
       ...cached,
       message: `Reused cached ${cached.configurationMode?.toUpperCase() ?? 'C++'} compile commands`
     }
+  } catch {
+    return null
+  }
+}
+
+export async function readCachedCodeIntelligenceSetupResult(
+  scopeDirectory: string,
+  fingerprint: string
+): Promise<CodeIntelligenceCppSetupResult | null> {
+  try {
+    const cached = parseCachedCodeIntelligenceSetupResult(
+      await readFile(join(scopeDirectory, SETUP_MANIFEST_FILE), 'utf8'),
+      fingerprint
+    )
+    if (!cached) {
+      return null
+    }
+    await access(join(scopeDirectory, 'compile_commands.json'), constants.R_OK)
+    // parseCached guarantees this is set.
+    await access(cached.clangdExecutable!, constants.X_OK)
+    return cached
   } catch {
     return null
   }

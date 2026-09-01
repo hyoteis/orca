@@ -20,7 +20,7 @@ import {
   createBasicCompilationDatabase,
   mergeCompilationDatabases
 } from './code-intelligence-compilation-database'
-import { type CppBuildRoot } from './code-intelligence-cmake-root-selection'
+import type { CppBuildRoot } from './code-intelligence-cmake-root-selection'
 import { findGnOutputFile } from './code-intelligence-gn-output'
 import { classifyCppBuildRoots } from './code-intelligence-build-root-classification'
 import { provisionCppSetupTools } from './code-intelligence-cpp-tool-provisioning'

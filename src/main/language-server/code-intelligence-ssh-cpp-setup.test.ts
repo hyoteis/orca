@@ -23,7 +23,9 @@ function scriptedConnection(respond: (command: string) => RemoteResponse) {
       commands.push(command)
       // Shell-scripted commands resolve eagerly so a throwing script rejects exec
       // like a dropped connection; stdin-driven writes resolve on the timer.
-      const directory = command.match(/^cd '(.*)' && cat >/)?.[1]
+      const atomicWrite = command.match(/^cd '(.*)' && cat > '.*' && mv '.*' '([^']+)'$/)
+      const directory = atomicWrite?.[1]
+      const fileName = atomicWrite?.[2]
       const readPath = command.match(/^cat '(.*)'$/)?.[1]
       const response = directory || readPath ? undefined : respond(command)
       const channel = Object.assign(new EventEmitter(), {
@@ -38,7 +40,7 @@ function scriptedConnection(respond: (command: string) => RemoteResponse) {
       })
       setTimeout(() => {
         if (directory) {
-          files.set(`${directory}/compile_commands.json`, stdin[index] ?? '')
+          files.set(`${directory}/${fileName}`, stdin[index] ?? '')
           channel.emit('close', 0)
           return
         }
@@ -77,10 +79,14 @@ type HostScriptOptions = {
   sourcesByRoot?: Record<string, string>
   /** `command -v <tool>` answers for cmake/ninja/gn (clangd is built-in). */
   toolPaths?: Record<string, string>
+  /** Executable buildtools gn path reported by the bundled-gn probe. */
+  bundledGn?: string
   /** Answers for `find <root> -mindepth 1` subdirectory listings. */
   subdirectoriesByRoot?: Record<string, string>
   /** Exit answers for `exec cmake` / `exec gn` configure commands. */
   configureResults?: Record<string, RemoteResponse>
+  /** Seconds-precision mtimes for the fingerprint stat batch; default 1000. */
+  mtimesByPath?: Record<string, number>
 }
 
 function linuxHostScript(options: HostScriptOptions = {}) {
@@ -95,9 +101,22 @@ function linuxHostScript(options: HostScriptOptions = {}) {
     if (command.startsWith('command -v clangd')) {
       return { stdout: '/usr/bin/clangd' }
     }
+    if (command.startsWith('command -v gn ')) {
+      if (options.toolPaths?.gn) {
+        return { stdout: options.toolPaths.gn }
+      }
+      return options.bundledGn && command.includes(`'${options.bundledGn}'`)
+        ? { stdout: options.bundledGn }
+        : { code: 1 }
+    }
     if (/^command -v '\w+'$/.test(command)) {
       const path = options.toolPaths?.[command.match(/^command -v '(\w+)'$/)?.[1] ?? '']
       return path ? { stdout: path } : { code: 1 }
+    }
+    if (command.startsWith('for p in ') && command.includes('stat ')) {
+      const listPart = command.slice(command.indexOf('in ') + 3, command.indexOf('; do'))
+      const paths = [...listPart.matchAll(/'([^']+)'/g)].map((match) => match[1]!)
+      return { stdout: `${paths.map((path) => String(options.mtimesByPath?.[path] ?? 1000)).join('\n')}\n` }
     }
     if (command.startsWith('rm -rf ')) {
       return { code: 0 }
@@ -495,5 +514,150 @@ describe('CodeIntelligenceSshCppSetup', () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain('No compile commands were generated')
     expect(commands.some((command) => command.includes('cat >'))).toBe(false)
+  })
+
+  it('reuses the cached setup result when a second reconfigure matches the fingerprint', async () => {
+    const cmakeShard = [
+      {
+        directory: '/srv/project/module',
+        file: '/srv/project/module/src/main.cpp',
+        arguments: ['clang++', '-c', '/srv/project/module/src/main.cpp']
+      }
+    ]
+    const { setup, commands, files } = setupWith(
+      linuxHostScript({
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/CMakeLists.txt',
+          `${scopeDirectory}/compile_commands.json`
+        ]),
+        toolPaths: { cmake: '/usr/bin/cmake', ninja: '/usr/bin/ninja' }
+      })
+    )
+    files.set(`${scopeDirectory}/build-1/compile_commands.json`, JSON.stringify(cmakeShard))
+    const request = { repoId: 'repo-1', relativeRoots: ['module'], installMissingTools: true }
+
+    const first = await setup.run(request)
+    expect(first.ok).toBe(true)
+    const manifest = JSON.parse(files.get(`${scopeDirectory}/setup-manifest.json`) ?? 'null')
+    expect(manifest?.result).toMatchObject({ ok: true, compileCommandsDir: scopeDirectory })
+    expect(manifest.fingerprint).toEqual(expect.any(String))
+
+    const firstCommandCount = commands.length
+    const second = await setup.run(request)
+    expect(second).toMatchObject({
+      ok: true,
+      configurationMode: 'cmake',
+      compileCommandCount: 1,
+      compileCommandsDir: scopeDirectory
+    })
+    expect(second.message).toContain('Reused cached')
+    const secondCommands = commands.slice(firstCommandCount)
+    expect(secondCommands.some((command) => command.includes("&& exec '"))).toBe(false)
+    expect(secondCommands.some((command) => command.startsWith('command -v'))).toBe(false)
+    expect(secondCommands.length).toBeLessThan(firstCommandCount)
+  })
+
+  it('regenerates when a remote build root mtime changes and rewrites the manifest', async () => {
+    const cmakeShard = [
+      {
+        directory: '/srv/project/module',
+        file: '/srv/project/module/src/main.cpp',
+        arguments: ['clang++', '-c', '/srv/project/module/src/main.cpp']
+      }
+    ]
+    const mtimesByPath = { '/srv/project/module/CMakeLists.txt': 1000 }
+    const { setup, commands, files } = setupWith(
+      linuxHostScript({
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/CMakeLists.txt',
+          `${scopeDirectory}/compile_commands.json`
+        ]),
+        toolPaths: { cmake: '/usr/bin/cmake', ninja: '/usr/bin/ninja' },
+        mtimesByPath
+      })
+    )
+    files.set(`${scopeDirectory}/build-1/compile_commands.json`, JSON.stringify(cmakeShard))
+    const request = { repoId: 'repo-1', relativeRoots: ['module'], installMissingTools: true }
+
+    expect((await setup.run(request)).ok).toBe(true)
+    const staleFingerprint = JSON.parse(files.get(`${scopeDirectory}/setup-manifest.json`)!)
+      .fingerprint
+
+    mtimesByPath['/srv/project/module/CMakeLists.txt'] = 2000
+    const firstCommandCount = commands.length
+    const result = await setup.run(request)
+
+    expect(result.ok).toBe(true)
+    expect(commands.slice(firstCommandCount).some((command) => command.includes("exec '/usr/bin/cmake'"))).toBe(
+      true
+    )
+    const refreshedFingerprint = JSON.parse(files.get(`${scopeDirectory}/setup-manifest.json`)!)
+      .fingerprint
+    expect(refreshedFingerprint).not.toBe(staleFingerprint)
+  })
+
+  it('uses a bundled buildtools gn without installing a package', async () => {
+    const outputDirectory = posix.join(
+      '/srv/project/out',
+      `.orca-code-intelligence-${posix.basename(scopeDirectory)}-build-1`
+    )
+    const bundledGn = '/srv/project/buildtools/linux64/gn'
+    const gnShard = [
+      {
+        directory: outputDirectory,
+        file: '/srv/project/module/main.cc',
+        arguments: ['clang++', '-c', '/srv/project/module/main.cc']
+      }
+    ]
+    const { setup, commands, files } = setupWith(
+      linuxHostScript({
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/BUILD.gn',
+          '/srv/project/.gn'
+        ]),
+        bundledGn
+      })
+    )
+    files.set(`${outputDirectory}/compile_commands.json`, JSON.stringify(gnShard))
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result).toMatchObject({ ok: true, configurationMode: 'gn', compileCommandCount: 1 })
+    expect(commands.some((command) => command.includes("exec '/srv/project/buildtools/linux64/gn'"))).toBe(
+      true
+    )
+    expect(commands.some((command) => command.includes('apt-get'))).toBe(false)
+  })
+
+  it('still fails with a manual install hint when no gn exists anywhere', async () => {
+    const { setup } = setupWith((command) => {
+      if (command.includes("'apt-get'")) {
+        return { code: 1, stderr: 'sudo: a password is required' }
+      }
+      return linuxHostScript({
+        readable: new Set([
+          ...DEFAULT_READABLE_PATHS,
+          '/srv/project/module/BUILD.gn',
+          '/srv/project/.gn'
+        ])
+      })(command)
+    })
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['module'],
+      installMissingTools: true
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('sudo apt-get update && sudo apt-get install -y generate-ninja')
+    expect(result.message).not.toContain('sudo -n')
   })
 })

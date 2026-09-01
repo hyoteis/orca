@@ -1,7 +1,14 @@
+import { posix } from 'node:path'
 import type { ClientChannel } from 'ssh2'
 import { shellEscape } from '../ssh/ssh-connection-utils'
 import type { SshConnection } from '../ssh/ssh-connection'
-import { COMMAND_TIMEOUT_MS } from './code-intelligence-cpp-setup-tools'
+import { buildPosixLanguageServerCommand } from '../ssh/ssh-language-server-session-manager'
+import {
+  COMMAND_TIMEOUT_MS,
+  MAX_LOG_BYTES,
+  type CppSetupCommandRunner
+} from './code-intelligence-cpp-setup-tools'
+import type { CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
 import {
   IGNORED_DIRECTORIES,
   SOURCE_EXTENSIONS
@@ -80,12 +87,65 @@ export function buildRemoteReadableDirectoriesCommand(paths: readonly string[]):
   return `for d in ${paths.map(shellEscape).join(' ')}; do if [ -r "$d" ]; then printf '%s\\n' "$d"; fi; done`
 }
 
+/** First executable candidate in a remote `[ -x ]` probe loop. */
+function buildRemoteExecutableCandidatesLoop(candidates: readonly string[]): string {
+  const list = candidates.map(shellEscape).join(' ')
+  return `{ for c in ${list}; do [ -x "$c" ] && printf '%s\\n' "$c" && exit 0; done; exit 1; }`
+}
+
 /** clangd lookup: PATH first, then the same darwin candidates the local flow probes. */
 export function buildRemoteClangdDiscoveryCommand(
   darwinCandidates: readonly string[]
 ): string {
-  const candidates = darwinCandidates.map(shellEscape).join(' ')
-  return `command -v clangd || { for c in ${candidates}; do [ -x "$c" ] && printf '%s\\n' "$c" && exit 0; done; exit 1; }`
+  return `command -v clangd || ${buildRemoteExecutableCandidatesLoop(darwinCandidates)}`
+}
+
+/** gn lookup: PATH first, then the workspace's bundled buildtools candidates. */
+export function buildRemoteGnDiscoveryCommand(bundledCandidates: readonly string[]): string {
+  return `command -v gn || ${buildRemoteExecutableCandidatesLoop(bundledCandidates)}`
+}
+
+/** One round trip for all fingerprint mtimes; missing paths print 0 (local parity). */
+export function buildRemoteMtimesCommand(paths: readonly string[], uname: string): string {
+  const flag = uname === 'Darwin' ? '-f %m' : '-c %Y'
+  const list = paths.map(shellEscape).join(' ')
+  return `for p in ${list}; do stat ${flag} "$p" 2>/dev/null || printf '0\\n'; done`
+}
+
+/** Remote filesystem surface for build-root classification and GN output scans. */
+export function sshBuildRootDetection(queue: SshSetupExecQueue): CppBuildRootDetection {
+  return {
+    join: posix.join,
+    resolve: posix.resolve,
+    relative: posix.relative,
+    dirname: posix.dirname,
+    isReadablePath: async (path) =>
+      (await queue.exec(buildRemoteReadablePathCommand(path))).code === 0,
+    listSubdirectories: async (directory) => {
+      const result = await queue.exec(buildRemoteListSubdirectoriesCommand(directory))
+      return result.code === 0 ? parseRemoteListing(result.stdout) : []
+    }
+  }
+}
+
+/** CppSetupCommandRunner over SSH; `env` is ignored (spec §4.2: no MSVC capture remotely). */
+export function sshCommandRunner(queue: SshSetupExecQueue): CppSetupCommandRunner {
+  return async (executable, args, cwd) => {
+    const result = await queue.exec(buildPosixLanguageServerCommand({ executable, args, cwd }))
+    if (result.code === null) {
+      // Channel died mid-command: not an install failure, a disconnect.
+      throw new SshSetupConnectionError('SSH connection was interrupted')
+    }
+    const output = `${result.stdout}${result.stderr}`.slice(0, MAX_LOG_BYTES)
+    return { code: result.code, output }
+  }
+}
+
+function parseRemoteListing(output: string): string[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
 }
 
 /**

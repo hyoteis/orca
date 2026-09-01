@@ -5,7 +5,9 @@ import {
   SshSetupConnectionError,
   SshSetupExecQueue,
   buildRemoteAtomicWriteCommand,
-  buildRemoteDirectoryExistsCommand
+  buildRemoteDirectoryExistsCommand,
+  buildRemoteGnDiscoveryCommand,
+  buildRemoteMtimesCommand
 } from './code-intelligence-ssh-setup-exec'
 
 type FakeChannel = EventEmitter & {
@@ -187,5 +189,29 @@ describe('buildRemoteDirectoryExistsCommand', () => {
       "test -d '/home/dev/.orca/cdb'"
     )
     expect(buildRemoteDirectoryExistsCommand("/path/it's")).toBe("test -d '/path/it'\\''s'")
+  })
+})
+
+describe('buildRemoteGnDiscoveryCommand', () => {
+  it('falls back from the PATH lookup to bundled candidate probes', () => {
+    expect(
+      buildRemoteGnDiscoveryCommand(['/srv/buildtools/linux64/gn', '/srv/buildtools/gn'])
+    ).toBe(
+      "command -v gn || { for c in '/srv/buildtools/linux64/gn' '/srv/buildtools/gn'; do [ -x \"$c\" ] && printf '%s\\n' \"$c\" && exit 0; done; exit 1; }"
+    )
+  })
+})
+
+describe('buildRemoteMtimesCommand', () => {
+  it('stats every path in order, GNU-style on Linux', () => {
+    expect(buildRemoteMtimesCommand(['/a', '/b'], 'Linux')).toBe(
+      `for p in '/a' '/b'; do stat -c %Y "$p" 2>/dev/null || printf '0\\n'; done`
+    )
+  })
+
+  it('switches to BSD stat flags on Darwin', () => {
+    expect(buildRemoteMtimesCommand(['/a'], 'Darwin')).toBe(
+      `for p in '/a'; do stat -f %m "$p" 2>/dev/null || printf '0\\n'; done`
+    )
   })
 })
