@@ -17,15 +17,9 @@ import {
   buildRemoteFindSourceFilesCommand,
   buildRemoteReadableDirectoriesCommand,
   buildRemoteReadFileCommand,
+  parseRemoteListing,
   type SshSetupExecQueue
 } from './code-intelligence-ssh-setup-exec'
-
-function parseRemoteListing(output: string): string[] {
-  return output
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-}
 
 /** Reads a generated shard back for the local single-source merge;
  * mergeCompilationDatabaseShards validates the array shape. */

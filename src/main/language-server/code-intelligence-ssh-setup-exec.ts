@@ -141,7 +141,8 @@ export function sshCommandRunner(queue: SshSetupExecQueue): CppSetupCommandRunne
   }
 }
 
-function parseRemoteListing(output: string): string[] {
+/** Line-wise parsing of remote `find`/stat listings (trimmed, blank-free). */
+export function parseRemoteListing(output: string): string[] {
   return output
     .split(/\r?\n/)
     .map((line) => line.trim())

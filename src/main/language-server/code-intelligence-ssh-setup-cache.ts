@@ -16,7 +16,8 @@ import {
 } from './code-intelligence-ssh-setup-exec'
 
 /** Remote fingerprint via one stat batch; null when the answer does not line
- * up with the probe list (cache silently skipped). */
+ * up with the probe list (cache silently skipped). Seconds-precision mtimes
+ * (vs the local mtimeMs) are fine: the two caches never cross-compare. */
 export async function remoteSetupFingerprint(
   queue: SshSetupExecQueue,
   args: {
