@@ -4,6 +4,7 @@ import { translate } from '@/i18n/i18n'
 import type { CppDefinitionTarget } from './cpp-definition-locations'
 import { installCppDefinitionLinkAffordance } from './cpp-definition-link-affordance'
 import { installCppSemanticHighlightDecorations } from './cpp-semantic-highlight-decorations'
+import { CPP_LANGUAGES } from './cpp-code-intelligence-workspace'
 import {
   getCppHover,
   openCppDefinitionTarget,
@@ -16,7 +17,6 @@ type DocumentContext = {
   requestAt: (position: Monaco.IPosition) => CppCodeIntelligenceRequest | null
 }
 
-const CPP_LANGUAGES = ['c', 'cpp', 'objective-c', 'objective-cpp'] as const
 const documents = new Map<string, DocumentContext>()
 let installed = false
 

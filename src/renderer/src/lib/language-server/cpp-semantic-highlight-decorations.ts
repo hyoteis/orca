@@ -54,6 +54,12 @@ export function decodeCppSemanticTokenDecorations(data: Uint32Array): SemanticDe
   return decorations
 }
 
+export function isLaunchConsentError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  // Matches authorizeSession's stale-consent throw from the scope store.
+  return message.includes('launch consent')
+}
+
 export function installCppSemanticHighlightDecorations(
   monaco: MonacoApi,
   editor: Monaco.editor.IStandaloneCodeEditor,
@@ -87,7 +93,15 @@ export function installCppSemanticHighlightDecorations(
         }))
       )
     } catch (error) {
-      console.warn('[code-intelligence] Semantic highlighting failed', error)
+      if (isLaunchConsentError(error)) {
+        // Why: consent-caused silence reads as "colors are broken" (#62); name
+        // the real cause and the recovery path instead of the raw IPC error.
+        console.warn(
+          '[code-intelligence] Semantic highlighting paused — configuration changed since authorization; re-authorize from the editor banner or the status-bar segment.'
+        )
+      } else {
+        console.warn('[code-intelligence] Semantic highlighting failed', error)
+      }
     }
   }
 

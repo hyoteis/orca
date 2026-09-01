@@ -29,6 +29,7 @@ import { getDiffContentSignature } from './diff-content-signature'
 import { translate } from '@/i18n/i18n'
 import { CheckRunDetailsPanel } from './CheckRunDetailsPanel'
 import { ExternalFileChangeBanner } from './ExternalFileChangeBanner'
+import { CodeIntelligenceConsentBanner } from './CodeIntelligenceConsentBanner'
 
 const MonacoEditor = lazy(() => import('./MonacoEditor'))
 const DiffViewer = lazy(() => import('./DiffViewer'))
@@ -809,6 +810,7 @@ export function EditorContent({
             )}
           />
         )}
+        <CodeIntelligenceConsentBanner file={activeFile} language={monacoLanguage} />
         <div className="min-h-0 flex-1 relative">
           {isMarkdown ? (
             renderMarkdownContent(fc)

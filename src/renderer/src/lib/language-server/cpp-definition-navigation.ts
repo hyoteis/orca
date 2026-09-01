@@ -19,6 +19,7 @@ import { definitionTargets, type CppDefinitionTarget } from './cpp-definition-lo
 import {
   fileUriToHostPath,
   findCppCodeIntelligenceScope,
+  CPP_LANGUAGES,
   openCppDefinitionTargetInWorkspace,
   relativeToRoot
 } from './cpp-code-intelligence-workspace'
@@ -47,7 +48,6 @@ type ActiveClient = {
   semanticLegend: SemanticTokensLegend | null
 }
 
-const CPP_LANGUAGES = new Set(['c', 'cpp', 'objective-c', 'objective-cpp'])
 const CLIENT_INSTANCE_ID = crypto.randomUUID()
 
 class CppCodeIntelligence {

@@ -88,6 +88,7 @@
       "pendingReconsentSummary": "Code intelligence folders changed since authorization",
       "foldersChangedSinceAuthorization": "{{value0}} folders changed since authorization",
       "configurationChangedSinceAuthorization": "Configuration changed since authorization",
+      "editorConsentPaused": "Code intelligence paused — configuration changed since authorization",
       "reauthorize": "Reauthorize",
       "reauthorizeFailed": "Could not reauthorize code intelligence folders",
       "rescanFolders": "Rescan folders",

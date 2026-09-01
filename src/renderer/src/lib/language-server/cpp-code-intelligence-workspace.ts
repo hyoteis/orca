@@ -5,6 +5,10 @@ import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence
 import { isDocumentInCodeIntelligenceScope } from './code-intelligence-scope-membership'
 import type { CppDefinitionTarget } from './cpp-definition-locations'
 
+// Lives here (not in cpp-definition-navigation) so banner/UI code can gate on
+// C/C++ without pulling the vscode-jsonrpc/browser import chain into tests.
+export const CPP_LANGUAGES = new Set(['c', 'cpp', 'objective-c', 'objective-cpp'])
+
 type CppWorkspaceRequest = {
   filePath: string
   relativePath: string
@@ -54,9 +58,10 @@ export function fileUriToHostPath(uri: string, executionHostId: string): string 
 }
 
 export function findCppCodeIntelligenceScope(
-  request: CppWorkspaceRequest
+  request: CppWorkspaceRequest,
+  // Subscription-fed override so React callers re-derive on settings/repos changes.
+  state: Pick<ReturnType<typeof useAppStore.getState>, 'repos' | 'settings'> = useAppStore.getState()
 ): CodeIntelligenceScope | null {
-  const state = useAppStore.getState()
   const repo = state.repos.find(
     (candidate) =>
       candidate.id === request.worktreeId || pathStartsWith(request.filePath, candidate.path)
