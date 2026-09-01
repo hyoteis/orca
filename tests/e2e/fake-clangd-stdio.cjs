@@ -10,6 +10,8 @@ const logFile = /--pid-log=(.+)/.exec(args.join('\n'))?.[1]
 if (logFile) {
   fs.appendFileSync(logFile, `${process.pid}\n`)
 }
+// Optional canned textDocument/definition answer for jump-navigation e2e.
+const definitionUri = /--definition-uri=(.+)/.exec(args.join('\n'))?.[1]
 
 let buffer = ''
 process.stdin.on('data', (chunk) => {
@@ -28,10 +30,22 @@ process.stdin.on('data', (chunk) => {
     if (message.id === undefined) {
       continue
     }
-    const result =
-      message.method === 'initialize'
-        ? { capabilities: { hoverProvider: true, definitionProvider: true } }
-        : null
+    let result
+    if (message.method === 'initialize') {
+      result = { capabilities: { hoverProvider: true, definitionProvider: true } }
+    } else if (message.method === 'textDocument/definition' && definitionUri) {
+      result = [
+        {
+          uri: definitionUri,
+          range: {
+            start: { line: 0, character: 4 },
+            end: { line: 0, character: 16 }
+          }
+        }
+      ]
+    } else {
+      result = null
+    }
     const body = Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }))
     process.stdout.write(`Content-Length: ${body.length}\r\n\r\n`)
     process.stdout.write(body)

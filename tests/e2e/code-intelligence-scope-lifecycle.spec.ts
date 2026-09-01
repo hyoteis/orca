@@ -20,7 +20,11 @@ async function createCppFolderFixture(
     rmSync(rootPath, { recursive: true, force: true })
   })
   for (const [relativePath, content] of [
-    ['engine/core/engine.cpp', 'int engine_main() { return 0; }\n'],
+    ['engine/core/engine.h', 'int engine_start();\n'],
+    [
+      'engine/core/engine.cpp',
+      '#include "engine.h"\n\nint engine_main() {\n    return engine_start();\n}\n'
+    ],
     ['fx/effect.cpp', 'void fx_effect() {}\n']
   ] as const) {
     const filePath = path.join(rootPath, relativePath)
@@ -56,12 +60,17 @@ async function addFolderWorkspace(
 async function seedCppScopeWithFakeClangd(
   page: Page,
   repoId: string,
-  rootPath: string
+  rootPath: string,
+  definitionUri?: string
 ): Promise<{ scopeId: string; pidLog: string }> {
   const pidLog = path.join(rootPath, 'clangd-pids.log')
   const scopeId = `local:folder:${repoId}:cpp`
   await page.evaluate(
-    async ({ id, repo, root, log, script }) => {
+    async ({ id, repo, root, log, script, definition }) => {
+      const args = [script, `--compile-commands-dir=${root}`, `--pid-log=${log}`]
+      if (definition) {
+        args.push(`--definition-uri=${definition}`)
+      }
       await window.api.codeIntelligence.upsertScope({
         id,
         name: 'Engine C++',
@@ -75,18 +84,21 @@ async function seedCppScopeWithFakeClangd(
         ],
         // The compile-commands dir must exist or spawn is refused (#58); the
         // workspace root always does.
-        serverSource: {
-          type: 'custom',
-          executable: 'node',
-          args: [script, `--compile-commands-dir=${root}`, `--pid-log=${log}`]
-        },
+        serverSource: { type: 'custom', executable: 'node', args },
         enabled: true,
         revision: 0
       })
       await window.api.codeIntelligence.grantConsent({ scopeId: id, revision: 1 })
       await window.__store?.getState().fetchSettings()
     },
-    { id: scopeId, repo: repoId, root: rootPath, log: pidLog, script: fakeClangdScript }
+    {
+      id: scopeId,
+      repo: repoId,
+      root: rootPath,
+      log: pidLog,
+      script: fakeClangdScript,
+      definition: definitionUri ?? null
+    }
   )
   return { scopeId, pidLog }
 }
@@ -162,6 +174,59 @@ test('member edits keep the running language-server session alive', async ({
   ).toBeVisible({ timeout: 10_000 })
   await hoverEngineCpp(orcaPage, path.join(root, 'engine', 'core', 'engine.cpp'))
   expect(readPids(pidLog)).toEqual([sessionPid])
+})
+
+test('opened cpp file renders colored tokens and Ctrl+Click jumps to the definition', async ({
+  orcaPage,
+  registerPostElectronShutdownCleanup
+}) => {
+  const root = await createCppFolderFixture(registerPostElectronShutdownCleanup)
+  const repoId = await addFolderWorkspace(orcaPage, root)
+  const headerUri = `file:///${path
+    .join(root, 'engine', 'core', 'engine.h')
+    .replace(/\\/g, '/')}`
+  await seedCppScopeWithFakeClangd(orcaPage, repoId, root, headerUri)
+
+  await hoverEngineCpp(orcaPage, path.join(root, 'engine', 'core', 'engine.cpp'))
+
+  // Syntax highlighting: Monaco's cpp tokenizer colors the document with more
+  // than one token class (keywords vs identifiers vs preprocessor/strings).
+  const tokenClasses = await orcaPage.evaluate(() => [
+    ...new Set(
+      [...document.querySelectorAll('.view-lines span[class*="mtk"]')].map(
+        (element) => element.className
+      )
+    )
+  ])
+  expect(tokenClasses.length).toBeGreaterThan(2)
+
+  // Hold the platform definition modifier (Control on Windows/Linux) over the
+  // symbol: the jump affordance decoration must appear.
+  const symbol = orcaPage.locator('.view-lines span', { hasText: 'engine_start' }).first()
+  await orcaPage.keyboard.down('Control')
+  try {
+    await symbol.hover()
+    await expect(orcaPage.locator('.orca-definition-link').first()).toBeVisible({
+      timeout: 10_000
+    })
+    await symbol.click()
+  } finally {
+    await orcaPage.keyboard.up('Control')
+  }
+
+  // The jump opens and focuses the definition target in the editor.
+  await expect
+    .poll(
+      () =>
+        orcaPage.evaluate(
+          () => window.__store?.getState().openFiles.some((file) => file.filePath.endsWith('engine.h')) ?? false
+        ),
+      { timeout: 10_000 }
+    )
+    .toBe(true)
+  await expect(orcaPage.locator('.editor-header-path').first()).toContainText('engine.h', {
+    timeout: 20_000
+  })
 })
 
 test('scope removal deletes the owning host scope directory', async ({
