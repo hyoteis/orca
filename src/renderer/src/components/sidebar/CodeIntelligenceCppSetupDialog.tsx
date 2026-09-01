@@ -157,26 +157,10 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     setStage('running')
     setResult(null)
     try {
-      const setupCpp = window.api.codeIntelligence.setupCpp
-      if (typeof setupCpp !== 'function') {
-        setResult({
-          ok: false,
-          message: translate(
-            'settings.codeIntelligence.restartRequired',
-            'Restart the Orca test app to load the updated setup bridge.'
-          ),
-          log: 'The renderer loaded the new setup UI with an older Electron preload. Restart Orca and try again.',
-          relativeRoots: selectedRoots,
-          installedTools: []
-        })
-        setStage('idle')
-        return
-      }
-      const setup = await setupCpp({
+      const setup = await window.api.codeIntelligence.setupCpp({
         repoId: repo.id,
         // Dual-form members: workspace-relative and host-absolute selections alike.
         relativeRoots: selectedRoots,
-        workspaceDirectories: roots,
         installMissingTools: true,
         additionalIncludeDirectories: additionalIncludes
           .split(/\r?\n/)
@@ -280,7 +264,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
             {setupHost?.kind === 'ssh'
               ? translate(
                   'settings.codeIntelligence.sshSetupDescription',
-                  'Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.'
+                  'Orca runs C++ setup on the connected SSH Host and installs missing tools there.'
                 )
               : translate(
                   'settings.codeIntelligence.setupDescription',

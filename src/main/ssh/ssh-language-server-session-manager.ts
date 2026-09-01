@@ -29,44 +29,6 @@ export function buildWindowsLanguageServerCommand(command: SshLanguageServerComm
   const encoded = Buffer.from(script, 'utf16le').toString('base64')
   return `powershell.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded}`
 }
-export async function probeSshLanguageServer(
-  connection: SshConnection,
-  command: SshLanguageServerCommand,
-  buildCommand: (command: SshLanguageServerCommand) => string = buildPosixLanguageServerCommand,
-  timeoutMs = 5_000
-): Promise<string> {
-  const channel = (await connection.exec(
-    buildCommand({ ...command, args: [...command.args, '--version'] })
-  )) as unknown as Channel
-  return await new Promise<string>((resolve, reject) => {
-    const chunks: Buffer[] = []
-    let retainedBytes = 0
-    const collect = (chunk: Buffer): void => {
-      if (retainedBytes >= 64 * 1024) {
-        return
-      }
-      const accepted = chunk.subarray(0, 64 * 1024 - retainedBytes)
-      retainedBytes += accepted.length
-      chunks.push(accepted)
-    }
-    channel.on('data', collect)
-    channel.stderr.on('data', collect)
-    const timer = setTimeout(() => {
-      channel.close()
-      reject(new Error('Timed out probing SSH language server'))
-    }, timeoutMs)
-    timer.unref?.()
-    channel.once('error', (error: Error) => {
-      clearTimeout(timer)
-      reject(error)
-    })
-    channel.once('close', () => {
-      clearTimeout(timer)
-      resolve(Buffer.concat(chunks).toString('utf8').trim())
-    })
-  })
-}
-
 export class SshLanguageServerSessionManager {
   private readonly sessions = new Map<string, Session>()
   constructor(

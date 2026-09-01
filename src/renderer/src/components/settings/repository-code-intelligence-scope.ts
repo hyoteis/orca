@@ -1,4 +1,3 @@
-import type { CodeIntelligenceCandidate } from '../../lib/language-server/code-intelligence-scope-discovery'
 import type {
   CodeIntelligenceLanguage,
   CodeIntelligenceScope
@@ -35,21 +34,5 @@ export function createRepositoryCodeIntelligenceScope(args: {
     serverSource: { type: 'automatic' },
     enabled: true,
     revision: 0
-  }
-}
-
-export function addCandidateToCodeIntelligenceScope(
-  scope: CodeIntelligenceScope,
-  candidate: CodeIntelligenceCandidate
-): CodeIntelligenceScope {
-  if (!candidate.languages.includes(scope.language)) {
-    return scope
-  }
-  if (scope.members.some((member) => member.path === candidate.relativeRoot)) {
-    return scope
-  }
-  return {
-    ...scope,
-    members: [...scope.members, { path: candidate.relativeRoot, visibleResults: true }]
   }
 }

@@ -3,7 +3,6 @@ import type {
   CodeIntelligenceCppSetupResult
 } from '../shared/code-intelligence-cpp-setup'
 import type {
-  CodeIntelligenceProbeResult,
   CodeIntelligenceScope,
   CodeIntelligenceScopeChange
 } from '../shared/code-intelligence-scope'
@@ -1128,9 +1127,7 @@ export type PluginMarketplaceHostInstallPreview = {
 
 export type PreloadApi = {
   codeIntelligence: {
-    listScopes: () => Promise<readonly CodeIntelligenceScope[]>
     setupCpp: (request: CodeIntelligenceCppSetupRequest) => Promise<CodeIntelligenceCppSetupResult>
-    probeScope: (scopeId: string) => Promise<CodeIntelligenceProbeResult>
     upsertScope: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScope>
     removeScope: (scopeId: string) => Promise<boolean>
     grantConsent: (

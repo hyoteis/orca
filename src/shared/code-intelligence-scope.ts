@@ -44,12 +44,6 @@ export type CodeIntelligenceScopeConsent = {
   /** Member snapshot at authorization time; drives the re-consent banner diff. */
   authorizedMembers?: CodeIntelligenceScopeMember[]
 }
-export type CodeIntelligenceProbeResult = {
-  available: boolean
-  version?: string
-  message?: string
-  installCommand?: string
-}
 export type CodeIntelligenceConfigurationMode = 'cmake' | 'gn' | 'basic' | 'mixed'
 export type CodeIntelligenceSetupStatus = {
   state: 'ready' | 'limited' | 'error'

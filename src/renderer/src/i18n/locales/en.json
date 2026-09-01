@@ -45,7 +45,6 @@
       "buildScanFailed": "Could not scan C++ build folders",
       "setupComplete": "C++ setup generated and enabled",
       "setupFailed": "C++ setup failed",
-      "restartRequired": "Restart the Orca test app to load the updated setup bridge.",
       "localOnly": "One-click setup currently supports local Hosts.",
       "scopeSelection": "Scope selection",
       "wholeProject": "Whole project",
@@ -103,7 +102,7 @@
       "setupLimited": "Configured with limited BASIC indexing",
       "setupReady": "C++ code intelligence is ready",
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
-      "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there. Source folders only for now; CMake and GN folders arrive later.",
+      "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there.",
       "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}...",
       "toggleFolderTree": "Expand folder"
     },

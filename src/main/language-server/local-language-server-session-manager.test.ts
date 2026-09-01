@@ -4,7 +4,6 @@ import {
   LocalLanguageServerSessionManager,
   resolveDefaultLocalLanguageServerCommand
 } from './local-language-server-session-manager'
-import { probeLocalLanguageServer } from './local-language-server-probe'
 import type {
   LanguageServerLaunchRequest,
   LanguageServerSessionEvent
@@ -57,16 +56,6 @@ describe('LocalLanguageServerSessionManager', () => {
       args: ['--background-index'],
       cwd: tmpdir()
     })
-  })
-
-  it('re-detects a configured executable without starting a session', async () => {
-    await expect(
-      probeLocalLanguageServer({
-        executable: process.execPath,
-        args: ['-e', "process.stdout.write('test-language-server 1.0')", '--'],
-        cwd: tmpdir()
-      })
-    ).resolves.toBe('test-language-server 1.0')
   })
 
   it('streams bytes and terminates the owned process', async () => {

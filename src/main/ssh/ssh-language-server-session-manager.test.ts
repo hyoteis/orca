@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildPosixLanguageServerCommand,
   buildWindowsLanguageServerCommand,
-  probeSshLanguageServer,
   SshLanguageServerSessionManager
 } from './ssh-language-server-session-manager'
 import type { SshConnection } from './ssh-connection'
@@ -45,22 +44,6 @@ describe('SshLanguageServerSessionManager', () => {
     expect(Buffer.from(encoded ?? '', 'base64').toString('utf16le')).toBe(
       "Set-Location -LiteralPath 'C:\\repo'; & 'C:\\Tools\\clangd.cmd' '--stdio'"
     )
-  })
-  it('probes the language server on the SSH Host', async () => {
-    const channel = new Channel()
-    const connection = {
-      exec: vi.fn(async () => {
-        setTimeout(() => {
-          channel.emit('data', Buffer.from('clangd 19'))
-          channel.emit('close')
-        })
-        return channel
-      })
-    } as unknown as SshConnection
-    await expect(
-      probeSshLanguageServer(connection, { executable: 'clangd', args: [], cwd: '/repo' })
-    ).resolves.toBe('clangd 19')
-    expect(connection.exec).toHaveBeenCalledWith("cd '/repo' && exec 'clangd' '--version'")
   })
   it('streams bytes and owns channel cleanup', async () => {
     const events: LanguageServerSessionEvent[] = [],

@@ -152,15 +152,6 @@ export class CodeIntelligenceScopeStore {
     return structuredClone(next)
   }
 
-  resolveProbe(scopeId: string): LanguageServerLaunchRequest {
-    const scope = this.requireScope(scopeId)
-    return this.toLaunchRequest(scope, {
-      sessionId: `probe:${scope.id}`,
-      scopeId: scope.id,
-      revision: scope.revision
-    })
-  }
-
   authorizeSession(request: LanguageServerSessionOpenRequest): LanguageServerLaunchRequest {
     const scope = this.requireScope(request.scopeId)
     if (scope.revision !== request.revision) {

@@ -13,7 +13,6 @@ export function clangdCompileCommandsDirArg(directory: string): string {
 export type CodeIntelligenceCppSetupRequest = {
   repoId: string
   relativeRoots: string[]
-  workspaceDirectories?: string[]
   installMissingTools: boolean
   additionalIncludeDirectories?: string[]
   defines?: string[]
@@ -25,7 +24,6 @@ export type CodeIntelligenceCppSetupResult = {
   message: string
   log: string
   relativeRoots: string[]
-  workspaceDirectories?: string[]
   installedTools: string[]
   clangdExecutable?: string
   compileCommandsDir?: string
