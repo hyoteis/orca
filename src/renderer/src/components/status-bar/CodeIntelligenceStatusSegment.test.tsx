@@ -37,11 +37,11 @@ const makeScope = (
 
 const initialState = useAppStore.getInitialState()
 
-function mountSegment(scope: CodeIntelligenceScope): void {
+function mountSegment(scope: CodeIntelligenceScope | CodeIntelligenceScope[]): void {
   useAppStore.setState({
     settings: {
       ...initialState.settings,
-      codeIntelligenceScopes: [scope]
+      codeIntelligenceScopes: Array.isArray(scope) ? scope : [scope]
     } as GlobalSettings,
     repos: [
       {
@@ -146,7 +146,7 @@ describe('CodeIntelligenceStatusSegment re-consent', () => {
     )
 
     expect(await screen.findByText('2 folders changed since authorization')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Reauthorize' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reauthorize r1' }))
 
     await waitFor(() =>
       expect(grantConsentMock).toHaveBeenCalledWith({
@@ -171,6 +171,44 @@ describe('CodeIntelligenceStatusSegment re-consent', () => {
     expect(await screen.findByText('Configuration changed since authorization')).toBeTruthy()
   })
 
+  it('moves re-consent into the popover header with a why line and revision button', async () => {
+    mountSegment(
+      makeScope(
+        [
+          { path: 'engine', visibleResults: true },
+          { path: 'audio', visibleResults: true }
+        ],
+        { consent: staleConsent, revision: 3 }
+      )
+    )
+
+    expect(await screen.findByText('Reauthorization needed')).toBeTruthy()
+    expect(screen.getByText('2 folders changed since authorization')).toBeTruthy()
+    expect(
+      screen.getByText('Code intelligence stays paused until you reauthorize.')
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Reauthorize r3' })).toBeTruthy()
+    // Stale state swaps the header title; the folder-list title returns once consent is current.
+    expect(screen.queryByText('Code intelligence folders')).toBeNull()
+  })
+
+  it('falls back to the plain Reauthorize label with multiple stale scopes', async () => {
+    mountSegment([
+      makeScope([{ path: 'engine', visibleResults: true }], { consent: staleConsent }),
+      makeScope([{ path: 'scripts', visibleResults: true }], {
+        id: 'local:worktree:demo:python',
+        name: 'demo Python',
+        language: 'python',
+        serverSource: { type: 'custom', executable: 'pyright', args: [] },
+        consent: staleConsent
+      })
+    ])
+
+    expect(await screen.findByText('Reauthorization needed')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Reauthorize r/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
+  })
+
   it('renders no banner and keeps the normal label while consent is current', () => {
     mountSegment(
       makeScope([{ path: 'engine', visibleResults: true }], {
@@ -193,7 +231,7 @@ describe('CodeIntelligenceStatusSegment re-consent', () => {
     )
     grantConsentMock.mockRejectedValue(new Error('revision changed'))
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Reauthorize' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reauthorize r1' }))
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled())
     await waitFor(() => expect(useAppStore.getState().fetchSettings).toHaveBeenCalled())

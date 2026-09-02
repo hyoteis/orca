@@ -143,3 +143,36 @@ describe('FileExplorerRow code intelligence menu item', () => {
     expect(screen.queryByRole('menuitem', { name: 'Add to Code Intelligence' })).toBeNull()
   })
 })
+
+describe('FileExplorerRow in-scope row marker', () => {
+  it('marks member and descendant rows with the scope indicator', () => {
+    renderRow(makeScope([{ path: 'engine', visibleResults: true }]))
+    expect(screen.getByTitle('In Code Intelligence')).toBeTruthy()
+
+    cleanup()
+    renderRow(makeScope([{ path: 'engine', visibleResults: true }]), new Set(), {
+      ...directory,
+      name: 'core',
+      path: '/repo/engine/core',
+      relativePath: 'engine/core',
+      depth: 1
+    })
+    expect(screen.getByTitle('In Code Intelligence')).toBeTruthy()
+  })
+
+  it('omits the marker outside members, for files, and without a scope', () => {
+    renderRow(makeScope([{ path: 'fx', visibleResults: true }]))
+    expect(screen.queryByTitle('In Code Intelligence')).toBeNull()
+
+    cleanup()
+    renderRow(makeScope([{ path: 'engine', visibleResults: true }]), new Set(), {
+      ...directory,
+      isDirectory: false
+    })
+    expect(screen.queryByTitle('In Code Intelligence')).toBeNull()
+
+    cleanup()
+    renderRow(null)
+    expect(screen.queryByTitle('In Code Intelligence')).toBeNull()
+  })
+})

@@ -205,36 +205,28 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <SelectedTextCopyMenu>
-          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-            <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
-              <Braces className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">
-                {translate('settings.codeIntelligence.statusTitle', 'Code intelligence folders')}
-              </span>
-            </div>
-            <span className="text-[11px] tabular-nums text-muted-foreground">{folderCount}</span>
-          </div>
-          {pendingReconsent ? (
-            <div
-              role="alert"
-              className="border-b border-amber-500/20 bg-amber-500/10 px-3 py-2"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="size-3.5 shrink-0" />
-                  <span className="truncate">
-                    {changedFolderCount > 0
-                      ? translate(
-                          'settings.codeIntelligence.foldersChangedSinceAuthorization',
-                          '{{value0}} folders changed since authorization',
-                          { value0: changedFolderCount }
-                        )
-                      : translate(
-                          'settings.codeIntelligence.configurationChangedSinceAuthorization',
-                          'Configuration changed since authorization'
-                        )}
-                  </span>
+          {/* #73: re-consent sits in the header so it stays visible above the scrolling member list. */}
+          <div className="border-b border-border px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground">
+                {pendingReconsent ? (
+                  <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                ) : (
+                  <Braces className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="truncate">
+                  {pendingReconsent
+                    ? translate(
+                        'settings.codeIntelligence.reauthorizationNeeded',
+                        'Reauthorization needed'
+                      )
+                    : translate(
+                        'settings.codeIntelligence.statusTitle',
+                        'Code intelligence folders'
+                      )}
                 </span>
+              </div>
+              {pendingReconsent ? (
                 <Button
                   type="button"
                   size="xs"
@@ -242,11 +234,43 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
                   onClick={() => void handleReauthorize()}
                 >
                   <ShieldCheck className="size-3.5" />
-                  {translate('settings.codeIntelligence.reauthorize', 'Reauthorize')}
+                  {staleScopes.length === 1
+                    ? translate(
+                        'settings.codeIntelligence.reauthorizeAtRevision',
+                        'Reauthorize r{{value0}}',
+                        { value0: staleScopes[0].revision }
+                      )
+                    : translate('settings.codeIntelligence.reauthorize', 'Reauthorize')}
                 </Button>
-              </div>
+              ) : (
+                <span className="text-[11px] tabular-nums text-muted-foreground">
+                  {folderCount}
+                </span>
+              )}
             </div>
-          ) : null}
+            {pendingReconsent ? (
+              <div role="alert" className="mt-1.5 space-y-0.5">
+                <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                  {changedFolderCount > 0
+                    ? translate(
+                        'settings.codeIntelligence.foldersChangedSinceAuthorization',
+                        '{{value0}} folders changed since authorization',
+                        { value0: changedFolderCount }
+                      )
+                    : translate(
+                        'settings.codeIntelligence.configurationChangedSinceAuthorization',
+                        'Configuration changed since authorization'
+                      )}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  {translate(
+                    'settings.codeIntelligence.pausedUntilReauthorize',
+                    'Code intelligence stays paused until you reauthorize.'
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
           <div className="border-b border-border/60 px-3 py-2">
             <div className="truncate text-xs font-medium text-foreground">{projectName}</div>
             <div className="truncate font-mono text-[10px] text-muted-foreground">

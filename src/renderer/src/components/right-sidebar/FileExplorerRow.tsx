@@ -539,6 +539,8 @@ export function FileExplorerRow({
     codeIntelligenceScope && onToggleCodeIntelligenceMembers && node.isDirectory
       ? getCodeIntelligenceMembershipAction(codeIntelligenceScope, node.relativePath)
       : null
+  const codeIntelligenceInScope =
+    codeIntelligenceAction === 'remove' || codeIntelligenceAction === 'disabled'
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useFileExplorerRowDrag({
       rowDropDir,
@@ -716,6 +718,17 @@ export function FileExplorerRow({
           >
             {node.name}
           </span>
+          {codeIntelligenceInScope ? (
+            /* Why: row-level scope indicator (#73) — membership visible without right-clicking. */
+            <span
+              title={translate(
+                'auto.components.right.sidebar.FileExplorerRow.codeIntelligenceInScope',
+                'In Code Intelligence'
+              )}
+              aria-hidden="true"
+              className="ml-1 size-1.5 shrink-0 rotate-45 rounded-[1px] bg-status-success"
+            />
+          ) : null}
           {nodeStatus ? (
             <span
               className="ml-auto shrink-0 text-[10px] font-semibold tracking-wide mr-2"

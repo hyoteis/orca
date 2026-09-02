@@ -61,6 +61,9 @@
       "foldersChangedSinceAuthorization": "\u81ea\u6388\u6743\u540e\u5df2\u53d8\u66f4 {{value0}} \u4e2a\u6587\u4ef6\u5939",
       "configurationChangedSinceAuthorization": "\u81ea\u6388\u6743\u540e\u914d\u7f6e\u5df2\u53d8\u66f4",
       "editorConsentPaused": "\u4ee3\u7801\u667a\u80fd\u5df2\u6682\u505c \u2014 \u81ea\u6388\u6743\u540e\u914d\u7f6e\u5df2\u53d8\u66f4",
+      "reauthorizationNeeded": "\u9700\u8981\u91cd\u65b0\u6388\u6743",
+      "reauthorizeAtRevision": "\u91cd\u65b0\u6388\u6743 r{{value0}}",
+      "pausedUntilReauthorize": "\u91cd\u65b0\u6388\u6743\u524d\u4ee3\u7801\u667a\u80fd\u4fdd\u6301\u6682\u505c\u3002",
       "reauthorize": "\u91cd\u65b0\u6388\u6743",
       "reauthorizeFailed": "\u65e0\u6cd5\u91cd\u65b0\u6388\u6743\u4ee3\u7801\u667a\u80fd\u6587\u4ef6\u5939",
       "rescanFolders": "\u91cd\u65b0\u626b\u63cf\u6587\u4ef6\u5939",
@@ -10337,7 +10340,10 @@
             "f9d7ca753d": "复制路径",
             "3161c4e425": "文件夹",
             "e887fa4b2e": "在终端中打开",
-            "1d8e182c32": "查看文件"
+            "1d8e182c32": "查看文件",
+            "codeIntelligenceInScope": "已在代码智能中",
+            "codeIntelligenceRemove": "从代码智能中移除",
+            "codeIntelligenceAdd": "添加到代码智能"
           },
           "FileExplorerToolbar": {
             "d238264654": "显示 Git 忽略的文件",
