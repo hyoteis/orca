@@ -12175,6 +12175,14 @@
             "90cabf6cfc": "Stack this PR above #{{value0}}",
             "ff81473a57": "Creates a GitHub Stack or extends the parent's existing stack.",
             "29732f2fb0": "new PR"
+          },
+          "OpenEditorsSection": {
+            "title": "Open Editors",
+            "closeEditor": "Close editor",
+            "close": "Close",
+            "pin": "Pin",
+            "unpin": "Unpin",
+            "toggleSection": "Toggle Open Editors section"
           }
         }
       },
@@ -14775,6 +14783,13 @@
       "rightSidebar": {
         "CodePanel": {
           "addFolder": "Add Folder",
+          "addFolderConfirm": "Add",
+          "addFolderCppScope": "C++ scope",
+          "addFolderDescription": "Pick a folder from the workspace tree, or enter an absolute Host path outside the workspace.",
+          "addFolderPythonAbsolute": "Python code folders must stay relative to the workspace",
+          "addFolderPythonOnlyRelative": "Python accepts workspace-relative paths only.",
+          "addFolderPythonScope": "Python scope",
+          "addFolderTitle": "Add Folder to Code Scopes",
           "browseBlocked": "Authorize code intelligence to browse this folder",
           "configureCode": "Configure Code…",
           "emptyCopy": "Add a folder to create a C++ or Python scope.",
