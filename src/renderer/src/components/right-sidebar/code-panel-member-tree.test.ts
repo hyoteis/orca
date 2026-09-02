@@ -3,6 +3,7 @@ import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence
 import {
   buildCodePanelMemberRows,
   getCodePanelKeptEmptyLanguages,
+  removeCodePanelMemberRow,
   resolveCodePanelMemberDirectory
 } from './code-panel-member-tree'
 
@@ -183,5 +184,31 @@ describe('getCodePanelKeptEmptyLanguages', () => {
       scope({ id: 'local:worktree:repo-1:python', language: 'python', members: [] })
     ])
     expect(languages).toEqual(['python'])
+  })
+})
+
+describe('removeCodePanelMemberRow', () => {
+  it('edits every scope holding the member and keeps emptied scopes', () => {
+    const cpp = scope({
+      members: [
+        { path: 'src/core', visibleResults: true },
+        { path: 'tools', visibleResults: true }
+      ]
+    })
+    const python = scope({
+      id: 'local:worktree:repo-1:python',
+      language: 'python',
+      members: [{ path: 'src/core', visibleResults: true }]
+    })
+    const edits = removeCodePanelMemberRow([cpp, python], 'src/core')
+    expect(edits).toHaveLength(2)
+    expect(edits[0]).toMatchObject({ id: cpp.id, members: [{ path: 'tools', visibleResults: true }] })
+    expect(edits[1]).toMatchObject({ id: python.id, members: [] })
+  })
+
+  it('returns no edit for scopes without the member', () => {
+    expect(
+      removeCodePanelMemberRow([scope({ members: [{ path: 'tools', visibleResults: true }] })], 'src/core')
+    ).toEqual([])
   })
 })

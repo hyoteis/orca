@@ -42,6 +42,10 @@ describe('normalizeCodeIntelligenceScope member forms', () => {
     ])
   })
 
+  it('keeps a scope whose members were all removed (#63 decision 6)', () => {
+    expect(normalizeCodeIntelligenceScope(scope({ members: [] })).members).toEqual([])
+  })
+
   it('rejects .. segments in both forms', () => {
     expect(() =>
       normalizeCodeIntelligenceScope(

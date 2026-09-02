@@ -1,11 +1,35 @@
 import React, { useCallback, useMemo, useState } from 'react'
-import { ChevronRight, Folder, FolderOpen, Ghost, Loader2, Plus, ShieldOff } from 'lucide-react'
+import {
+  ChevronRight,
+  ExternalLink,
+  Folder,
+  FolderInput,
+  FolderOpen,
+  Ghost,
+  Loader2,
+  Plus,
+  Settings2,
+  ShieldOff,
+  Trash2
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
 import { useAppStore } from '@/store'
 import { useWorktreeMap } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import { joinPath } from '@/lib/path'
+import {
+  isLocalPathOpenBlocked,
+  showLocalPathOpenBlockedToast
+} from '@/lib/local-path-open-guard'
+import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import type { DirEntry, Worktree } from '../../../../shared/types'
 import type {
   CodeIntelligenceLanguage
@@ -14,15 +38,26 @@ import { getExecutionHostLabel, getWorktreeExecutionHostId } from '../../../../s
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getStatusBarCodeIntelligenceScopes } from '../status-bar/code-intelligence-status-scopes'
+import { buildAddProjectFromFolderModalData } from './file-explorer-add-project-action'
 import {
   buildCodePanelMemberRows,
   getCodePanelKeptEmptyLanguages,
+  removeCodePanelMemberRow,
   type CodePanelMemberRow
 } from './code-panel-member-tree'
 import { readFileExplorerDirectory } from './file-explorer-directory-listing'
 
 const LANGUAGE_DISPLAY: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Python' }
 const LANGUAGE_BADGE: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Py' }
+
+function stopRightButtonMenuSelection(event: React.PointerEvent): void {
+  if (event.button !== 2) {
+    return
+  }
+  // Why: Radix opens context menus under the pointer; on some macOS/Electron
+  // paths the right-button release lands on the first item and selects it.
+  event.preventDefault()
+}
 
 function LanguageBadge({ language }: { language: CodeIntelligenceLanguage }): React.JSX.Element {
   return (
@@ -79,6 +114,36 @@ export function CodePanel({
   )
   const rows = useMemo(() => buildCodePanelMemberRows(scopes), [scopes])
   const keptEmptyLanguages = useMemo(() => getCodePanelKeptEmptyLanguages(scopes), [scopes])
+  const openModal = useAppStore((s) => s.openModal)
+  // Configure routes to the existing C++ setup dialog, which pre-checks the
+  // scope's current members itself (single source of truth, #63 decision 4).
+  const configureRepoId = useMemo(() => {
+    const cppScope = scopes.find((scope) => scope.language === 'cpp')
+    const parsed = cppScope ? parseWorkspaceKey(cppScope.workspaceKey) : null
+    return parsed ? (parsed.type === 'folder' ? parsed.folderWorkspaceId : parsed.worktreeId) : null
+  }, [scopes])
+
+  const handleOpenAsWorkspace = (row: CodePanelMemberRow): void => {
+    if (!activeRepo) {
+      return
+    }
+    openModal(
+      'confirm-add-project-from-folder',
+      buildAddProjectFromFolderModalData({ path: row.directory }, activeRepo)
+    )
+  }
+  const handleReveal = (row: CodePanelMemberRow): void => {
+    if (isLocalPathOpenBlocked(settings, { connectionId: activeRepo?.connectionId ?? null })) {
+      showLocalPathOpenBlockedToast()
+      return
+    }
+    window.api.shell.openPath(row.directory)
+  }
+  const handleRemove = (row: CodePanelMemberRow): void => {
+    void Promise.all(
+      removeCodePanelMemberRow(scopes, row.path).map((next) => writeCodeIntelligenceScopeEdit(next))
+    )
+  }
 
   const defaultListDirectory = useCallback(
     async (dirPath: string): Promise<DirEntry[]> => {
@@ -204,41 +269,68 @@ export function CodePanel({
     const dirPath = row.directory
     const expanded = expandedDirs.has(dirPath)
     return (
-      <React.Fragment key={row.path}>
-        <button
-          type="button"
-          className="flex h-[26px] w-full items-center gap-1.5 px-2 text-left text-[13px] text-foreground hover:bg-accent"
-          title={
-            row.browseBlocked
-              ? translate(
-                  'auto.components.rightSidebar.CodePanel.browseBlocked',
-                  'Authorize code intelligence to browse this folder'
-                )
-              : dirPath
-          }
-          onClick={() => {
-            if (!row.browseBlocked) {
-              toggleDir(dirPath)
+      <ContextMenu key={row.path}>
+        <ContextMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex h-[26px] w-full items-center gap-1.5 px-2 text-left text-[13px] text-foreground hover:bg-accent"
+            title={
+              row.browseBlocked
+                ? translate(
+                    'auto.components.rightSidebar.CodePanel.browseBlocked',
+                    'Authorize code intelligence to browse this folder'
+                  )
+                : dirPath
             }
-          }}
+            onClick={() => {
+              if (!row.browseBlocked) {
+                toggleDir(dirPath)
+              }
+            }}
+          >
+            {row.browseBlocked ? (
+              <ShieldOff className="size-3 shrink-0 text-amber-500" />
+            ) : (
+              <ChevronRight
+                className={cn(
+                  'size-3 shrink-0 text-muted-foreground transition-transform',
+                  expanded && 'rotate-90'
+                )}
+              />
+            )}
+            <span className="min-w-0 flex-1 truncate font-mono text-xs">{row.path}</span>
+            {row.languages.map((language) => (
+              <LanguageBadge key={language} language={language} />
+            ))}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent
+          className="w-64 bg-[rgba(255,255,255,0.82)] dark:bg-[rgba(0,0,0,0.72)]"
+          onPointerUpCapture={stopRightButtonMenuSelection}
+          onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          {row.browseBlocked ? (
-            <ShieldOff className="size-3 shrink-0 text-amber-500" />
-          ) : (
-            <ChevronRight
-              className={cn(
-                'size-3 shrink-0 text-muted-foreground transition-transform',
-                expanded && 'rotate-90'
-              )}
-            />
-          )}
-          <span className="min-w-0 flex-1 truncate font-mono text-xs">{row.path}</span>
-          {row.languages.map((language) => (
-            <LanguageBadge key={language} language={language} />
-          ))}
-        </button>
+          <ContextMenuItem onSelect={() => handleOpenAsWorkspace(row)}>
+            <FolderInput />
+            {translate('auto.components.rightSidebar.CodePanel.openAsWorkspace', 'Open as Workspace')}
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => handleReveal(row)}>
+            <ExternalLink />
+            {translate('auto.components.rightSidebar.CodePanel.reveal', 'Reveal in File Manager')}
+          </ContextMenuItem>
+          {row.languages.includes('cpp') && configureRepoId ? (
+            <ContextMenuItem onSelect={() => openModal('code-intelligence-cpp-setup', { repoId: configureRepoId })}>
+              <Settings2 />
+              {translate('auto.components.rightSidebar.CodePanel.configureCode', 'Configure Code…')}
+            </ContextMenuItem>
+          ) : null}
+          <ContextMenuSeparator />
+          <ContextMenuItem variant="destructive" onSelect={() => handleRemove(row)}>
+            <Trash2 />
+            {translate('auto.components.rightSidebar.CodePanel.remove', 'Remove')}
+          </ContextMenuItem>
+        </ContextMenuContent>
         {renderDirChildren(dirPath, 1)}
-      </React.Fragment>
+      </ContextMenu>
     )
   }
 

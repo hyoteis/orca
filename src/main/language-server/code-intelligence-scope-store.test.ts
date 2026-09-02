@@ -85,6 +85,15 @@ describe('CodeIntelligenceScopeStore', () => {
     ).toBe(false)
   })
 
+  it('keeps a member-emptied scope alive without a session restart', () => {
+    const store = createStore([scope()])
+    const result = new CodeIntelligenceScopeStore(store).upsert({ ...scope(), members: [] })
+    expect(result.restartRequired).toBe(false)
+    expect(result.scope.members).toEqual([])
+    expect(result.scope.revision).toBe(2)
+    expect(store.getSettings().codeIntelligenceScopes).toHaveLength(1)
+  })
+
   it('authorizes only the persisted enabled scope with current consent and revision', () => {
     const store = createStore([scope()])
     const catalog = new CodeIntelligenceScopeStore(store)

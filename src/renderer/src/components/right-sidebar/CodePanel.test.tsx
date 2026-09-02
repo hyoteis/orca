@@ -10,11 +10,25 @@ const mockState = vi.hoisted(() => ({
   activeWorktreeId: 'repo-1::/ws/repo-1' as string | null,
   repos: [] as Repo[],
   worktreesByRepo: {} as Record<string, Worktree[]>,
-  folderWorkspaces: []
+  folderWorkspaces: [],
+  openModal: vi.fn(),
+  fetchSettings: vi.fn()
+}))
+
+const windowApi = vi.hoisted(() => ({
+  codeIntelligence: { upsertScope: vi.fn() },
+  shell: { openPath: vi.fn() }
 }))
 
 vi.mock('@/store', () => ({
-  useAppStore: <T,>(selector: (state: typeof mockState) => T): T => selector(mockState)
+  useAppStore: Object.assign(
+    <T,>(selector: (state: typeof mockState) => T): T => selector(mockState),
+    { getState: () => mockState }
+  )
+}))
+
+vi.mock('sonner', () => ({
+  toast: { info: vi.fn(), error: vi.fn(), success: vi.fn() }
 }))
 
 vi.mock('@/store/selectors', () => ({
@@ -71,13 +85,15 @@ const file = (name: string): DirEntry => ({ name, isDirectory: false, isSymlink:
 
 function setupState({
   scopes = [scope({})],
-  worktreeHostId = 'local'
+  worktreeHostId = 'local',
+  repos = [{ id: 'repo-1' } as unknown as Repo]
 }: {
   scopes?: CodeIntelligenceScope[]
   worktreeHostId?: string
+  repos?: Repo[]
 } = {}): void {
   mockState.settings = { codeIntelligenceScopes: scopes } as unknown as GlobalSettings
-  mockState.repos = []
+  mockState.repos = repos
   mockState.worktreesByRepo = {
     'repo-1': [
       {
@@ -92,6 +108,11 @@ function setupState({
 
 beforeEach(() => {
   mockState.folderWorkspaces = []
+  mockState.openModal.mockReset()
+  mockState.fetchSettings.mockReset()
+  windowApi.codeIntelligence.upsertScope.mockReset().mockResolvedValue({})
+  windowApi.shell.openPath.mockReset().mockResolvedValue(undefined)
+  ;(window as unknown as { api: typeof windowApi }).api = windowApi
 })
 
 describe('CodePanel member rows', () => {
@@ -216,5 +237,120 @@ describe('CodePanel header', () => {
     const addFolder = screen.getByRole('button', { name: /Add Folder/ })
     expect((addFolder as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/my-host/)).toBeTruthy()
+  })
+})
+
+describe('CodePanel member context menu', () => {
+  const openMemberMenu = (): void => {
+    fireEvent.contextMenu(screen.getByRole('button', { name: /src/ }))
+  }
+
+  it('offers all four actions on a member row', () => {
+    setupState()
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    expect(screen.getByRole('menuitem', { name: 'Open as Workspace' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Reveal in File Manager' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Configure Code…' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
+  })
+
+  it('hides Configure Code… on python-only rows', () => {
+    setupState({
+      scopes: [
+        scope({
+          id: 'local:worktree:repo-1:python',
+          language: 'python',
+          members: [{ path: 'src', visibleResults: true }]
+        })
+      ]
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Configure Code…' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
+  })
+
+  it('removes the member through the single writer and keeps the emptied scope', async () => {
+    setupState({ scopes: [scope({ members: [{ path: 'src', visibleResults: true }] })] })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    await waitFor(() => expect(windowApi.codeIntelligence.upsertScope).toHaveBeenCalledTimes(1))
+    expect(windowApi.codeIntelligence.upsertScope.mock.calls[0]?.[0]).toMatchObject({
+      id: 'local:worktree:repo-1:cpp',
+      members: []
+    })
+    expect(mockState.fetchSettings).toHaveBeenCalled()
+  })
+
+  it('removes a merged row from every owning scope', async () => {
+    setupState({
+      scopes: [
+        scope({ members: [{ path: 'src', visibleResults: true }] }),
+        scope({
+          id: 'local:worktree:repo-1:python',
+          language: 'python',
+          members: [
+            { path: 'src', visibleResults: true },
+            { path: 'tools', visibleResults: true }
+          ]
+        })
+      ]
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    await waitFor(() => expect(windowApi.codeIntelligence.upsertScope).toHaveBeenCalledTimes(2))
+    const edited = windowApi.codeIntelligence.upsertScope.mock.calls.map(
+      (call) => call[0] as { id: string; members: { path: string }[] }
+    )
+    expect(edited.map((s) => ({ id: s.id, members: s.members.map((m) => m.path) }))).toEqual([
+      { id: 'local:worktree:repo-1:cpp', members: [] },
+      { id: 'local:worktree:repo-1:python', members: ['tools'] }
+    ])
+  })
+
+  it('opens the C++ setup dialog scoped to the workspace repo', () => {
+    setupState()
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Configure Code…' }))
+    expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1'
+    })
+  })
+
+  it('opens the member directory through the add-project flow', () => {
+    setupState()
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open as Workspace' }))
+    expect(mockState.openModal).toHaveBeenCalledWith('confirm-add-project-from-folder', {
+      folderPath: '/ws/repo-1/src',
+      runtimeEnvironmentId: null
+    })
+  })
+
+  it('reveals local member directories in the OS file manager', () => {
+    setupState()
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
+    expect(windowApi.shell.openPath).toHaveBeenCalledWith('/ws/repo-1/src')
+  })
+
+  it('refuses to reveal members of SSH workspaces, matching FileExplorer', async () => {
+    const { toast } = await import('sonner')
+    setupState({
+      worktreeHostId: 'ssh:my-host',
+      scopes: [scope({ executionHostId: 'ssh:my-host', members: [{ path: 'src', visibleResults: true }] })],
+      repos: [{ id: 'repo-1', connectionId: 'my-host' } as unknown as Repo]
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    openMemberMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
+    expect(windowApi.shell.openPath).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalled()
   })
 })

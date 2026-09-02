@@ -14,7 +14,7 @@ export function canShowAddAsProjectAction(node: TreeNode, activeRepo: Repo | nul
 }
 
 export function buildAddProjectFromFolderModalData(
-  node: TreeNode,
+  node: Pick<TreeNode, 'path'>,
   activeRepo: Repo
 ): AddProjectFromFolderModalData {
   // Why: subfolder paths must stay on their owning repo host, not the mutable global selection.

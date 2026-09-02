@@ -56,3 +56,16 @@ export function getCodePanelKeptEmptyLanguages(
 ): CodeIntelligenceLanguage[] {
   return scopes.filter((scope) => scope.members.length === 0).map((scope) => scope.language)
 }
+
+/** Per-scope edits for removing one merged row; emptied scopes are kept (#63 decision 6). */
+export function removeCodePanelMemberRow(
+  scopes: readonly CodeIntelligenceScope[],
+  memberPath: string
+): CodeIntelligenceScope[] {
+  return scopes
+    .filter((scope) => scope.members.some((member) => member.path === memberPath))
+    .map((scope) => ({
+      ...scope,
+      members: scope.members.filter((member) => member.path !== memberPath)
+    }))
+}

@@ -14776,11 +14776,15 @@
         "CodePanel": {
           "addFolder": "Add Folder",
           "browseBlocked": "Authorize code intelligence to browse this folder",
+          "configureCode": "Configure Code…",
           "emptyCopy": "Add a folder to create a C++ or Python scope.",
           "emptyTitle": "No code scopes for this workspace on this host.",
           "listFailed": "Could not list this folder",
           "loading": "Loading…",
           "noWorkspace": "No active workspace owns this folder",
+          "openAsWorkspace": "Open as Workspace",
+          "remove": "Remove",
+          "reveal": "Reveal in File Manager",
           "scopeEmptyKept": "{{value0}} scope is empty — kept",
           "title": "Code"
         },

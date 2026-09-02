@@ -158,8 +158,10 @@ export function normalizeCodeIntelligenceScope(
     seen.add(key)
     members.push({ path, visibleResults: input.visibleResults })
   }
-  if (!scope.id.trim() || !scope.name.trim() || members.length === 0) {
-    throw new Error('Code intelligence scope requires an id, name, and member')
+  // Empty member lists are legal (#63 decision 6): removing the last member
+  // keeps the scope so consent history and kept-empty hints survive.
+  if (!scope.id.trim() || !scope.name.trim()) {
+    throw new Error('Code intelligence scope requires an id and name')
   }
   if (scope.serverSource.type === 'custom' && !scope.serverSource.executable.trim()) {
     throw new Error('Custom language server executable is required')
