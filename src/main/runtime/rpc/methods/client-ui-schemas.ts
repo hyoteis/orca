@@ -39,6 +39,7 @@ const WorktreeCardProperties = z
   .array(WorktreeCardPropertyParam)
   .transform((value) => normalizeWorktreeCardProperties(value))
 const STATIC_RIGHT_SIDEBAR_TABS = [
+  'code',
   'explorer',
   'search',
   'vault',

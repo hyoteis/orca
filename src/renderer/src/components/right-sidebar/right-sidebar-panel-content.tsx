@@ -4,6 +4,7 @@ import type { ActiveRightSidebarTab } from '@/store/slices/editor'
 import { isPluginPanelTabKey } from '../../../../shared/plugins/plugin-manifest'
 
 const FileExplorer = lazy(() => import('./FileExplorer'))
+const CodePanel = lazy(() => import('./CodePanel'))
 const SourceControl = lazy(() => import('./SourceControl'))
 const ChecksPanel = lazy(() => import('./ChecksPanel'))
 const PortsPanel = lazy(() => import('./PortsPanel'))
@@ -25,6 +26,7 @@ export function RightSidebarPanelContent({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <Suspense fallback={null}>
         {effectiveTab === 'explorer' && <FileExplorer />}
+        {effectiveTab === 'code' && <CodePanel />}
         {effectiveTab === 'source-control' && <SourceControl />}
         {effectiveTab === 'checks' && <ChecksPanel />}
         {/* Why: SSH port forwarding still depends on the raw ports.detect data,

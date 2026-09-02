@@ -2439,6 +2439,7 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
     const out: AppState['rightSidebarTabByWorktree'] = {}
     for (const [id, tab] of Object.entries(omitted)) {
       if (
+        tab === 'code' ||
         tab === 'explorer' ||
         tab === 'vault' ||
         tab === 'workspaces' ||

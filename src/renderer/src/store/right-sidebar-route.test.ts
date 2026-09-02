@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { normalizeRightSidebarRoute } from './right-sidebar-route'
 
 describe('normalizeRightSidebarRoute', () => {
+  it('preserves the code panel route', () => {
+    expect(normalizeRightSidebarRoute('code')).toEqual({
+      rightSidebarTab: 'code',
+      rightSidebarExplorerView: 'files'
+    })
+  })
+
   it('preserves the folder-only PR Checks route', () => {
     expect(normalizeRightSidebarRoute('pr-checks')).toEqual({
       rightSidebarTab: 'pr-checks',

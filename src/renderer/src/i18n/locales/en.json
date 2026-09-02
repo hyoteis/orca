@@ -11601,24 +11601,25 @@
             }
           },
           "index": {
-            "70893f017b": "Side",
-            "7b415c39e9": "Top",
-            "864111caa2": "Activity Bar Position",
-            "e8e2e4ce74": "Toggle right sidebar",
-            "441733b630": "Ports",
-            "83a10e3c44": "Checks",
             "0314901467": "Source Control",
             "06219e4cb1": "Search",
-            "8bc2bbc3a0": "Explorer",
-            "45b78f03bc": "side",
             "34af8aadf5": "top",
-            "9fffaf17c1": "Toggle right sidebar ({{value0}})",
-            "b37ff4a89a": "ports",
-            "9f83375839": "checks",
+            "441733b630": "Ports",
+            "45b78f03bc": "side",
             "6306b48afd": "source-control",
+            "70893f017b": "Side",
+            "7b415c39e9": "Top",
+            "83a10e3c44": "Checks",
+            "864111caa2": "Activity Bar Position",
+            "8bc2bbc3a0": "Explorer",
+            "9f83375839": "checks",
+            "9fffaf17c1": "Toggle right sidebar ({{value0}})",
+            "aiVaultSessionHistory": "Agents",
+            "b37ff4a89a": "ports",
+            "codeTab": "Code",
+            "e8e2e4ce74": "Toggle right sidebar",
             "ef182dcb12": "search",
             "fc3095d2ed": "explorer",
-            "aiVaultSessionHistory": "Agents",
             "folderWorkspaces": "Attached worktrees",
             "parentPrChecks": "PR Checks"
           },
@@ -14772,14 +14773,16 @@
         }
       },
       "rightSidebar": {
-        "FolderWorkspaceWorktreesPanel": {
-          "unavailable": "Workspaces are only shown for folder workspaces.",
-          "label": "Workspaces",
-          "description": "Shows worktrees attached to this folder workspace.",
-          "countOne": "1 attached worktree",
-          "countMany": "{{value0}} attached worktrees",
-          "emptyTitle": "No attached worktrees yet",
-          "emptyCopy": "Worktrees created from this workspace will show up here."
+        "CodePanel": {
+          "addFolder": "Add Folder",
+          "browseBlocked": "Authorize code intelligence to browse this folder",
+          "emptyCopy": "Add a folder to create a C++ or Python scope.",
+          "emptyTitle": "No code scopes for this workspace on this host.",
+          "listFailed": "Could not list this folder",
+          "loading": "Loading…",
+          "noWorkspace": "No active workspace owns this folder",
+          "scopeEmptyKept": "{{value0}} scope is empty — kept",
+          "title": "Code"
         },
         "FolderWorkspacePrChecksPanel": {
           "unavailable": "PR checks are only shown for folder workspaces.",
@@ -14799,6 +14802,15 @@
           "failingCount": "{{value0}} failing",
           "onePending": "1 pending",
           "pendingCount": "{{value0}} pending"
+        },
+        "FolderWorkspaceWorktreesPanel": {
+          "unavailable": "Workspaces are only shown for folder workspaces.",
+          "label": "Workspaces",
+          "description": "Shows worktrees attached to this folder workspace.",
+          "countOne": "1 attached worktree",
+          "countMany": "{{value0}} attached worktrees",
+          "emptyTitle": "No attached worktrees yet",
+          "emptyCopy": "Worktrees created from this workspace will show up here."
         },
         "parentPrChecks": {
           "rowSummary": {

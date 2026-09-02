@@ -333,7 +333,8 @@ describe('rendered right sidebar titlebar drag regions', () => {
 
     const markup = renderToStaticMarkup(<RightSidebar />)
 
-    expect(markup).toContain('data-file-explorer')
+    // Why: the fallback lands on the first visible tab, which is Code since #69.
+    expect(buttonOpeningTag(markup, 'Code')).toContain('text-foreground')
     expect(markup).not.toContain('data-folder-workspace-worktrees-panel')
     expect(mockAppState.setRightSidebarTab).not.toHaveBeenCalled()
   })
@@ -345,7 +346,7 @@ describe('rendered right sidebar titlebar drag regions', () => {
 
     const markup = renderToStaticMarkup(<RightSidebar />)
 
-    expect(markup).toContain('data-file-explorer')
+    expect(buttonOpeningTag(markup, 'Code')).toContain('text-foreground')
     expect(markup).not.toContain('data-folder-workspace-pr-checks-panel')
     expect(mockAppState.setRightSidebarTab).not.toHaveBeenCalled()
   })

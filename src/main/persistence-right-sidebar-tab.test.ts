@@ -29,6 +29,10 @@ describe('normalizeRightSidebarTab', () => {
     expect(normalizeRightSidebarTab('pr-checks')).toBe('pr-checks')
   })
 
+  it('preserves the code panel tab across restarts', () => {
+    expect(normalizeRightSidebarTab('code')).toBe('code')
+  })
+
   it('preserves well-formed plugin panel tabs', () => {
     expect(normalizeRightSidebarTab('plugin:orca-samples.my-plugin/dashboard')).toBe(
       'plugin:orca-samples.my-plugin/dashboard'
