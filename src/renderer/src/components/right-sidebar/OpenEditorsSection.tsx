@@ -4,7 +4,7 @@ import { SortableContext, useSortable } from '@dnd-kit/sortable'
 import { useAppStore } from '@/store'
 import { ChevronDown, ChevronRight, Pin, PinOff, X } from 'lucide-react'
 import type { OpenFile } from '@/store/slices/editor'
-import type { Tab } from '../../../shared/types'
+import type { Tab } from '../../../../shared/types'
 import { basename } from '@/lib/path'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
