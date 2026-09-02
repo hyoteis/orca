@@ -67,6 +67,7 @@ import { installMonacoE2EProbe } from './monaco-e2e-probe'
 import { monacoFindOptions } from './monaco-find-options'
 import { matchesPendingEditorFocusRequest } from './pending-editor-focus-request'
 import { registerCppMonacoDocument } from '@/lib/language-server/cpp-monaco-language-features'
+import { registerPythonMonacoDocument } from '@/lib/language-server/python-monaco-language-features'
 
 type MonacoEditorProps = {
   fileId: string
@@ -383,8 +384,8 @@ export default function MonacoEditor({
       }
 
       setupCopy(editorInstance, monaco, filePath, propsRef)
-      const unregisterCppMonacoDocument = worktreeId
-        ? registerCppMonacoDocument(monaco, editorInstance, (position) => ({
+      const codeIntelligenceRequestAt = worktreeId
+        ? (position: { lineNumber: number; column: number }) => ({
             fileId,
             filePath,
             relativePath: propsRef.current.relativePath,
@@ -394,7 +395,13 @@ export default function MonacoEditor({
             documentVersion: editorInstance.getModel()?.getVersionId() ?? 1,
             lineNumber: position.lineNumber,
             column: position.column
-          }))
+          })
+        : null
+      const unregisterCppMonacoDocument = codeIntelligenceRequestAt
+        ? registerCppMonacoDocument(monaco, editorInstance, codeIntelligenceRequestAt)
+        : () => undefined
+      const unregisterPythonMonacoDocument = codeIntelligenceRequestAt
+        ? registerPythonMonacoDocument(monaco, editorInstance, codeIntelligenceRequestAt)
         : () => undefined
       unregisterFileSearchSelectionRef.current?.()
       unregisterFileSearchSelectionRef.current = registerFileSearchSelectedTextProvider(() => {
@@ -532,6 +539,7 @@ export default function MonacoEditor({
         scrollStateSub.dispose()
         gutterMouseDownSub.dispose()
         unregisterCppMonacoDocument()
+        unregisterPythonMonacoDocument()
         cleanupSaveShortcut()
         cleanupFindShortcut()
         cleanupAddReviewNoteShortcut()

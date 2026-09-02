@@ -15,13 +15,15 @@ import {
   type LanguageServerClientKey
 } from './language-server-client-registry'
 import { toServerFileUri } from './language-server-document-uri'
+import { cacheRequest, requestCacheKey } from './navigation-request-cache'
 import { definitionTargets, type CppDefinitionTarget } from './cpp-definition-locations'
 import {
   fileUriToHostPath,
   findCppCodeIntelligenceScope,
   CPP_LANGUAGES,
   openCppDefinitionTargetInWorkspace,
-  relativeToRoot
+  relativeToRoot,
+  type CodeIntelligenceDocumentRequest
 } from './cpp-code-intelligence-workspace'
 import {
   CPP_SEMANTIC_TOKEN_MODIFIERS,
@@ -29,17 +31,7 @@ import {
   remapCppSemanticTokenData
 } from './cpp-semantic-token-mapping'
 
-export type CppCodeIntelligenceRequest = {
-  fileId: string
-  filePath: string
-  relativePath: string
-  worktreeId: string
-  language: string
-  text: string
-  documentVersion: number
-  lineNumber: number
-  column: number
-}
+export type CppCodeIntelligenceRequest = CodeIntelligenceDocumentRequest
 
 type OpenClient = Awaited<ReturnType<LanguageServerClientRegistry['open']>>
 type ActiveClient = {
@@ -204,39 +196,6 @@ class CppCodeIntelligence {
 const definitionCache = new Map<string, Promise<CppDefinitionTarget | null>>()
 const hoverCache = new Map<string, Promise<Hover | null>>()
 const semanticTokenCache = new Map<string, Promise<Uint32Array | null>>()
-
-function cacheRequest<T>(
-  cache: Map<string, Promise<T>>,
-  key: string,
-  load: () => Promise<T>,
-  limit: number
-): Promise<T> {
-  const cached = cache.get(key)
-  if (cached) {
-    return cached
-  }
-  const request = load().catch((error) => {
-    if (cache.get(key) === request) {
-      cache.delete(key)
-    }
-    throw error
-  })
-  cache.set(key, request)
-  while (cache.size > limit) {
-    const oldest = cache.keys().next().value
-    if (oldest) {
-      cache.delete(oldest)
-    } else {
-      break
-    }
-  }
-  return request
-}
-
-function requestCacheKey(request: CppCodeIntelligenceRequest, position: boolean): string {
-  const base = `${request.worktreeId}:${request.filePath}:${request.documentVersion}`
-  return position ? `${base}:${request.lineNumber}:${request.column}` : base
-}
 
 let codeIntelligence: CppCodeIntelligence | null = null
 

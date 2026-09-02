@@ -37,6 +37,9 @@ vi.mock('@/store', () => ({
 vi.mock('@/lib/language-server/cpp-monaco-language-features', () => ({
   registerCppMonacoDocument: vi.fn(() => vi.fn())
 }))
+vi.mock('@/lib/language-server/python-monaco-language-features', () => ({
+  registerPythonMonacoDocument: vi.fn(() => vi.fn())
+}))
 vi.mock('../diff-comments/useDiffCommentDecorator', () => ({
   useDiffCommentDecorator: vi.fn()
 }))
