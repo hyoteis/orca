@@ -14786,6 +14786,7 @@
           "addFolderConfirm": "Add",
           "addFolderCppScope": "C++ scope",
           "addFolderDescription": "Pick a folder from the workspace tree, or enter an absolute Host path outside the workspace.",
+          "addFolderFailed": "Could not add this folder",
           "addFolderPythonAbsolute": "Python code folders must stay relative to the workspace",
           "addFolderPythonOnlyRelative": "Python accepts workspace-relative paths only.",
           "addFolderPythonScope": "Python scope",

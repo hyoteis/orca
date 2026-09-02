@@ -228,14 +228,16 @@ describe('CodePanel browsing', () => {
 })
 
 describe('CodePanel header', () => {
-  it('shows the active host label and a disabled Add Folder placeholder', () => {
+  it('shows the active host label and opens the add-folder picker from the header', () => {
     setupState({
       scopes: [scope({ executionHostId: 'ssh:my-host' })],
       worktreeHostId: 'ssh:my-host'
     })
     render(<CodePanel listDirectory={vi.fn()} />)
     const addFolder = screen.getByRole('button', { name: /Add Folder/ })
-    expect((addFolder as HTMLButtonElement).disabled).toBe(true)
+    expect((addFolder as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(addFolder)
+    expect(screen.getByText('Add Folder to Code Scopes')).toBeTruthy()
     expect(screen.getByText(/my-host/)).toBeTruthy()
   })
 })

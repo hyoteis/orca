@@ -46,6 +46,9 @@ import {
   type CodePanelMemberRow
 } from './code-panel-member-tree'
 import { readFileExplorerDirectory } from './file-explorer-directory-listing'
+import { CodePanelAddFolderDialog, type CodePanelAddFolderScopeSeed } from './CodePanelAddFolderDialog'
+import { useLazyDirectoryListing } from './use-lazy-directory-listing'
+import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
 
 const LANGUAGE_DISPLAY: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Python' }
 const LANGUAGE_BADGE: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Py' }
@@ -86,10 +89,6 @@ export function CodePanel({
   const repos = useAppStore((s) => s.repos)
   const folderWorkspaces = useAppStore((s) => s.folderWorkspaces)
   const worktreeMap = useWorktreeMap()
-  const [expandedDirs, setExpandedDirs] = useState<ReadonlySet<string>>(() => new Set())
-  const [pendingDirs, setPendingDirs] = useState<ReadonlySet<string>>(() => new Set())
-  const [entriesByDir, setEntriesByDir] = useState<Record<string, DirEntry[]>>({})
-  const [errorByDir, setErrorByDir] = useState<Record<string, string>>({})
 
   const activeWorktree = activeWorktreeId ? (worktreeMap.get(activeWorktreeId) ?? null) : null
   const folderWorkspace = useMemo(() => {
@@ -162,48 +161,23 @@ export function CodePanel({
     [activeWorktreeId, effectiveWorktree]
   )
   const list = listDirectory ?? defaultListDirectory
+  const { expandedDirs, pendingDirs, entriesByDir, errorByDir, toggleDir } =
+    useLazyDirectoryListing(list)
 
-  const toggleDir = useCallback(
-    (dirPath: string): void => {
-      setExpandedDirs((current) => {
-        const next = new Set(current)
-        if (next.has(dirPath)) {
-          next.delete(dirPath)
-        } else {
-          next.add(dirPath)
-        }
-        return next
-      })
-      if (entriesByDir[dirPath] === undefined && !pendingDirs.has(dirPath)) {
-        setPendingDirs((current) => new Set(current).add(dirPath))
-        void list(dirPath)
-          .then((entries) => {
-            setEntriesByDir((current) => ({ ...current, [dirPath]: entries }))
-            setErrorByDir((current) => {
-              const { [dirPath]: _dropped, ...rest } = current
-              return rest
-            })
-          })
-          .catch(() => {
-            setErrorByDir((current) => ({
-              ...current,
-              [dirPath]: translate(
-                'auto.components.rightSidebar.CodePanel.listFailed',
-                'Could not list this folder'
-              )
-            }))
-          })
-          .finally(() => {
-            setPendingDirs((current) => {
-              const next = new Set(current)
-              next.delete(dirPath)
-              return next
-            })
-          })
-      }
-    },
-    [entriesByDir, list, pendingDirs]
-  )
+  const [addFolderOpen, setAddFolderOpen] = useState(false)
+  // Creation seed mirrors the status-bar scope lookup (repoId + folder flag).
+  const addFolderSeed: CodePanelAddFolderScopeSeed | null = useMemo(() => {
+    if (!activeWorktreeId || !effectiveWorktree || !activeRepo || !executionHostId) {
+      return null
+    }
+    return {
+      repoId: getRepoIdFromWorktreeId(activeWorktreeId),
+      repoName: activeRepo.displayName,
+      repoPath: effectiveWorktree.path,
+      isFolder: parseWorkspaceKey(activeWorktreeId)?.type === 'folder',
+      executionHostId
+    }
+  }, [activeWorktreeId, effectiveWorktree, activeRepo, executionHostId])
 
   const renderDirChildren = (dirPath: string, depth: number): React.JSX.Element[] | null => {
     if (!expandedDirs.has(dirPath)) {
@@ -351,8 +325,14 @@ export function CodePanel({
           </span>
         ) : null}
         <span className="flex-1" />
-        {/* Add Folder lands with the in-app tree picker (#71); placeholder only. */}
-        <Button type="button" variant="outline" size="xs" disabled className="gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="gap-1.5"
+          disabled={!addFolderSeed}
+          onClick={() => setAddFolderOpen(true)}
+        >
           <Plus className="size-3.5" />
           {translate('auto.components.rightSidebar.CodePanel.addFolder', 'Add Folder')}
         </Button>
@@ -375,6 +355,16 @@ export function CodePanel({
                     'Add a folder to create a C++ or Python scope.'
                   )}
                 </div>
+                <Button
+                  type="button"
+                  size="xs"
+                  className="gap-1.5"
+                  disabled={!addFolderSeed}
+                  onClick={() => setAddFolderOpen(true)}
+                >
+                  <Plus className="size-3.5" />
+                  {translate('auto.components.rightSidebar.CodePanel.addFolder', 'Add Folder')}
+                </Button>
               </div>
             )}
         {keptEmptyLanguages.map((language) => (
@@ -383,9 +373,22 @@ export function CodePanel({
             className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground"
           >
             <LanguageBadge language={language} />
-            {translate('auto.components.rightSidebar.CodePanel.scopeEmptyKept', '{{value0}} scope is empty — kept', {
-              value0: LANGUAGE_DISPLAY[language]
-            })}
+            <span className="min-w-0 flex-1 truncate">
+              {translate('auto.components.rightSidebar.CodePanel.scopeEmptyKept', '{{value0}} scope is empty — kept', {
+                value0: LANGUAGE_DISPLAY[language]
+              })}
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className="h-5 gap-1 px-1.5"
+              disabled={!addFolderSeed}
+              onClick={() => setAddFolderOpen(true)}
+            >
+              <Plus className="size-3" />
+              {translate('auto.components.rightSidebar.CodePanel.addFolder', 'Add Folder')}
+            </Button>
           </div>
         ))}
         {pendingDirs.size > 0 ? (
@@ -395,6 +398,15 @@ export function CodePanel({
           </div>
         ) : null}
       </div>
+      {addFolderSeed && addFolderOpen ? (
+        <CodePanelAddFolderDialog
+          onOpenChange={setAddFolderOpen}
+          scopes={scopes}
+          scopeSeed={addFolderSeed}
+          workspaceRootPath={addFolderSeed.repoPath}
+          listDirectory={list}
+        />
+      ) : null}
     </div>
   )
 }
