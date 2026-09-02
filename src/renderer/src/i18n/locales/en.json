@@ -14783,6 +14783,7 @@
       },
       "rightSidebar": {
         "CodePanel": {
+          "addAsProject": "Add Folder as Project",
           "addFolder": "Add Folder",
           "addFolderConfirm": "Add",
           "addFolderCppScope": "C++ scope",
@@ -14792,6 +14793,9 @@
           "addFolderPythonOnlyRelative": "Python accepts workspace-relative paths only.",
           "addFolderPythonScope": "Python scope",
           "addFolderTitle": "Add Folder to Code Scopes",
+          "bridgedInfo": "Code folders come from the linked project {{value0}}; changes here write back to it.",
+          "notProjectCopy": "Code folders follow the project. Add this folder as a project to configure C++ / Python indexing here.",
+          "notProjectTitle": "This folder is not a project yet",
           "browseBlocked": "Authorize code intelligence to browse this folder",
           "configureCode": "Configure Code…",
           "emptyCopy": "Add a folder to create a C++ or Python scope.",

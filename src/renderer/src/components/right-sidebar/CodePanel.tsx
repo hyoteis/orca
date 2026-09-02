@@ -2,9 +2,8 @@ import React, { useCallback, useMemo, useState } from 'react'
 import {
   ChevronRight,
   ExternalLink,
-  Folder,
   FolderInput,
-  FolderOpen,
+  Link,
   Ghost,
   Loader2,
   Plus,
@@ -24,17 +23,22 @@ import { useAppStore } from '@/store'
 import { useWorktreeMap } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
-import { joinPath } from '@/lib/path'
 import {
   isLocalPathOpenBlocked,
   showLocalPathOpenBlockedToast
 } from '@/lib/local-path-open-guard'
 import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import type { DirEntry, Worktree } from '../../../../shared/types'
-import type {
-  CodeIntelligenceLanguage
-} from '../../../../shared/code-intelligence-scope'
-import { getExecutionHostLabel, getWorktreeExecutionHostId } from '../../../../shared/execution-host'
+import {
+  getExecutionHostLabel,
+  getWorktreeExecutionHostId,
+  parseExecutionHostId
+} from '../../../../shared/execution-host'
+import {
+  findFolderWorkspaceLinkedRepo,
+  getFolderWorkspaceExecutionHostId
+} from '../../../../shared/folder-workspace-repo-link'
+import { isFolderRepo } from '../../../../shared/repo-kind'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getStatusBarCodeIntelligenceScopes } from '../status-bar/code-intelligence-status-scopes'
@@ -46,12 +50,17 @@ import {
   type CodePanelMemberRow
 } from './code-panel-member-tree'
 import { readFileExplorerDirectory } from './file-explorer-directory-listing'
+import { openCodePanelFile } from './code-panel-open-file'
+import { LANGUAGE_DISPLAY, LanguageBadge } from './code-panel-language-badge'
+import {
+  FolderBridgeInfoLine,
+  FolderNotProjectEmptyState
+} from './code-panel-folder-bridge-state'
+import { CodePanelDirChildren } from './code-panel-dir-children'
 import { CodePanelAddFolderDialog, type CodePanelAddFolderScopeSeed } from './CodePanelAddFolderDialog'
 import { useLazyDirectoryListing } from './use-lazy-directory-listing'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
 
-const LANGUAGE_DISPLAY: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Python' }
-const LANGUAGE_BADGE: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Py' }
 
 function stopRightButtonMenuSelection(event: React.PointerEvent): void {
   if (event.button !== 2) {
@@ -60,21 +69,6 @@ function stopRightButtonMenuSelection(event: React.PointerEvent): void {
   // Why: Radix opens context menus under the pointer; on some macOS/Electron
   // paths the right-button release lands on the first item and selects it.
   event.preventDefault()
-}
-
-function LanguageBadge({ language }: { language: CodeIntelligenceLanguage }): React.JSX.Element {
-  return (
-    <span
-      className={cn(
-        'inline-flex h-[15px] shrink-0 items-center rounded-full px-1.5 text-[11px] font-semibold leading-none',
-        language === 'cpp'
-          ? 'border border-border bg-secondary text-secondary-foreground'
-          : 'border border-dashed border-border text-muted-foreground'
-      )}
-    >
-      {LANGUAGE_BADGE[language]}
-    </span>
-  )
 }
 
 export type CodePanelDirectoryLister = (dirPath: string) => Promise<DirEntry[]>
@@ -98,6 +92,12 @@ export function CodePanel({
         null)
       : null
   }, [activeWorktreeId, folderWorkspaces])
+  // #72 variant A: folder sessions read/write the same-path folder repo's scopes.
+  const linkedFolderRepo = useMemo(
+    () => (folderWorkspace ? findFolderWorkspaceLinkedRepo(folderWorkspace, repos) : null),
+    [folderWorkspace, repos]
+  )
+  const bridged = folderWorkspace !== null && linkedFolderRepo !== null
   // Folder workspaces unify through the same Worktree host precedence as the sidebar.
   const effectiveWorktree: Worktree | null =
     activeWorktree ?? (folderWorkspace ? folderWorkspaceToWorktree(folderWorkspace) : null)
@@ -108,8 +108,15 @@ export function CodePanel({
     ? getWorktreeExecutionHostId(effectiveWorktree, activeRepo)
     : null
   const scopes = useMemo(
-    () => getStatusBarCodeIntelligenceScopes({ settings, activeWorktreeId, executionHostId }),
-    [settings, activeWorktreeId, executionHostId]
+    () =>
+      getStatusBarCodeIntelligenceScopes({
+        settings,
+        activeWorktreeId,
+        executionHostId,
+        folderWorkspaces,
+        repos
+      }),
+    [settings, activeWorktreeId, executionHostId, folderWorkspaces, repos]
   )
   const rows = useMemo(() => buildCodePanelMemberRows(scopes), [scopes])
   const keptEmptyLanguages = useMemo(() => getCodePanelKeptEmptyLanguages(scopes), [scopes])
@@ -123,16 +130,42 @@ export function CodePanel({
   }, [scopes])
 
   const handleOpenAsWorkspace = (row: CodePanelMemberRow): void => {
-    if (!activeRepo) {
+    if (!seedSourceRepo) {
       return
     }
     openModal(
       'confirm-add-project-from-folder',
-      buildAddProjectFromFolderModalData({ path: row.directory }, activeRepo)
+      buildAddProjectFromFolderModalData({ path: row.directory }, seedSourceRepo)
     )
   }
+  const handleAddWorkspaceFolderAsProject = (): void => {
+    if (!folderWorkspace) {
+      return
+    }
+    const host = parseExecutionHostId(getFolderWorkspaceExecutionHostId(folderWorkspace))
+    openModal(
+      'confirm-add-project-from-folder',
+      host?.kind === 'ssh'
+        ? { folderPath: folderWorkspace.folderPath, connectionId: host.targetId }
+        : {
+            folderPath: folderWorkspace.folderPath,
+            runtimeEnvironmentId: host?.kind === 'runtime' ? host.environmentId : null
+          }
+    )
+  }
+  const handleOpenFile = (filePath: string, fileName: string): void => {
+    if (!activeWorktreeId || !effectiveWorktree) {
+      return
+    }
+    openCodePanelFile({
+      filePath,
+      fileName,
+      activeWorktreeId,
+      workspaceRootPath: effectiveWorktree.path
+    })
+  }
   const handleReveal = (row: CodePanelMemberRow): void => {
-    if (isLocalPathOpenBlocked(settings, { connectionId: activeRepo?.connectionId ?? null })) {
+    if (isLocalPathOpenBlocked(settings, { connectionId: seedSourceRepo?.connectionId ?? null })) {
       showLocalPathOpenBlockedToast()
       return
     }
@@ -161,83 +194,24 @@ export function CodePanel({
     [activeWorktreeId, effectiveWorktree]
   )
   const list = listDirectory ?? defaultListDirectory
-  const { expandedDirs, pendingDirs, entriesByDir, errorByDir, toggleDir } =
-    useLazyDirectoryListing(list)
+  const listing = useLazyDirectoryListing(list)
+  const { expandedDirs, pendingDirs, toggleDir } = listing
 
   const [addFolderOpen, setAddFolderOpen] = useState(false)
+  const seedSourceRepo = activeRepo ?? linkedFolderRepo
   // Creation seed mirrors the status-bar scope lookup (repoId + folder flag).
   const addFolderSeed: CodePanelAddFolderScopeSeed | null = useMemo(() => {
-    if (!activeWorktreeId || !effectiveWorktree || !activeRepo || !executionHostId) {
+    if (!activeWorktreeId || !effectiveWorktree || !seedSourceRepo || !executionHostId) {
       return null
     }
     return {
-      repoId: getRepoIdFromWorktreeId(activeWorktreeId),
-      repoName: activeRepo.displayName,
-      repoPath: effectiveWorktree.path,
-      isFolder: parseWorkspaceKey(activeWorktreeId)?.type === 'folder',
+      repoId: bridged ? seedSourceRepo.id : getRepoIdFromWorktreeId(activeWorktreeId),
+      repoName: seedSourceRepo.displayName,
+      repoPath: bridged ? seedSourceRepo.path : effectiveWorktree.path,
+      isFolder: isFolderRepo(seedSourceRepo),
       executionHostId
     }
-  }, [activeWorktreeId, effectiveWorktree, activeRepo, executionHostId])
-
-  const renderDirChildren = (dirPath: string, depth: number): React.JSX.Element[] | null => {
-    if (!expandedDirs.has(dirPath)) {
-      return null
-    }
-    const entries = entriesByDir[dirPath]
-    if (!entries) {
-      const error = errorByDir[dirPath]
-      return error
-        ? [
-            <div
-              key={`${dirPath}\0error`}
-              className="px-2 py-1 pl-3 text-[11px] text-muted-foreground"
-            >
-              {error}
-            </div>
-          ]
-        : null
-    }
-    return entries.map((entry) => {
-      const childPath = joinPath(dirPath, entry.name)
-      if (!entry.isDirectory) {
-        return (
-          <div
-            key={childPath}
-            className="flex h-[24px] items-center gap-1.5 font-mono text-xs text-foreground"
-            style={{ paddingLeft: `${depth * 14 + 22}px` }}
-          >
-            <span className="size-3 shrink-0" />
-            <span className="truncate">{entry.name}</span>
-          </div>
-        )
-      }
-      const expanded = expandedDirs.has(childPath)
-      return (
-        <React.Fragment key={childPath}>
-          <button
-            type="button"
-            className="flex h-[24px] w-full items-center gap-1.5 text-left font-mono text-xs text-foreground hover:bg-accent"
-            style={{ paddingLeft: `${depth * 14 + 8}px` }}
-            onClick={() => toggleDir(childPath)}
-          >
-            <ChevronRight
-              className={cn(
-                'size-3 shrink-0 text-muted-foreground transition-transform',
-                expanded && 'rotate-90'
-              )}
-            />
-            {expanded ? (
-              <FolderOpen className="size-3 shrink-0 text-muted-foreground" />
-            ) : (
-              <Folder className="size-3 shrink-0 text-muted-foreground" />
-            )}
-            <span className="truncate">{entry.name}</span>
-          </button>
-          {renderDirChildren(childPath, depth + 1)}
-        </React.Fragment>
-      )
-    })
-  }
+  }, [activeWorktreeId, effectiveWorktree, seedSourceRepo, executionHostId, bridged])
 
   const renderMemberRow = (row: CodePanelMemberRow): React.JSX.Element => {
     const dirPath = row.directory
@@ -303,7 +277,7 @@ export function CodePanel({
             {translate('auto.components.rightSidebar.CodePanel.remove', 'Remove')}
           </ContextMenuItem>
         </ContextMenuContent>
-        {renderDirChildren(dirPath, 1)}
+        <CodePanelDirChildren dirPath={dirPath} depth={1} listing={listing} onOpenFile={handleOpenFile} />
       </ContextMenu>
     )
   }
@@ -324,6 +298,19 @@ export function CodePanel({
             {hostLabel}
           </span>
         ) : null}
+        {linkedFolderRepo ? (
+          <span
+            className="flex max-w-[11rem] items-center gap-1 truncate rounded-full border border-dashed border-border px-2 py-0.5 text-[11px] text-muted-foreground"
+            title={translate(
+              'auto.components.rightSidebar.CodePanel.bridgedInfo',
+              'Code folders come from the linked project {{value0}}; changes here write back to it.',
+              { value0: linkedFolderRepo.displayName }
+            )}
+          >
+            <Link className="size-3 shrink-0" />
+            <span className="truncate">{linkedFolderRepo.displayName}</span>
+          </span>
+        ) : null}
         <span className="flex-1" />
         <Button
           type="button"
@@ -338,9 +325,12 @@ export function CodePanel({
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek py-1">
+        {bridged ? <FolderBridgeInfoLine repoName={linkedFolderRepo?.displayName ?? ''} /> : null}
         {rows.length > 0
           ? rows.map(renderMemberRow)
-          : scopes.length === 0 && (
+          : folderWorkspace && !linkedFolderRepo
+            ? <FolderNotProjectEmptyState onAddAsProject={handleAddWorkspaceFolderAsProject} />
+            : scopes.length === 0 && (
               <div className="flex flex-col items-center justify-center gap-2.5 px-4 py-7 text-center">
                 <Ghost className="size-7 text-muted-foreground/60" />
                 <div className="text-[13px] text-foreground">

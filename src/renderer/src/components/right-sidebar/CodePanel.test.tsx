@@ -10,8 +10,9 @@ const mockState = vi.hoisted(() => ({
   activeWorktreeId: 'repo-1::/ws/repo-1' as string | null,
   repos: [] as Repo[],
   worktreesByRepo: {} as Record<string, Worktree[]>,
-  folderWorkspaces: [],
+  folderWorkspaces: [] as unknown[],
   openModal: vi.fn(),
+  openFile: vi.fn(),
   fetchSettings: vi.fn()
 }))
 
@@ -86,29 +87,39 @@ const file = (name: string): DirEntry => ({ name, isDirectory: false, isSymlink:
 function setupState({
   scopes = [scope({})],
   worktreeHostId = 'local',
-  repos = [{ id: 'repo-1' } as unknown as Repo]
+  repos = [{ id: 'repo-1' } as unknown as Repo],
+  activeWorktreeId,
+  folderWorkspaces = []
 }: {
   scopes?: CodeIntelligenceScope[]
   worktreeHostId?: string
   repos?: Repo[]
+  activeWorktreeId?: string
+  folderWorkspaces?: unknown[]
 } = {}): void {
   mockState.settings = { codeIntelligenceScopes: scopes } as unknown as GlobalSettings
   mockState.repos = repos
-  mockState.worktreesByRepo = {
-    'repo-1': [
-      {
-        id: 'repo-1::/ws/repo-1',
-        repoId: 'repo-1',
-        hostId: worktreeHostId,
-        path: '/ws/repo-1'
-      } as unknown as Worktree
-    ]
-  }
+  mockState.activeWorktreeId = activeWorktreeId ?? 'repo-1::/ws/repo-1'
+  mockState.folderWorkspaces = folderWorkspaces
+  mockState.worktreesByRepo =
+    activeWorktreeId?.startsWith('folder:')
+      ? {}
+      : {
+          'repo-1': [
+            {
+              id: 'repo-1::/ws/repo-1',
+              repoId: 'repo-1',
+              hostId: worktreeHostId,
+              path: '/ws/repo-1'
+            } as unknown as Worktree
+          ]
+        }
 }
 
 beforeEach(() => {
   mockState.folderWorkspaces = []
   mockState.openModal.mockReset()
+  mockState.openFile.mockReset()
   mockState.fetchSettings.mockReset()
   windowApi.codeIntelligence.upsertScope.mockReset().mockResolvedValue({})
   windowApi.shell.openPath.mockReset().mockResolvedValue(undefined)
@@ -211,6 +222,23 @@ describe('CodePanel browsing', () => {
     expect(screen.getByText('main.cpp')).toBeTruthy()
   })
 
+  it('opens a file row through the editor open path', async () => {
+    const listDirectory = vi.fn().mockResolvedValue([dir('include'), file('main.cpp')])
+    setupState()
+    render(<CodePanel listDirectory={listDirectory} />)
+    fireEvent.click(screen.getByRole('button', { name: /src/ }))
+    const fileRow = await screen.findByRole('button', { name: 'main.cpp' })
+    fireEvent.click(fileRow)
+    expect(mockState.openFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePath: '/ws/repo-1/src/main.cpp',
+        worktreeId: 'repo-1::/ws/repo-1',
+        mode: 'edit'
+      }),
+      expect.objectContaining({ preview: true, focusEditor: true })
+    )
+  })
+
   it('expands a nested directory row on click', async () => {
     const listDirectory = vi
       .fn()
@@ -239,6 +267,106 @@ describe('CodePanel header', () => {
     fireEvent.click(addFolder)
     expect(screen.getByText('Add Folder to Code Scopes')).toBeTruthy()
     expect(screen.getByText(/my-host/)).toBeTruthy()
+  })
+})
+
+describe('CodePanel folder workspace bridging', () => {
+  const FOLDER_REPO = {
+    id: 'repo-1',
+    kind: 'folder',
+    path: '/ws/repo-1',
+    displayName: 'DiligentEngine',
+    connectionId: undefined
+  } as unknown as Repo
+  const FOLDER_WS = {
+    id: 'fw-1',
+    projectGroupId: 'pg-1',
+    name: 'ws',
+    folderPath: '/ws/repo-1',
+    connectionId: undefined,
+    executionHostId: undefined
+  } as unknown as Record<string, unknown>
+
+  it('renders the linked project scopes with a provenance chip and info line', () => {
+    setupState({
+      activeWorktreeId: 'folder:fw-1',
+      folderWorkspaces: [FOLDER_WS],
+      repos: [FOLDER_REPO],
+      scopes: [
+        scope({
+          id: 'local:folder:repo-1:cpp',
+          workspaceKey: 'folder:repo-1'
+        })
+      ]
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
+    expect(screen.getAllByText(/DiligentEngine/)).toHaveLength(2)
+    expect(screen.getByText(/linked project/)).toBeTruthy()
+  })
+
+  it('shows the add-as-project empty state when no folder repo is linked', () => {
+    setupState({
+      activeWorktreeId: 'folder:fw-1',
+      folderWorkspaces: [FOLDER_WS],
+      repos: [],
+      scopes: []
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    expect(screen.getByText('This folder is not a project yet')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Add Folder as Project/ }))
+    expect(mockState.openModal).toHaveBeenCalledWith('confirm-add-project-from-folder', {
+      folderPath: '/ws/repo-1',
+      runtimeEnvironmentId: null
+    })
+  })
+
+  it('opens the add-folder picker from the bridged repo', () => {
+    setupState({
+      activeWorktreeId: 'folder:fw-1',
+      folderWorkspaces: [FOLDER_WS],
+      repos: [FOLDER_REPO],
+      scopes: [
+        scope({
+          id: 'local:folder:repo-1:cpp',
+          workspaceKey: 'folder:repo-1'
+        })
+      ]
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    const addFolder = screen.getByRole('button', { name: /Add Folder/ })
+    expect((addFolder as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(addFolder)
+    expect(screen.getByText('Add Folder to Code Scopes')).toBeTruthy()
+  })
+
+  it('refuses reveal for a bridged ssh workspace', async () => {
+    const { toast } = await import('sonner')
+    setupState({
+      activeWorktreeId: 'folder:fw-1',
+      folderWorkspaces: [{ ...FOLDER_WS, connectionId: 'my-host' }],
+      repos: [
+        {
+          id: 'repo-1',
+          kind: 'folder',
+          path: '/ws/repo-1',
+          displayName: 'DiligentEngine',
+          connectionId: 'my-host'
+        } as unknown as Repo
+      ],
+      scopes: [
+        scope({
+          id: 'ssh:folder:repo-1:cpp',
+          workspaceKey: 'folder:repo-1',
+          executionHostId: 'ssh:my-host'
+        })
+      ]
+    })
+    render(<CodePanel listDirectory={vi.fn()} />)
+    fireEvent.contextMenu(screen.getByRole('button', { name: /src/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
+    expect(windowApi.shell.openPath).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalled()
   })
 })
 

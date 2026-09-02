@@ -18,6 +18,8 @@ import { SelectedTextCopyMenu } from '@/components/SelectedTextCopyMenu'
 import { useAppStore } from '@/store'
 import { useWorktreeMap } from '@/store/selectors'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
+import { getFolderWorkspaceExecutionHostId } from '../../../../shared/folder-workspace-repo-link'
+import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   countChangedCodeIntelligenceMembers,
@@ -42,6 +44,7 @@ type Props = { iconOnly: boolean }
 export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.Element | null {
   const settings = useAppStore((state) => state.settings)
   const repos = useAppStore((state) => state.repos)
+  const folderWorkspaces = useAppStore((state) => state.folderWorkspaces)
   const activeWorktreeId = useAppStore((state) => state.activeWorktreeId)
   const openModal = useAppStore((state) => state.openModal)
   const [open, setOpen] = useState(false)
@@ -50,12 +53,29 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
   const activeRepo = activeWorktree
     ? repos.find((repo) => repo.id === activeWorktree.repoId)
     : undefined
+  const folderWorkspace = useMemo(() => {
+    const parsed = activeWorktreeId ? parseWorkspaceKey(activeWorktreeId) : null
+    return parsed?.type === 'folder'
+      ? (folderWorkspaces.find(
+          (candidate) => folderWorkspaceKey(candidate.id) === activeWorktreeId
+        ) ?? null)
+      : null
+  }, [activeWorktreeId, folderWorkspaces])
   const executionHostId = activeWorktree
     ? getWorktreeExecutionHostId(activeWorktree, activeRepo)
-    : null
+    : folderWorkspace
+      ? getFolderWorkspaceExecutionHostId(folderWorkspace)
+      : null
   const scopes = useMemo(
-    () => getStatusBarCodeIntelligenceScopes({ settings, activeWorktreeId, executionHostId }),
-    [activeWorktreeId, executionHostId, settings]
+    () =>
+      getStatusBarCodeIntelligenceScopes({
+        settings,
+        activeWorktreeId,
+        executionHostId,
+        folderWorkspaces,
+        repos
+      }),
+    [activeWorktreeId, executionHostId, settings, folderWorkspaces, repos]
   )
   // All hooks must run before the empty-scopes early return below.
   const staleScopes = useMemo(() => scopes.filter(isCodeIntelligenceConsentStale), [scopes])

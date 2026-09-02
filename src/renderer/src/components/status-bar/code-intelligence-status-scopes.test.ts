@@ -37,7 +37,67 @@ const scopes: CodeIntelligenceScope[] = [
   }
 ]
 
+const FOLDER_WS = {
+  id: 'fw-1',
+  projectGroupId: 'pg-1',
+  name: 'workspace',
+  folderPath: 'D:/ws/folder',
+  connectionId: undefined,
+  executionHostId: undefined
+} as never
+
+const FOLDER_REPO = {
+  id: 'repo-9',
+  kind: 'folder',
+  path: 'D:/ws/folder',
+  displayName: 'folder',
+  connectionId: undefined,
+  executionHostId: undefined
+} as never
+
 describe('code intelligence status scopes', () => {
+  it('bridges folder workspace sessions to the linked folder repo scopes', () => {
+    const result = getStatusBarCodeIntelligenceScopes({
+      settings: {
+        codeIntelligenceScopes: [
+          {
+            ...scopes[0]!,
+            id: 'folder-cpp',
+            workspaceKey: 'folder:repo-9'
+          }
+        ]
+      } as never,
+      activeWorktreeId: 'folder:fw-1',
+      executionHostId: 'local',
+      folderWorkspaces: [FOLDER_WS],
+      repos: [FOLDER_REPO]
+    })
+
+    expect(result.map((scope) => scope.id)).toEqual(['folder-cpp'])
+  })
+
+  it('returns no scopes for folder sessions without a linked repo', () => {
+    const result = getStatusBarCodeIntelligenceScopes({
+      settings: { codeIntelligenceScopes: scopes } as never,
+      activeWorktreeId: 'folder:fw-1',
+      executionHostId: 'local',
+      folderWorkspaces: [FOLDER_WS],
+      repos: []
+    })
+
+    expect(result).toEqual([])
+  })
+
+  it('returns no scopes for folder sessions when bridging inputs are absent', () => {
+    const result = getStatusBarCodeIntelligenceScopes({
+      settings: { codeIntelligenceScopes: scopes } as never,
+      activeWorktreeId: 'folder:fw-1',
+      executionHostId: 'local'
+    })
+
+    expect(result).toEqual([])
+  })
+
   it('shows enabled scopes for the active repo and execution host', () => {
     const result = getStatusBarCodeIntelligenceScopes({
       settings: { codeIntelligenceScopes: scopes } as never,
