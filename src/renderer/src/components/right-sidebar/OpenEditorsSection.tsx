@@ -102,7 +102,11 @@ function SortableOpenEditorRow({
             <TooltipTrigger asChild>
               <span className="min-w-0 flex-1 truncate">
                 {fileName}
-                {uncommitted ? <span className="text-muted-foreground"> (diff)</span> : null}
+                {uncommitted ? (
+                  <span className="text-muted-foreground">
+                    {translate('auto.components.right.sidebar.OpenEditorsSection.diff', ' (diff)')}
+                  </span>
+                ) : null}
               </span>
             </TooltipTrigger>
             <TooltipContent side="left" sideOffset={6} className="max-w-80 break-all">

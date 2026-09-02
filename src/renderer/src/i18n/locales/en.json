@@ -12180,6 +12180,7 @@
             "title": "Open Editors",
             "closeEditor": "Close editor",
             "close": "Close",
+            "diff": " (diff)",
             "pin": "Pin",
             "unpin": "Unpin",
             "toggleSection": "Toggle Open Editors section"
