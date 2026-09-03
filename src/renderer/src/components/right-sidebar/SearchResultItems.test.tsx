@@ -62,15 +62,38 @@ function makeFile(overrides: Partial<SearchFileResult> = {}): SearchFileResult {
   }
 }
 
-function renderFileResultRow(fileResult: SearchFileResult): ReactElementLike {
+function renderFileResultRow(
+  fileResult: SearchFileResult,
+  inCodeScopeRange?: boolean
+): ReactElementLike {
   return FileResultRow({
     fileResult,
     collapsed: false,
+    inCodeScopeRange,
     onToggleCollapse: vi.fn()
   }) as unknown as ReactElementLike
 }
 
 describe('FileResultRow', () => {
+  it('renders the in-scope diamond only for marked worktree-range hits', () => {
+    const hasScopeDiamond = (node: unknown): boolean => {
+      let found = false
+      visit(node, (entry) => {
+        if (
+          typeof entry.type === 'string' &&
+          entry.type === 'span' &&
+          typeof entry.props.className === 'string' &&
+          entry.props.className.includes('bg-status-success')
+        ) {
+          found = true
+        }
+      })
+      return found
+    }
+    expect(hasScopeDiamond(renderFileResultRow(makeFile(), true))).toBe(true)
+    expect(hasScopeDiamond(renderFileResultRow(makeFile()))).toBe(false)
+  })
+
   it('renders omitted matchCount as the navigable match count', () => {
     expect(findBadgeText(findFileRowButton(renderFileResultRow(makeFile())))).toBe('2')
   })

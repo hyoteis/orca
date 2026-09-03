@@ -55,11 +55,13 @@ export function ToggleButton({
 export function FileResultRow({
   fileResult,
   onToggleCollapse,
-  collapsed
+  collapsed,
+  inCodeScopeRange
 }: {
   fileResult: SearchFileResult
   onToggleCollapse: () => void
   collapsed: boolean
+  inCodeScopeRange?: boolean
 }): React.JSX.Element {
   const fileName = basename(fileResult.relativePath)
   const parentDir = dirname(fileResult.relativePath)
@@ -96,6 +98,14 @@ export function FileResultRow({
                       )}
                     </span>
                   </div>
+                  {inCodeScopeRange && (
+                    /* Why: same diamond as FileExplorerRow (#73) — worktree-range
+                       hits that fall inside Code scope members. */
+                    <span
+                      aria-hidden="true"
+                      className="mr-0.5 size-1.5 shrink-0 rotate-45 rounded-[1px] bg-status-success"
+                    />
+                  )}
                   <span className="text-[10px] text-muted-foreground flex-shrink-0 bg-muted/80 rounded-full px-1.5">
                     {matchCount}
                   </span>

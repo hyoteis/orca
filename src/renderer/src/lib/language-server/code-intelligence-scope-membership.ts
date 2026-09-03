@@ -23,7 +23,7 @@ function normalizeCandidatePath(value: string): string | null {
   return normalized || '.'
 }
 
-function memberWorkspaceRelativePath(
+export function memberWorkspaceRelativePath(
   scope: CodeIntelligenceMemberScope,
   member: CodeIntelligenceScopeMember
 ): string | null {

@@ -46,6 +46,7 @@ import type {
   GitUpstreamStatus,
   ActiveRightSidebarTab,
   RightSidebarExplorerView,
+  FileSearchRange,
   SearchResult,
   WorkspaceSessionState,
   WorkspaceVisibleTabType
@@ -125,6 +126,7 @@ const DEFAULT_FILE_SEARCH_STATE = {
   useRegex: false,
   includePattern: '',
   excludePattern: '',
+  searchRange: 'worktree',
   results: null,
   resultOwner: null,
   loading: false,
@@ -732,6 +734,7 @@ export type EditorSlice = {
       useRegex: boolean
       includePattern: string
       excludePattern: string
+      searchRange: FileSearchRange
       results: SearchResult | null
       resultOwner: FileSearchResultOwner | null
       loading: boolean

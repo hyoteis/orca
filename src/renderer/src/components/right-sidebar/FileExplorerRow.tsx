@@ -292,6 +292,8 @@ type FileExplorerRowProps = {
   onAddFolderAsProject: () => void
   canAddAsProject: boolean
   codeIntelligenceScope?: CodeIntelligenceScope | null
+  /** Worktree-range ◆ marker hit (#82); independent of the membership menu. */
+  inCodeScopeRange?: boolean
   onToggleCodeIntelligenceMembers?: (paths: readonly string[], action: 'add' | 'remove') => void
   onOpenInTerminal: () => void
   onRequestDelete: () => void
@@ -509,6 +511,7 @@ export function FileExplorerRow({
   onAddFolderAsProject,
   canAddAsProject,
   codeIntelligenceScope = null,
+  inCodeScopeRange,
   onToggleCodeIntelligenceMembers,
   onOpenInTerminal,
   onRequestDelete,
@@ -540,7 +543,9 @@ export function FileExplorerRow({
       ? getCodeIntelligenceMembershipAction(codeIntelligenceScope, node.relativePath)
       : null
   const codeIntelligenceInScope =
-    codeIntelligenceAction === 'remove' || codeIntelligenceAction === 'disabled'
+    codeIntelligenceAction === 'remove' ||
+    codeIntelligenceAction === 'disabled' ||
+    Boolean(inCodeScopeRange)
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useFileExplorerRowDrag({
       rowDropDir,

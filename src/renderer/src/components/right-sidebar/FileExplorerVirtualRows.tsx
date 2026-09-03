@@ -42,6 +42,8 @@ type FileExplorerVirtualRowsProps = {
   onAddFolderAsProject: (node: TreeNode) => void
   canAddFolderAsProject: (node: TreeNode) => boolean
   codeIntelligenceScope?: CodeIntelligenceScope | null
+  /** Worktree-range ◆ marker predicate; absent while searching ◆ Scope. */
+  isPathInCodeScopeRange?: (relativePath: string) => boolean
   onToggleCodeIntelligenceMembers?: (paths: readonly string[], action: 'add' | 'remove') => void
   onOpenInTerminal: (node: TreeNode) => void
   onRequestDelete: (node: TreeNode) => void
@@ -91,6 +93,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
     onAddFolderAsProject,
     canAddFolderAsProject,
     codeIntelligenceScope = null,
+    isPathInCodeScopeRange,
     onToggleCodeIntelligenceMembers,
     onOpenInTerminal,
     onRequestDelete,
@@ -202,6 +205,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onAddFolderAsProject={() => onAddFolderAsProject(n)}
               canAddAsProject={canAddFolderAsProject(n)}
               codeIntelligenceScope={codeIntelligenceScope}
+              inCodeScopeRange={isPathInCodeScopeRange?.(n.relativePath)}
               onToggleCodeIntelligenceMembers={onToggleCodeIntelligenceMembers}
               onOpenInTerminal={() => onOpenInTerminal(n)}
               onRequestDelete={() => onRequestDelete(n)}

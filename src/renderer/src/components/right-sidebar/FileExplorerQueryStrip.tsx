@@ -5,12 +5,14 @@ import type { RightSidebarExplorerView } from '../../../../shared/types'
 type FileExplorerQueryStripProps = {
   view: RightSidebarExplorerView
   onSelectView: (view: RightSidebarExplorerView) => void
+  rangeSwitch?: React.ReactNode
   children: React.ReactNode
 }
 
 export function FileExplorerQueryStrip({
   view,
   onSelectView,
+  rangeSwitch,
   children
 }: FileExplorerQueryStripProps): React.JSX.Element {
   return (
@@ -19,7 +21,12 @@ export function FileExplorerQueryStrip({
          underneath so it reads as choosing the mode for the field above. */}
       <div className="flex flex-col gap-1">
         {children}
-        <FileExplorerViewSwitch view={view} onSelectView={onSelectView} />
+        <div className="flex items-center gap-1">
+          {rangeSwitch}
+          <div className="min-w-0 flex-1">
+            <FileExplorerViewSwitch view={view} onSelectView={onSelectView} />
+          </div>
+        </div>
       </div>
     </div>
   )

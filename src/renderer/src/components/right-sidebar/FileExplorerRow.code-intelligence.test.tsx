@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import { FileExplorerRow } from './FileExplorerRow'
@@ -32,7 +33,8 @@ const makeScope = (members: CodeIntelligenceScope['members']): CodeIntelligenceS
 function renderRow(
   scope: CodeIntelligenceScope | null,
   selectedPaths: ReadonlySet<string> = new Set(),
-  node: TreeNode = directory
+  node: TreeNode = directory,
+  extraProps: Partial<React.ComponentProps<typeof FileExplorerRow>> = {}
 ) {
   const onToggleCodeIntelligenceMembers = vi.fn()
   render(
@@ -64,6 +66,7 @@ function renderRow(
       onAddFolderAsProject={vi.fn()}
       canAddAsProject={false}
       codeIntelligenceScope={scope}
+      {...extraProps}
       onToggleCodeIntelligenceMembers={onToggleCodeIntelligenceMembers}
       onOpenInTerminal={vi.fn()}
       onRequestDelete={vi.fn()}
@@ -174,5 +177,17 @@ describe('FileExplorerRow in-scope row marker', () => {
     cleanup()
     renderRow(null)
     expect(screen.queryByTitle('In Code Intelligence')).toBeNull()
+  })
+
+  it('marks worktree-range find hits inside members without a cpp scope', () => {
+    const fileHit: TreeNode = {
+      ...directory,
+      name: 'app.py',
+      path: '/repo/engine/app.py',
+      relativePath: 'engine/app.py',
+      isDirectory: false
+    }
+    renderRow(null, new Set(), fileHit, { inCodeScopeRange: true })
+    expect(screen.getByTitle('In Code Intelligence')).toBeTruthy()
   })
 })

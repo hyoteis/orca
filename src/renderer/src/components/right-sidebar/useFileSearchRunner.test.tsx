@@ -2,6 +2,7 @@
 
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import type { SearchResult } from '../../../../shared/types'
 import { useFileSearchRunner } from './useFileSearchRunner'
 
@@ -160,6 +161,99 @@ describe('useFileSearchRunner result ownership', () => {
 
     expect(updates).toContainEqual({
       results: RESULTS,
+      resultOwner: { worktreeId, runtimeEnvironmentId: null }
+    })
+  })
+})
+
+describe('useFileSearchRunner scope range', () => {
+  const worktreeId = 'repo-a::/repo'
+  const codeScopes: CodeIntelligenceScope[] = [
+    {
+      id: 'local:worktree:repo-a:python',
+      name: 'Python',
+      executionHostId: 'local',
+      workspaceKey: 'worktree:repo-a',
+      workspaceRoot: '/repo',
+      language: 'python',
+      members: [{ path: 'engine/py', visibleResults: true }],
+      serverSource: { type: 'automatic' },
+      enabled: true,
+      revision: 1
+    }
+  ]
+  const mixedResults: SearchResult = {
+    files: [
+      {
+        filePath: '/repo/engine/py/app.py',
+        relativePath: 'engine/py/app.py',
+        matches: [
+          { line: 1, column: 1, matchLength: 5, lineContent: 'owner' },
+          { line: 2, column: 1, matchLength: 5, lineContent: 'owner' }
+        ]
+      },
+      {
+        filePath: '/repo/engine/fx/main.cpp',
+        relativePath: 'engine/fx/main.cpp',
+        matches: [{ line: 1, column: 1, matchLength: 5, lineContent: 'owner' }]
+      }
+    ],
+    totalMatches: 3,
+    truncated: false
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mocks.getConnectionId.mockReturnValue(null)
+    mocks.searchRuntimeFiles.mockResolvedValue(mixedResults)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  function renderScopeRangeRunner(searchRange: 'worktree' | 'scope') {
+    const updates: Record<string, unknown>[] = []
+    mocks.getState.mockImplementation(() => ({
+      settings: { activeRuntimeEnvironmentId: null },
+      repos: [],
+      worktreesByRepo: {},
+      fileSearchStateByWorktree: { [worktreeId]: { searchRange } }
+    }))
+    const hook = renderHook(() =>
+      useFileSearchRunner({
+        activeWorktreeId: worktreeId,
+        worktreePath: '/repo',
+        updateActiveSearchState: (update) => updates.push(update),
+        codeScopes
+      })
+    )
+    return { hook, updates }
+  }
+
+  it('filters contents results to member dirs and recomputes totals in scope range', async () => {
+    const { hook, updates } = renderScopeRangeRunner('scope')
+
+    await finishSearch(hook.result.current.executeSearch)
+
+    expect(updates).toContainEqual({
+      results: {
+        files: [mixedResults.files[0]],
+        totalMatches: 2,
+        truncated: false
+      },
+      resultOwner: { worktreeId, runtimeEnvironmentId: null }
+    })
+  })
+
+  it('keeps the whole searched tree in worktree range', async () => {
+    const { hook, updates } = renderScopeRangeRunner('worktree')
+
+    await finishSearch(hook.result.current.executeSearch)
+
+    expect(updates).toContainEqual({
+      results: mixedResults,
       resultOwner: { worktreeId, runtimeEnvironmentId: null }
     })
   })

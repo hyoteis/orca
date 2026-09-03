@@ -60,6 +60,12 @@ import { isRenameHotspotTarget, resolveDirToggleTiming } from './file-explorer-d
 import type { TreeNode } from './file-explorer-types'
 import { OpenEditorsSection } from './OpenEditorsSection'
 import { CodeScopesSection } from './CodeScopesSection'
+import { useCodeScopesSection } from './use-code-scopes-section'
+import { FileExplorerRangeSwitch } from './FileExplorerRangeSwitch'
+import {
+  filterRelativePathsByFileSearchScopeRange,
+  isRelativePathInFileSearchScopeRange
+} from './file-search-range'
 import { useFileExplorerSelection } from './useFileExplorerSelection'
 import { useFileExplorerVisibleRowProjection } from './useFileExplorerVisibleRowProjection'
 import { translate } from '@/i18n/i18n'
@@ -77,7 +83,9 @@ function FileExplorerFiles(): React.JSX.Element {
   const [nameFilterCollapsedPaths, setNameFilterCollapsedPaths] = useState<Set<string>>(
     () => new Set()
   )
-  const searchPanel = useFileSearchPanel(explorerView)
+  // One scope set drives the range switch, Names filtering, and ◆ markers.
+  const { scopes: codeScopes } = useCodeScopesSection()
+  const searchPanel = useFileSearchPanel(explorerView, codeScopes)
 
   const handleSelectExplorerView = useCallback(
     (view: RightSidebarExplorerView) => {
@@ -181,6 +189,14 @@ function FileExplorerFiles(): React.JSX.Element {
     enabled: hasNameFilter && !nameFilterQueryTooLarge,
     worktreeId: activeWorktreeId
   })
+  // Why: the panel already resolves the stored range against scope
+  // availability; reuse its effective value so Names never strands on 'scope'.
+  const effectiveSearchRange = searchPanel.rangeProps.range
+  const scopeRangeMembersAvailable = !searchPanel.rangeProps.scopeRangeUnavailable
+  const nameFilterCodeScopeRangeContains = useCallback(
+    (relativePath: string) => isRelativePathInFileSearchScopeRange(codeScopes, relativePath),
+    [codeScopes]
+  )
   const nameFilterSource = useMemo(
     () =>
       hasNameFilter
@@ -191,10 +207,14 @@ function FileExplorerFiles(): React.JSX.Element {
               ? []
               : nameFilterFiles.loading && nameFilterFiles.files.length === 0
                 ? null
-                : nameFilterFiles.files
+                : effectiveSearchRange === 'scope'
+                  ? filterRelativePathsByFileSearchScopeRange(nameFilterFiles.files, codeScopes)
+                  : nameFilterFiles.files
           }
         : null,
     [
+      codeScopes,
+      effectiveSearchRange,
       hasNameFilter,
       nameFilterFiles.files,
       nameFilterFiles.loading,
@@ -746,7 +766,11 @@ function FileExplorerFiles(): React.JSX.Element {
         />
         <OpenEditorsSection />
         <CodeScopesSection />
-        <FileExplorerQueryStrip view={explorerView} onSelectView={handleSelectExplorerView}>
+        <FileExplorerQueryStrip
+          view={explorerView}
+          onSelectView={handleSelectExplorerView}
+          rangeSwitch={<FileExplorerRangeSwitch {...searchPanel.rangeProps} />}
+        >
           {/* Why: keep both query rows mounted and cross-fade so the Names/Contents
              switch does not remount or shift when changing modes. */}
           <div className="relative min-h-7">
@@ -856,6 +880,11 @@ function FileExplorerFiles(): React.JSX.Element {
                 onAddFolderAsProject={handleAddFolderAsProject}
                 canAddFolderAsProject={(node) => canShowAddAsProjectAction(node, activeRepo)}
                 codeIntelligenceScope={cppCodeIntelligenceScope}
+                isPathInCodeScopeRange={
+                  hasNameFilter && effectiveSearchRange === 'worktree' && scopeRangeMembersAvailable
+                    ? nameFilterCodeScopeRangeContains
+                    : undefined
+                }
                 onToggleCodeIntelligenceMembers={handleToggleCodeIntelligenceMembers}
                 onOpenInTerminal={handleOpenInTerminal}
                 onRequestDelete={handleContextMenuDelete}

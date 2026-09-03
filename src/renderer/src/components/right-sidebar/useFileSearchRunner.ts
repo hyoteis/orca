@@ -10,8 +10,10 @@ import {
 } from '@/runtime/runtime-file-search-bounds'
 import { searchRuntimeFiles } from '@/runtime/runtime-file-client'
 import { useAppStore } from '@/store'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import type { SearchResult } from '../../../../shared/types'
 import { getRightSidebarWorktreeRuntimeSettings } from './file-explorer-runtime-owner'
+import { filterSearchResultsByFileSearchScopeRange } from './file-search-range'
 
 const SEARCH_DEBOUNCE_MS = 300
 const SEARCH_MAX_RESULTS = 2000
@@ -26,12 +28,15 @@ type UseFileSearchRunnerArgs = {
   activeWorktreeId: string | null
   worktreePath: string | null
   updateActiveSearchState: UpdateSearchState
+  /** Active-workspace Code scopes; drive the ◆ Scope range restriction. */
+  codeScopes?: readonly CodeIntelligenceScope[]
 }
 
 export function useFileSearchRunner({
   activeWorktreeId,
   worktreePath,
-  updateActiveSearchState
+  updateActiveSearchState,
+  codeScopes
 }: UseFileSearchRunnerArgs): {
   executeSearch: (query: string) => void
   cancelPendingSearch: () => void
@@ -131,8 +136,12 @@ export function useFileSearchRunner({
               maxResults: SEARCH_MAX_RESULTS
             }
           )
+          const scopedResults =
+            activeSearchState?.searchRange === 'scope' && codeScopes
+              ? filterSearchResultsByFileSearchScopeRange(results, codeScopes)
+              : results
           if (latestSearchIdRef.current === searchId) {
-            updateActiveSearchState({ results, resultOwner })
+            updateActiveSearchState({ results: scopedResults, resultOwner })
           }
         } catch (err) {
           console.error('Search failed:', err)
@@ -149,7 +158,7 @@ export function useFileSearchRunner({
         }
       }, SEARCH_DEBOUNCE_MS)
     },
-    [activeWorktreeId, updateActiveSearchState, worktreePath]
+    [activeWorktreeId, codeScopes, updateActiveSearchState, worktreePath]
   )
 
   useEffect(() => cancelPendingSearch, [cancelPendingSearch])

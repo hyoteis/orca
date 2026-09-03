@@ -3411,6 +3411,8 @@ export type RightSidebarTab =
   | `plugin:${string}`
 export type ActiveRightSidebarTab = Exclude<RightSidebarTab, 'search'>
 export type RightSidebarExplorerView = 'files' | 'search'
+/** Find-strip range (#77): worktree tree vs union of Code scope member dirs. */
+export type FileSearchRange = 'worktree' | 'scope'
 
 export type ProjectOrderBy = 'manual' | 'recent'
 export type WorkspaceHostScope = 'all' | 'local' | `ssh:${string}` | `runtime:${string}`

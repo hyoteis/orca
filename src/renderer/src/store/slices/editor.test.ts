@@ -348,6 +348,18 @@ describe('createEditorSlice right sidebar state', () => {
     })
   })
 
+  it('searchRange defaults to worktree and persists per worktree across Names and Contents', () => {
+    const store = createEditorStore()
+
+    store.getState().seedFileSearchQuery('wt-1', 'needle')
+    expect(store.getState().fileSearchStateByWorktree['wt-1']?.searchRange).toBe('worktree')
+
+    store.getState().updateFileSearchState('wt-1', { searchRange: 'scope' })
+    store.getState().seedFileSearchQuery('wt-2', 'other')
+    expect(store.getState().fileSearchStateByWorktree['wt-1']?.searchRange).toBe('scope')
+    expect(store.getState().fileSearchStateByWorktree['wt-2']?.searchRange).toBe('worktree')
+  })
+
   it('revealInExplorer selects explorer globally without writing a worktree entry', () => {
     const store = createEditorStore()
     const remembered = { 'wt-1': 'explorer' as const, 'wt-2': 'checks' as const }

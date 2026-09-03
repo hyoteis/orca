@@ -2,33 +2,23 @@ import type React from 'react'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef } from 'react'
 import { useAppStore } from '@/store'
 import { useActiveWorktree } from '@/store/selectors'
-import type { SearchFileResult, SearchMatch, SearchResult } from '../../../../shared/types'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import type { FileSearchRange, SearchFileResult, SearchMatch } from '../../../../shared/types'
 import { buildSearchRows } from './search-rows'
 import { cancelRevealFrame, openMatchResult } from './search-match-open'
-import type { SearchQueryRowProps } from './SearchQueryRow'
-import type { SearchFiltersProps } from './SearchFilters'
 import { useFileSearchRunner } from './useFileSearchRunner'
+import {
+  createWorktreeRangeMarkerPredicate,
+  hasFileSearchScopeRangeMembers
+} from './file-search-range'
+import type { FileSearchPanelModel } from './file-search-panel-model'
 
 const EMPTY_COLLAPSED_FILES = new Set<string>()
 
-export type FileSearchPanelModel = {
-  activeWorktreeId: string | null
-  queryRowProps: SearchQueryRowProps
-  filtersProps: SearchFiltersProps
-  resultsProps: {
-    results: SearchResult | null
-    hasCommittedResults: boolean
-    query: string
-    loading: boolean
-    rows: ReturnType<typeof buildSearchRows>
-    scrollRef: React.RefObject<HTMLDivElement | null>
-    onToggleCollapsedFile: (filePath: string) => void
-    onMatchClick: (fileResult: SearchFileResult, match: SearchMatch) => void
-  }
-  focusQueryInput: () => void
-}
-
-export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearchPanelModel {
+export function useFileSearchPanel(
+  explorerView: 'files' | 'search',
+  codeScopes: readonly CodeIntelligenceScope[] = []
+): FileSearchPanelModel {
   const activeWorktree = useActiveWorktree()
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const openFile = useAppStore((s) => s.openFile)
@@ -43,6 +33,7 @@ export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearch
   const fileSearchUseRegex = searchState?.useRegex ?? false
   const fileSearchIncludePattern = searchState?.includePattern ?? ''
   const fileSearchExcludePattern = searchState?.excludePattern ?? ''
+  const fileSearchRange = searchState?.searchRange ?? 'worktree'
   const fileSearchResults = searchState?.results ?? null
   const fileSearchResultOwner = searchState?.resultOwner ?? null
   const fileSearchLoading = searchState?.loading ?? false
@@ -91,10 +82,16 @@ export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearch
   )
 
   const worktreePath = activeWorktree?.path ?? null
+  const scopeRangeUnavailable = !hasFileSearchScopeRangeMembers(codeScopes)
+  // Why: a stored 'scope' choice must not strand find on an emptied scope —
+  // fall back to worktree until local members exist again (#77).
+  const effectiveSearchRange: FileSearchRange =
+    fileSearchRange === 'scope' && scopeRangeUnavailable ? 'worktree' : fileSearchRange
   const { executeSearch, cancelPendingSearch } = useFileSearchRunner({
     activeWorktreeId,
     worktreePath,
-    updateActiveSearchState
+    updateActiveSearchState,
+    codeScopes
   })
 
   const cancelSeededInputSelectionFrame = useCallback(() => {
@@ -236,8 +233,30 @@ export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearch
     [deferredSearchResults.owner, openFile, setPendingEditorReveal]
   )
 
+  const isFileInCodeScopeRange = createWorktreeRangeMarkerPredicate(
+    effectiveSearchRange,
+    scopeRangeUnavailable,
+    codeScopes
+  )
+
+  const handleSelectRange = useCallback(
+    (range: FileSearchRange) => {
+      if (!activeWorktreeId) {
+        return
+      }
+      updateFileSearchState(activeWorktreeId, { searchRange: range })
+      rerunSearch()
+    },
+    [activeWorktreeId, rerunSearch, updateFileSearchState]
+  )
+
   return {
     activeWorktreeId,
+    rangeProps: {
+      range: effectiveSearchRange,
+      scopeRangeUnavailable,
+      onSelectRange: handleSelectRange
+    },
     queryRowProps: {
       inputRef,
       query: fileSearchQuery,
@@ -283,7 +302,8 @@ export function useFileSearchPanel(explorerView: 'files' | 'search'): FileSearch
       rows: searchRows,
       scrollRef: resultsScrollRef,
       onToggleCollapsedFile: toggleActiveCollapsedFile,
-      onMatchClick: handleMatchClick
+      onMatchClick: handleMatchClick,
+      isFileInCodeScopeRange
     },
     focusQueryInput
   }

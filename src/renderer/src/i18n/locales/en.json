@@ -12043,6 +12043,12 @@
             "b3c8f1a902": "Filter files by name",
             "f8a2c4d1e0": "Explorer search mode"
           },
+          "FileExplorerRangeSwitch": {
+            "31bc25f7ec": "◆ Scope",
+            "43b9416a9a": "Explorer search range",
+            "67c5cb400e": "No Code scope members to search yet",
+            "c893ba3003": "Worktree"
+          },
           "GitHistoryCommitFiles": {
             "a1b2c3d4e5": "Loading files…",
             "b2c3d4e5f6": "No file changes in this commit",

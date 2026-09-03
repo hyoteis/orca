@@ -16,6 +16,8 @@ type SearchResultsPaneProps = {
   scrollRef: React.RefObject<HTMLDivElement | null>
   onToggleCollapsedFile: (filePath: string) => void
   onMatchClick: (fileResult: SearchFileResult, match: SearchMatch) => void
+  /** Worktree-range ◆ marker predicate; absent while searching ◆ Scope. */
+  isFileInCodeScopeRange?: (relativePath: string) => boolean
 }
 
 export function SearchResultsPane({
@@ -26,7 +28,8 @@ export function SearchResultsPane({
   rows,
   scrollRef,
   onToggleCollapsedFile,
-  onMatchClick
+  onMatchClick,
+  isFileInCodeScopeRange
 }: SearchResultsPaneProps): React.JSX.Element {
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -97,6 +100,7 @@ export function SearchResultsPane({
                     <FileResultRow
                       fileResult={row.fileResult}
                       collapsed={row.collapsed}
+                      inCodeScopeRange={isFileInCodeScopeRange?.(row.fileResult.relativePath)}
                       onToggleCollapse={() => onToggleCollapsedFile(row.fileResult.filePath)}
                     />
                   )}
