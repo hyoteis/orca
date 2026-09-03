@@ -93,6 +93,8 @@ docs/**
 !docs/assets/**
 !docs/readme/
 !docs/readme/**
+!docs/adr/
+!docs/adr/**
 !docs/STYLEGUIDE.md
 !docs/ai-vault-process-isolation-plan.md
 !docs/mobile-terminal-shortcut-bar.md
@@ -143,3 +145,9 @@ tests/tools/benchmarks/results/terminal-pipeline-*.json
 
 # Old release trees the cross-version wire harness extracts on demand
 tests/e2e/.cross-version-checkouts/
+
+# CodeGraph local index
+.codegraph/
+
+# Local scratch scripts
+output/
