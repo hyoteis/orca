@@ -5,7 +5,34 @@ import type {
   CodeIntelligenceLanguage,
   CodeIntelligenceScope
 } from '../../../../shared/code-intelligence-scope'
-import { isDocumentInCodeIntelligenceScope } from './code-intelligence-scope-membership'
+import {
+  isCodeIntelligenceResultVisible,
+  isDocumentInCodeIntelligenceScope
+} from './code-intelligence-scope-membership'
+import type { SymbolInformation, WorkspaceSymbol } from 'vscode-languageserver-protocol'
+
+/** Language-neutral workspace-symbol fan-out shape shared by Python and C++. */
+export type WorkspaceSymbolFanout = {
+  results: {
+    scopeId: string
+    scopeName: string
+    symbols: (SymbolInformation | WorkspaceSymbol)[]
+  }[]
+  /** True when at least one scope's request rejected (#13 partial labelling). */
+  partial: boolean
+}
+
+/** Positive visible-result allow-list (#12): only members marked visible surface. */
+export function visibleWorkspaceSymbols(
+  scope: CodeIntelligenceScope,
+  symbols: (SymbolInformation | WorkspaceSymbol)[]
+): (SymbolInformation | WorkspaceSymbol)[] {
+  return symbols.filter((symbol) => {
+    const path = fileUriToHostPath(symbol.location.uri, scope.executionHostId)
+    const relativePath = path ? relativeToRoot(path, scope.workspaceRoot) : null
+    return relativePath !== null && isCodeIntelligenceResultVisible(scope, relativePath)
+  })
+}
 
 export type CodeIntelligenceWorkspaceRequest = {
   filePath: string

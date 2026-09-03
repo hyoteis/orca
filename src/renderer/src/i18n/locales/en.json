@@ -67,6 +67,7 @@
       "noSemanticDefinition": "No definition found",
       "searchTextForSymbol": "Search text for symbol",
       "externalDependency": "External dependency",
+      "partialResults": "Partial",
       "statusSummary": "Code intelligence: {{value0}} folders",
       "statusTitle": "Code intelligence folders",
       "changeFailed": "Could not update code intelligence folders",
@@ -11030,7 +11031,18 @@
           },
           "SearchQueryRow": {
             "queryLabel": "Search files",
-            "clearLabel": "Clear search"
+            "clearLabel": "Clear search",
+            "symbolPlaceholder": "Search symbols",
+            "symbolMode": "Toggle workspace symbol search"
+          },
+          "SymbolSearchResults": {
+            "symbolCount": "{{value0}} symbols",
+            "typeToSearch": "Type to search workspace symbols",
+            "noSymbols": "No matching symbols",
+            "searchTextInstead": "Search text instead",
+            "partialEmpty": "Some scopes failed to answer",
+            "unresolvedLocation": "Symbol location unresolved",
+            "searching": "Searching symbols…"
           },
           "SearchResultItems": {
             "cc06595a3b": "Copy Line Path",

@@ -5,11 +5,14 @@ import {
   MarkupKind,
   SemanticTokensRequest,
   TokenFormat,
+  WorkspaceSymbolRequest,
+  type CancellationToken,
   type Hover,
   type InitializeParams,
   type SemanticTokensLegend
 } from 'vscode-languageserver-protocol'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import { useAppStore } from '@/store'
 import {
   LanguageServerClientRegistry,
   type LanguageServerClientKey
@@ -23,7 +26,9 @@ import {
   CPP_LANGUAGES,
   openCppDefinitionTargetInWorkspace,
   relativeToRoot,
-  type CodeIntelligenceDocumentRequest
+  visibleWorkspaceSymbols,
+  type CodeIntelligenceDocumentRequest,
+  type WorkspaceSymbolFanout
 } from './cpp-code-intelligence-workspace'
 import {
   CPP_SEMANTIC_TOKEN_MODIFIERS,
@@ -101,6 +106,50 @@ class CppCodeIntelligence {
       return null
     }
     return remapCppSemanticTokenData(result.data, semanticLegend)
+  }
+
+  /** #32 Command center fan-out over already-open clangd sessions (#13: no spawn). */
+  async searchWorkspaceSymbols(
+    query: string,
+    token?: CancellationToken
+  ): Promise<WorkspaceSymbolFanout> {
+    if (token?.isCancellationRequested || !query.trim()) {
+      return { results: [], partial: false }
+    }
+    const scopes = new Map(
+      (useAppStore.getState().settings?.codeIntelligenceScopes ?? []).map((scope) => [
+        scope.id,
+        scope
+      ])
+    )
+    const outcomes = await Promise.allSettled(
+      [...this.clients.entries()].map(async ([scopeId, active]) => {
+        const requestGeneration = this.registry.nextRequestGeneration(active.key)
+        const result = await active.client.connection.sendRequest(
+          WorkspaceSymbolRequest.type,
+          { query },
+          token
+        )
+        if (
+          token?.isCancellationRequested ||
+          !this.registry.isCurrentRequest(active.key, active.client.generation, requestGeneration)
+        ) {
+          return null
+        }
+        const scope = scopes.get(scopeId)
+        return {
+          scopeId,
+          scopeName: scope?.name ?? scopeId,
+          symbols: scope ? visibleWorkspaceSymbols(scope, result ?? []) : []
+        }
+      })
+    )
+    return {
+      results: outcomes.flatMap((outcome) =>
+        outcome.status === 'fulfilled' && outcome.value ? [outcome.value] : []
+      ),
+      partial: outcomes.some((outcome) => outcome.status === 'rejected')
+    }
   }
 
   private async prepareRequest(request: CppCodeIntelligenceRequest): Promise<{
@@ -240,4 +289,11 @@ export function openCppDefinitionTarget(
   target: CppDefinitionTarget
 ): boolean {
   return openCppDefinitionTargetInWorkspace(request, target)
+}
+
+export function searchCppWorkspaceSymbols(
+  query: string,
+  token?: CancellationToken
+): Promise<WorkspaceSymbolFanout> {
+  return service().searchWorkspaceSymbols(query, token)
 }

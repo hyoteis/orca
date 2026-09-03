@@ -11,11 +11,13 @@ import {
 export {
   fileUriToHostPath,
   relativeToRoot,
-  pathStartsWith
+  pathStartsWith,
+  visibleWorkspaceSymbols
 } from './code-intelligence-workspace'
 export type {
   CodeIntelligenceWorkspaceRequest,
-  CodeIntelligenceDocumentRequest
+  CodeIntelligenceDocumentRequest,
+  WorkspaceSymbolFanout
 } from './code-intelligence-workspace'
 
 // Lives here (not in cpp-definition-navigation) so banner/UI code can gate on

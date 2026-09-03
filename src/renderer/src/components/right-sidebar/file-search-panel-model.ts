@@ -11,6 +11,8 @@ export type FileSearchPanelModel = {
   filtersProps: SearchFiltersProps
   /** One range shared by Names find and Contents search (#77). */
   rangeProps: FileExplorerRangeSwitchProps
+  /** #13 labelled fallback: leave Symbols mode and rerun as text search. */
+  fallbackToTextSearch: () => void
   resultsProps: {
     results: SearchResult | null
     hasCommittedResults: boolean

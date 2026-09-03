@@ -20,7 +20,8 @@ import { definitionTargets } from './cpp-definition-locations'
 import {
   fileUriToHostPath,
   findCodeIntelligenceScope,
-  relativeToRoot
+  relativeToRoot,
+  visibleWorkspaceSymbols
 } from './code-intelligence-workspace'
 import { isCodeIntelligenceResultVisible } from './code-intelligence-scope-membership'
 import { toServerFileUri } from './language-server-document-uri'
@@ -264,9 +265,7 @@ export async function searchPythonWorkspaceSymbols(
       return {
         scopeId,
         scopeName: scope?.name ?? scopeId,
-        symbols: (result ?? []).filter(
-          (symbol) => scope && isVisibleInScope(scope, symbol.location)
-        )
+        symbols: scope ? visibleWorkspaceSymbols(scope, result ?? []) : []
       }
     })
   )

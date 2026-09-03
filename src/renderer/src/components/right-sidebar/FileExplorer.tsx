@@ -62,6 +62,8 @@ import { OpenEditorsSection } from './OpenEditorsSection'
 import { CodeScopesSection } from './CodeScopesSection'
 import { useCodeScopesSection } from './use-code-scopes-section'
 import { FileExplorerRangeSwitch } from './FileExplorerRangeSwitch'
+import { useSymbolSearch, openSymbolSearchResult } from './use-symbol-search'
+import { SymbolSearchResults } from './SymbolSearchResults'
 import {
   filterRelativePathsByFileSearchScopeRange,
   isRelativePathInFileSearchScopeRange
@@ -86,6 +88,12 @@ function FileExplorerFiles(): React.JSX.Element {
   // One scope set drives the range switch, Names filtering, and ◆ markers.
   const { scopes: codeScopes } = useCodeScopesSection()
   const searchPanel = useFileSearchPanel(explorerView, codeScopes)
+  // #32 Command center: same query box, workspace-symbol fan-out when toggled.
+  const symbolSearch = useSymbolSearch({
+    query: searchPanel.queryRowProps.query,
+    symbolMode: searchPanel.queryRowProps.symbolMode,
+    scopes: codeScopes
+  })
 
   const handleSelectExplorerView = useCallback(
     (view: RightSidebarExplorerView) => {
@@ -792,14 +800,34 @@ function FileExplorerFiles(): React.JSX.Element {
                   'pointer-events-none invisible absolute inset-x-0 top-0'
               )}
             >
-              <SearchQueryRow {...searchPanel.queryRowProps} />
+              <SearchQueryRow
+                {...searchPanel.queryRowProps}
+                loading={
+                  searchPanel.queryRowProps.symbolMode
+                    ? symbolSearch.loading
+                    : searchPanel.queryRowProps.loading
+                }
+                onKeyDown={(e) => {
+                  // Symbols mode: Enter opens the top result instead of rerunning text search.
+                  if (
+                    e.key === 'Enter' &&
+                    searchPanel.queryRowProps.symbolMode &&
+                    symbolSearch.rows[0]?.range &&
+                    activeWorktreeId
+                  ) {
+                    openSymbolSearchResult(symbolSearch.rows[0], activeWorktreeId, codeScopes)
+                    return
+                  }
+                  searchPanel.queryRowProps.onKeyDown(e)
+                }}
+              />
             </div>
           </div>
         </FileExplorerQueryStrip>
         <div
           className={cn(
             'border-b border-border px-2 pb-1.5',
-            explorerView !== 'search' &&
+            (explorerView !== 'search' || searchPanel.queryRowProps.symbolMode) &&
               'pointer-events-none invisible h-0 overflow-hidden border-b-0 p-0'
           )}
         >
@@ -910,15 +938,25 @@ function FileExplorerFiles(): React.JSX.Element {
               explorerView !== 'search' && 'pointer-events-none invisible'
             )}
           >
-            {searchPanel.activeWorktreeId ? (
+            {searchPanel.queryRowProps.symbolMode ? (
+              searchPanel.activeWorktreeId ? (
+                <SymbolSearchResults
+                  query={searchPanel.queryRowProps.query}
+                  rows={symbolSearch.rows}
+                  loading={symbolSearch.loading}
+                  partial={symbolSearch.partial}
+                  onOpen={(row) =>
+                    openSymbolSearchResult(row, searchPanel.activeWorktreeId!, codeScopes)
+                  }
+                  onFallbackToText={searchPanel.fallbackToTextSearch}
+                />
+              ) : (
+                noWorkspaceSelected()
+              )
+            ) : searchPanel.activeWorktreeId ? (
               <SearchResultsPane {...searchPanel.resultsProps} />
             ) : (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                {translate(
-                  'auto.components.right.sidebar.Search.98c8435e36',
-                  'Select a workspace to search'
-                )}
-              </div>
+              noWorkspaceSelected()
             )}
           </div>
         </div>
@@ -932,6 +970,14 @@ function FileExplorerFiles(): React.JSX.Element {
         onStartNew={startNew}
       />
     </>
+  )
+}
+
+function noWorkspaceSelected(): React.JSX.Element {
+  return (
+    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+      {translate('auto.components.right.sidebar.Search.98c8435e36', 'Select a workspace to search')}
+    </div>
   )
 }
 

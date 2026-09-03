@@ -6,6 +6,7 @@ import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence
 import type { FileSearchRange, SearchFileResult, SearchMatch } from '../../../../shared/types'
 import { buildSearchRows } from './search-rows'
 import { cancelRevealFrame, openMatchResult } from './search-match-open'
+import { useSymbolSearchModeActions } from './symbol-search-mode-actions'
 import { useFileSearchRunner } from './useFileSearchRunner'
 import {
   createWorktreeRangeMarkerPredicate,
@@ -34,6 +35,7 @@ export function useFileSearchPanel(
   const fileSearchIncludePattern = searchState?.includePattern ?? ''
   const fileSearchExcludePattern = searchState?.excludePattern ?? ''
   const fileSearchRange = searchState?.searchRange ?? 'worktree'
+  const symbolMode = searchState?.symbolMode ?? false
   const fileSearchResults = searchState?.results ?? null
   const fileSearchResultOwner = searchState?.resultOwner ?? null
   const fileSearchLoading = searchState?.loading ?? false
@@ -143,20 +145,31 @@ export function useFileSearchPanel(
     [deferredSearchResults.results, fileSearchCollapsedFiles, fileSearchQuery, worktreePath]
   )
 
+  // Symbols mode owns the query (#32) — gate every text-search entry point here
+  // so the policy stays in one place: input, Enter, and seeded jumps.
+  const executeTextSearch = useCallback(
+    (q: string) => {
+      if (!symbolMode) {
+        executeSearch(q)
+      }
+    },
+    [symbolMode, executeSearch]
+  )
+
   useEffect(() => {
     if (!activeWorktreeId || fileSearchSeedRequestId === undefined) {
       return
     }
 
     if (fileSearchQuery.trim()) {
-      executeSearch(fileSearchQuery)
+      executeTextSearch(fileSearchQuery)
     }
     scheduleSeededInputSelection()
     consumeFileSearchSeedRequest(activeWorktreeId, fileSearchSeedRequestId)
   }, [
     activeWorktreeId,
     consumeFileSearchSeedRequest,
-    executeSearch,
+    executeTextSearch,
     fileSearchQuery,
     fileSearchSeedRequestId,
     scheduleSeededInputSelection
@@ -196,9 +209,9 @@ export function useFileSearchPanel(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value
       updateActiveSearchState({ query: val })
-      executeSearch(val)
+      executeTextSearch(val)
     },
-    [updateActiveSearchState, executeSearch]
+    [updateActiveSearchState, executeTextSearch]
   )
 
   const handleKeyDown = useCallback(
@@ -212,10 +225,10 @@ export function useFileSearchPanel(
         }
       }
       if (e.key === 'Enter') {
-        executeSearch(fileSearchQuery)
+        executeTextSearch(fileSearchQuery)
       }
     },
-    [fileSearchQuery, handleClearSearch, executeSearch]
+    [fileSearchQuery, handleClearSearch, executeTextSearch]
   )
 
   const handleMatchClick = useCallback(
@@ -250,6 +263,12 @@ export function useFileSearchPanel(
     [activeWorktreeId, rerunSearch, updateFileSearchState]
   )
 
+  const { onToggleSymbolMode, fallbackToTextSearch } = useSymbolSearchModeActions({
+    activeWorktreeId,
+    symbolMode,
+    executeSearch
+  })
+
   return {
     activeWorktreeId,
     rangeProps: {
@@ -278,8 +297,11 @@ export function useFileSearchPanel(
       onToggleRegex: () => {
         updateActiveSearchState({ useRegex: !fileSearchUseRegex })
         rerunSearch()
-      }
+      },
+      symbolMode,
+      onToggleSymbolMode
     },
+    fallbackToTextSearch,
     filtersProps: {
       includePattern: fileSearchIncludePattern,
       excludePattern: fileSearchExcludePattern,

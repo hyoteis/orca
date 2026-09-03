@@ -127,6 +127,7 @@ const DEFAULT_FILE_SEARCH_STATE = {
   includePattern: '',
   excludePattern: '',
   searchRange: 'worktree',
+  symbolMode: false,
   results: null,
   resultOwner: null,
   loading: false,
@@ -735,6 +736,8 @@ export type EditorSlice = {
       includePattern: string
       excludePattern: string
       searchRange: FileSearchRange
+      /** #32 Symbols mode: same query box, workspace-symbol data source. */
+      symbolMode: boolean
       results: SearchResult | null
       resultOwner: FileSearchResultOwner | null
       loading: boolean
@@ -1631,7 +1634,7 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
       const shouldFocus = !shouldSeed
       const nextSearchState = {
         ...current,
-        ...(query ? { query } : {}),
+        ...(query ? { query, symbolMode: false } : {}),
         ...(includePattern ? { includePattern } : {}),
         ...(shouldSeed
           ? {
