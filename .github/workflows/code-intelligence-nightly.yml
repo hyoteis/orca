@@ -42,7 +42,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        run_install: false
+        with:
+          run_install: false
 
       # Why: the shared composite action installs with --ignore-scripts, which
       # skips the native postinstall builds these jobs run against; the inline
@@ -92,7 +93,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        run_install: false
+        with:
+          run_install: false
 
       - name: Use external node-gyp to avoid pnpm's bundled copy
         run: |
@@ -134,7 +136,8 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        run_install: false
+        with:
+          run_install: false
 
       - name: Use external node-gyp to avoid pnpm's bundled copy
         run: |
