@@ -53,6 +53,12 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   '.cc': 'cpp',
   '.cxx': 'cpp',
   '.hpp': 'cpp',
+  // Why: C++ header/inline-template spellings — missing these drops embedded codebases to plaintext (#46).
+  '.hh': 'cpp',
+  '.hxx': 'cpp',
+  '.inl': 'cpp',
+  '.ipp': 'cpp',
+  '.tcc': 'cpp',
   '.cs': 'csharp',
   '.rb': 'ruby',
   '.php': 'php',

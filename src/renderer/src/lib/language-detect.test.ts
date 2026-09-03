@@ -70,6 +70,23 @@ describe('detectLanguage', () => {
     expect(detectLanguage('C:\\app\\WebContent\\WEB-INF\\jsp\\LIST.JSP')).toBe('html')
   })
 
+  it('maps .hh/.hxx/.inl/.ipp/.tcc to cpp (case-insensitive)', () => {
+    expect(detectLanguage('inc/wrapper.hh')).toBe('cpp')
+    expect(detectLanguage('inc/wrapper.hxx')).toBe('cpp')
+    expect(detectLanguage('inc/table.inl')).toBe('cpp')
+    expect(detectLanguage('boost/vector.ipp')).toBe('cpp')
+    expect(detectLanguage('inc/sort.tcc')).toBe('cpp')
+    expect(detectLanguage('C:\\repo\\INC\\TABLE.INL')).toBe('cpp')
+  })
+
+  it('keeps .h on c and the core C++ extensions on cpp', () => {
+    expect(detectLanguage('inc/util.h')).toBe('c')
+    expect(detectLanguage('src/main.cpp')).toBe('cpp')
+    expect(detectLanguage('src/main.cc')).toBe('cpp')
+    expect(detectLanguage('src/main.cxx')).toBe('cpp')
+    expect(detectLanguage('inc/util.hpp')).toBe('cpp')
+  })
+
   it('keeps .json/.jsonc on the built-in json language and unknown on plaintext', () => {
     expect(detectLanguage('config/settings.json')).toBe('json')
     expect(detectLanguage('config/tsconfig.jsonc')).toBe('json')

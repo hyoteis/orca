@@ -364,6 +364,11 @@ export default function MonacoEditor({
         () => languageRef.current
       )
       ensureMarkdownDocCompletionProvider(monaco)
+      // Why: @monaco-editor/react only re-languages on a language *prop* change, so a retained model (keepCurrentModel) mounts with its stale language.
+      const mountedModel = editorInstance.getModel()
+      if (mountedModel && mountedModel.getLanguageId() !== languageRef.current) {
+        monaco.editor.setModelLanguage(mountedModel, languageRef.current)
+      }
       updateMarkdownCompletionDocuments()
 
       // Why: see contentRef — reconcile the retained model to the current prop before user interaction (surfaces edits made while unmounted).
@@ -885,7 +890,6 @@ export default function MonacoEditor({
               }
             : undefined,
           smoothScrolling: true,
-          'semanticHighlighting.enabled': true,
           cursorSmoothCaretAnimation: 'off',
           padding: { top: 0 },
           find: monacoFindOptions,

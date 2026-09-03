@@ -83,10 +83,10 @@ describe('MonacoEditor font family', () => {
     expect(options?.fontFamily).toBe('D2Coding Nerd Font Mono')
   })
 
-  it('forces semantic highlighting for language-server token colors', () => {
+  it('omits the semanticHighlighting option monaco does not register', () => {
     renderEditor()
     const options = editorProps.current?.options as Record<string, unknown> | undefined
-    expect(options?.['semanticHighlighting.enabled']).toBe(true)
+    expect(options).not.toHaveProperty('semanticHighlighting.enabled')
     expect(editorProps.current?.theme).toBe('orca-dark')
   })
 
