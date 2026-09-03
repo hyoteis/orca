@@ -43,6 +43,9 @@ export type CodeIntelligenceScopeConsent = {
   grantedAt: number
   /** Member snapshot at authorization time; drives the re-consent banner diff. */
   authorizedMembers?: CodeIntelligenceScopeMember[]
+  /** Canonical configuration snapshot at authorization time — renderer-side
+   * staleness without node:crypto; absent on pre-snapshot consents. */
+  authorizedConfiguration?: string
 }
 export type CodeIntelligenceConfigurationMode = 'cmake' | 'gn' | 'basic' | 'mixed'
 export type CodeIntelligenceSetupStatus = {
@@ -169,14 +172,17 @@ export function normalizeCodeIntelligenceScope(
   return { ...scope, id: scope.id.trim(), name: scope.name.trim(), members }
 }
 /** Ordered member compare — mirrors the fingerprint's members coverage, so the
- * banner and authorizeSession agree on when consent went stale. */
-export function isCodeIntelligenceConsentStale(
-  scope: Pick<CodeIntelligenceScope, 'members' | 'consent'>
-): boolean {
-  return (
-    scope.consent !== undefined &&
-    JSON.stringify(scope.consent.authorizedMembers) !== JSON.stringify(scope.members)
-  )
+ * banner and authorizeSession agree on when consent went stale. Consents with
+ * an authorizedConfiguration snapshot compare the whole payload instead, so
+ * fingerprint-only drift (serverSource, workspaceRoot) still lights the UI. */
+export function isCodeIntelligenceConsentStale(scope: CodeIntelligenceScope): boolean {
+  if (!scope.consent) {
+    return false
+  }
+  if (scope.consent.authorizedConfiguration !== undefined) {
+    return scope.consent.authorizedConfiguration !== codeIntelligenceConfigurationSnapshot(scope)
+  }
+  return JSON.stringify(scope.consent.authorizedMembers) !== JSON.stringify(scope.members)
 }
 
 /** Symmetric difference of member paths since authorization (0 = config-only change). */
@@ -214,4 +220,26 @@ export function scopeConfigurationPayload(scope: CodeIntelligenceScope): unknown
     serverSource: scope.serverSource,
     enabled: scope.enabled
   }
+}
+
+/** Key-sorted canonical JSON — one serialization both the Host-side hash and
+ * the renderer-side staleness compare agree on. */
+export function canonicalConfigurationJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalConfigurationJson).join(',')}]`
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalConfigurationJson(item)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'null'
+}
+
+/** What `configurationFingerprint` hashes — comparable verbatim in the renderer. */
+export function codeIntelligenceConfigurationSnapshot(scope: CodeIntelligenceScope): string {
+  return canonicalConfigurationJson(
+    scopeConfigurationPayload(normalizeCodeIntelligenceScope(scope))
+  )
 }

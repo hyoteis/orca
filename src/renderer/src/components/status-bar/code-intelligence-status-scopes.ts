@@ -9,6 +9,23 @@ import type {
 } from '../../../../shared/code-intelligence-scope'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
 
+/** Folder-workspace bridging (#72 A): the same-path folder repo whose scopes a
+ * folder:<uuid> session reads and writes. Null for worktree sessions. */
+export function findSessionLinkedFolderRepo(args: {
+  activeWorktreeId: string | null
+  folderWorkspaces?: readonly FolderWorkspace[]
+  repos?: readonly Repo[]
+}): Repo | null {
+  if (!args.activeWorktreeId || parseWorkspaceKey(args.activeWorktreeId)?.type !== 'folder') {
+    return null
+  }
+  const workspace =
+    args.folderWorkspaces?.find(
+      (candidate) => folderWorkspaceKey(candidate.id) === args.activeWorktreeId
+    ) ?? null
+  return workspace && args.repos ? findFolderWorkspaceLinkedRepo(workspace, args.repos) : null
+}
+
 export function getStatusBarCodeIntelligenceScopes(args: {
   settings: GlobalSettings | null | undefined
   activeWorktreeId: string | null
@@ -20,21 +37,22 @@ export function getStatusBarCodeIntelligenceScopes(args: {
   if (!args.activeWorktreeId) {
     return []
   }
-  let repoId = getRepoIdFromWorktreeId(args.activeWorktreeId)
   // Why: folder sessions have no repo of their own — their scopes are the
   // same-path folder repo's (#72 variant A), so bridge before key matching.
-  if (parseWorkspaceKey(args.activeWorktreeId)?.type === 'folder') {
-    const workspace =
-      args.folderWorkspaces?.find(
-        (candidate) => folderWorkspaceKey(candidate.id) === args.activeWorktreeId
-      ) ?? null
-    const linked =
-      workspace && args.repos ? findFolderWorkspaceLinkedRepo(workspace, args.repos) : null
-    if (!linked) {
-      return []
-    }
-    repoId = linked.id
+  const linked = findSessionLinkedFolderRepo(args)
+  if (!linked && parseWorkspaceKey(args.activeWorktreeId)?.type === 'folder') {
+    return []
   }
+  return scopesForRepo(args, linked?.id ?? getRepoIdFromWorktreeId(args.activeWorktreeId))
+}
+
+function scopesForRepo(
+  args: {
+    settings: GlobalSettings | null | undefined
+    executionHostId?: ExecutionHostId | null
+  },
+  repoId: string
+): CodeIntelligenceScope[] {
   const workspaceKeys = new Set([`worktree:${repoId}`, `folder:${repoId}`])
   return (args.settings?.codeIntelligenceScopes ?? []).filter(
     (scope) =>

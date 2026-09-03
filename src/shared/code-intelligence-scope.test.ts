@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  codeIntelligenceConfigurationSnapshot,
   countChangedCodeIntelligenceMembers,
   getCodeIntelligenceScopeId,
   isCodeIntelligenceConsentStale,
@@ -242,5 +243,63 @@ describe('consent staleness', () => {
       )
     ).toBe(0)
     expect(countChangedCodeIntelligenceMembers(scope({ consent: undefined }))).toBe(0)
+  })
+})
+
+describe('consent staleness with authorizedConfiguration snapshot', () => {
+  const consented = (overrides: Partial<CodeIntelligenceScope>): CodeIntelligenceScope => {
+    const granted = scope({ serverSource: { type: 'automatic' } })
+    return scope({
+      consent: {
+        configurationFingerprint: 'f',
+        grantedAt: 1,
+        authorizedMembers: granted.members,
+        authorizedConfiguration: codeIntelligenceConfigurationSnapshot(granted)
+      },
+      ...overrides
+    })
+  }
+
+  it('stays current while the configuration snapshot matches', () => {
+    const current = consented({ serverSource: { type: 'automatic' } })
+    expect(isCodeIntelligenceConsentStale(current)).toBe(false)
+  })
+
+  it('flags a serverSource change the members-only compare misses', () => {
+    const current = consented({
+      serverSource: { type: 'custom', executable: '/usr/bin/clangd', args: [] }
+    })
+    expect(isCodeIntelligenceConsentStale(current)).toBe(true)
+    // Config-only drift: the banner shows its configuration-changed line, not a folder count.
+    expect(countChangedCodeIntelligenceMembers(current)).toBe(0)
+  })
+
+  it('flags a workspaceRoot move and an enabled flip with identical members', () => {
+    expect(isCodeIntelligenceConsentStale(consented({ workspaceRoot: '/moved' }))).toBe(true)
+    expect(isCodeIntelligenceConsentStale(consented({ enabled: false }))).toBe(true)
+  })
+
+  it('still flags member changes through the snapshot', () => {
+    const current = consented({
+      members: [
+        { path: 'engine', visibleResults: true },
+        { path: 'fx', visibleResults: true }
+      ]
+    })
+    expect(isCodeIntelligenceConsentStale(current)).toBe(true)
+    expect(countChangedCodeIntelligenceMembers(current)).toBe(1)
+  })
+
+  it('keeps the members compare for legacy consents without a snapshot', () => {
+    const legacy = scope({
+      consent: {
+        configurationFingerprint: 'f',
+        grantedAt: 1,
+        authorizedMembers: [{ path: 'engine', visibleResults: true }]
+      },
+      serverSource: { type: 'custom', executable: '/usr/bin/clangd', args: [] }
+    })
+    // Members identical, serverSource drifted — legacy data cannot tell; unchanged behavior.
+    expect(isCodeIntelligenceConsentStale(legacy)).toBe(false)
   })
 })

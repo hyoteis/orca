@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildSymbolSearchRows } from './symbol-search-rows'
+import { visibleWorkspaceSymbols } from '@/lib/language-server/code-intelligence-workspace'
 
 const loc = (uri: string, line = 1) => ({
   uri,
@@ -123,5 +124,41 @@ describe('buildSymbolSearchRows', () => {
 
     expect(rows[0].displayPath).toBe('/site-packages/x.py')
     expect(rows[0].external).toBe(true)
+  })
+})
+
+describe('buildSymbolSearchRows Phase 1 budget (#14)', () => {
+  it('filters, groups, and projects 10,000 symbols within 100 ms', () => {
+    const scope = {
+      id: 's1',
+      name: 'proj',
+      executionHostId: 'local',
+      workspaceKey: 'worktree:repo-1',
+      workspaceRoot: '/repo',
+      language: 'cpp',
+      members: [{ path: '.', visibleResults: true }],
+      serverSource: { type: 'automatic' },
+      enabled: true,
+      revision: 1
+    } as const
+    const symbols = Array.from({ length: 10_000 }, (_, index) => ({
+      name: `symbol_${(9_999 - index).toString().padStart(5, '0')}`,
+      kind: (index % 26) + 1,
+      containerName: `ns${index % 50}`,
+      location: loc(`file:///repo/src/mod${index % 50}/file${index % 500}.cpp`)
+    }))
+    const info = scopeInfo('s1', '/repo')
+
+    const start = performance.now()
+    const visible = visibleWorkspaceSymbols(scope, symbols)
+    const rows = buildSymbolSearchRows(
+      { results: [{ scopeId: 's1', scopeName: 'proj', symbols: visible }], partial: false },
+      info
+    )
+    const elapsed = performance.now() - start
+
+    expect(rows).toHaveLength(10_000)
+    expect(rows[0]?.name).toBe('symbol_00000')
+    expect(elapsed).toBeLessThan(100)
   })
 })

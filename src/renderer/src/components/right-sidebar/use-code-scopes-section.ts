@@ -14,14 +14,16 @@ import {
   parseExecutionHostId
 } from '../../../../shared/execution-host'
 import {
-  findFolderWorkspaceLinkedRepo,
   getFolderWorkspaceExecutionHostId
 } from '../../../../shared/folder-workspace-repo-link'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
-import { getStatusBarCodeIntelligenceScopes } from '../status-bar/code-intelligence-status-scopes'
+import {
+  getStatusBarCodeIntelligenceScopes,
+  findSessionLinkedFolderRepo
+} from '../status-bar/code-intelligence-status-scopes'
 import { buildAddProjectFromFolderModalData } from './file-explorer-add-project-action'
 import {
   buildCodePanelMemberRows,
@@ -58,8 +60,8 @@ export function useCodeScopesSection({
   }, [activeWorktreeId, folderWorkspaces])
   // #72 variant A: folder sessions read/write the same-path folder repo's scopes.
   const linkedFolderRepo = useMemo(
-    () => (folderWorkspace ? findFolderWorkspaceLinkedRepo(folderWorkspace, repos) : null),
-    [folderWorkspace, repos]
+    () => findSessionLinkedFolderRepo({ activeWorktreeId, folderWorkspaces, repos }),
+    [activeWorktreeId, folderWorkspaces, repos]
   )
   const bridged = folderWorkspace !== null && linkedFolderRepo !== null
   // Folder workspaces unify through the same Worktree host precedence as the sidebar.

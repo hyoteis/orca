@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   countCodeIntelligenceScopeFolders,
+  findSessionLinkedFolderRepo,
   getCodeIntelligenceMemberDisplayPath,
   getStatusBarCodeIntelligenceScopes
 } from './code-intelligence-status-scopes'
@@ -117,5 +118,41 @@ describe('code intelligence status scopes', () => {
     expect(getCodeIntelligenceMemberDisplayPath(scopes[0], scopes[0].members[2])).toBe(
       'D:\\sdk\\external'
     )
+  })
+})
+
+describe('findSessionLinkedFolderRepo', () => {
+  it('resolves the same-path folder repo for folder sessions', () => {
+    expect(
+      findSessionLinkedFolderRepo({
+        activeWorktreeId: 'folder:fw-1',
+        folderWorkspaces: [FOLDER_WS],
+        repos: [FOLDER_REPO]
+      })?.id
+    ).toBe('repo-9')
+  })
+
+  it('returns null for worktree sessions and unbridgeable folder sessions', () => {
+    expect(
+      findSessionLinkedFolderRepo({
+        activeWorktreeId: 'repo-1::C:\\repo',
+        folderWorkspaces: [FOLDER_WS],
+        repos: [FOLDER_REPO]
+      })
+    ).toBe(null)
+    expect(
+      findSessionLinkedFolderRepo({
+        activeWorktreeId: 'folder:fw-1',
+        folderWorkspaces: [],
+        repos: [FOLDER_REPO]
+      })
+    ).toBe(null)
+    expect(
+      findSessionLinkedFolderRepo({
+        activeWorktreeId: 'folder:fw-1',
+        folderWorkspaces: [FOLDER_WS],
+        repos: []
+      })
+    ).toBe(null)
   })
 })

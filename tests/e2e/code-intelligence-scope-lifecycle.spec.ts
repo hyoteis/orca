@@ -168,7 +168,9 @@ test('member edits keep the running language-server session alive', async ({
   expect(readPids(pidLog)).toEqual([sessionPid])
 
   // Reauthorization restores the trust chain but still reuses the session.
-  await orcaPage.getByRole('button', { name: 'Reauthorize' }).click()
+  // exact: the editor banner's Reauthorize — the popover header renders
+  // 'Reauthorize r{n}' for the same stale scope (#73), so substring match hits two.
+  await orcaPage.getByRole('button', { name: 'Reauthorize', exact: true }).click()
   await expect(
     orcaPage.getByRole('button', { name: /Code intelligence: 1 folders/ })
   ).toBeVisible({ timeout: 10_000 })

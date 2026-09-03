@@ -1,37 +1,28 @@
 import { createHash } from 'node:crypto'
 import {
+  codeIntelligenceConfigurationSnapshot,
   normalizeCodeIntelligenceScope,
-  scopeConfigurationPayload,
   type CodeIntelligenceScope,
   type CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonical).join(',')}]`
-  }
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
+function fingerprintOfSnapshot(snapshot: string): string {
+  return createHash('sha256').update(snapshot).digest('hex')
 }
 export function getCodeIntelligenceConfigurationFingerprint(scope: CodeIntelligenceScope): string {
-  return createHash('sha256')
-    .update(canonical(scopeConfigurationPayload(normalizeCodeIntelligenceScope(scope))))
-    .digest('hex')
+  return fingerprintOfSnapshot(codeIntelligenceConfigurationSnapshot(scope))
 }
 export function grantCodeIntelligenceConsent(
   scope: CodeIntelligenceScope,
   now = Date.now()
 ): CodeIntelligenceScopeConsent {
+  // normalize is idempotent, so snapshotting the normalized scope skips a re-run.
+  const normalized = normalizeCodeIntelligenceScope(scope)
+  const authorizedConfiguration = codeIntelligenceConfigurationSnapshot(normalized)
   return {
-    configurationFingerprint: getCodeIntelligenceConfigurationFingerprint(scope),
+    configurationFingerprint: fingerprintOfSnapshot(authorizedConfiguration),
     grantedAt: now,
-    // Snapshot the normalized members so the renderer's diff uses the same
-    // shape the fingerprint hashes.
-    authorizedMembers: structuredClone(normalizeCodeIntelligenceScope(scope).members)
+    authorizedMembers: structuredClone(normalized.members),
+    authorizedConfiguration
   }
 }
 export function hasCurrentCodeIntelligenceConsent(scope: CodeIntelligenceScope): boolean {

@@ -63,6 +63,7 @@ import { CodeScopesSection } from './CodeScopesSection'
 import { useCodeScopesSection } from './use-code-scopes-section'
 import { FileExplorerRangeSwitch } from './FileExplorerRangeSwitch'
 import { useSymbolSearch, openSymbolSearchResult } from './use-symbol-search'
+import { findSessionLinkedFolderRepo } from '../status-bar/code-intelligence-status-scopes'
 import { SymbolSearchResults } from './SymbolSearchResults'
 import {
   filterRelativePathsByFileSearchScopeRange,
@@ -134,7 +135,6 @@ function FileExplorerFiles(): React.JSX.Element {
   const openFiles = useAppStore((s) => s.openFiles)
   const closeFile = useAppStore((s) => s.closeFile)
   const openModal = useAppStore((s) => s.openModal)
-  const settings = useAppStore((s) => s.settings)
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const showDotfiles = useAppStore((s) =>
     activeWorktreeId ? (s.showDotfilesByWorktree[activeWorktreeId] ?? true) : true
@@ -653,23 +653,19 @@ function FileExplorerFiles(): React.JSX.Element {
     },
     [activeRepo, openModal]
   )
-  const cppCodeIntelligenceScope = useMemo(
-    () =>
-      activeRepo
-        ? findCodeIntelligenceScopeForWorkspace({
-            settings,
-            repoId: activeRepo.id,
-            isFolder: isFolderRepo(activeRepo),
-            executionHostId: getRepoExecutionHostId(activeRepo),
-            language: 'cpp'
-          })
-        : null,
-    [activeRepo, settings]
-  )
+  const cppCodeIntelligenceScope =
+    codeScopes.find((scope) => scope.language === 'cpp') ?? null
   const handleToggleCodeIntelligenceMembers = useCallback(
     (paths: readonly string[], action: 'add' | 'remove') => {
       const state = useAppStore.getState()
-      const repo = state.repos.find((candidate) => candidate.id === activeWorktree?.repoId)
+      // Folder sessions toggle the same-path folder repo's scope (#72 variant A).
+      const repo =
+        state.repos.find((candidate) => candidate.id === activeWorktree?.repoId) ??
+        findSessionLinkedFolderRepo({
+          activeWorktreeId,
+          folderWorkspaces: state.folderWorkspaces,
+          repos: state.repos
+        })
       if (!repo) {
         return
       }
@@ -701,7 +697,7 @@ function FileExplorerFiles(): React.JSX.Element {
         void writeCodeIntelligenceScopeEdit(next)
       }
     },
-    [activeWorktree?.repoId, rowProjection]
+    [activeWorktree?.repoId, activeWorktreeId, rowProjection]
   )
   const handleOpenInTerminal = useCallback(
     (node: TreeNode) => {
