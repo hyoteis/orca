@@ -1,0 +1,159 @@
+name: Code Intelligence Nightly
+
+# Why: Phase 1 code-intelligence budgets and release-route matrices (#33/#87)
+# are too slow or too environment-specific for PR CI: 150k-file fixtures,
+# real clangd/basedpyright processes, a docker SSH host with netem RTT, and
+# timing-sensitive typing paint. One nightly run keeps regressions visible
+# before users feel them, mirroring the terminal-perf precedent.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref to check out (defaults to the workflow ref)
+        required: false
+        type: string
+  schedule:
+    - cron: '45 8 * * *'
+
+jobs:
+  budgets:
+    name: large fixtures + timed budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ORCA_CODE_INTELLIGENCE_NIGHTLY_REPORT: test-results/code-intelligence-nightly-report.json
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install language servers
+        run: sudo apt-get update && sudo apt-get install -y clangd cmake ninja-build
+
+      - name: Install basedpyright
+        run: pipx install basedpyright
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        run_install: false
+
+      # Why: same native install path as PR CI, which needs pnpm to bypass its
+      # bundled gyp_main.py.
+      - name: Use external node-gyp to avoid pnpm's bundled copy
+        run: |
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Ensure native runtime
+        run: node config/scripts/ensure-native-runtime.mjs --runtime=node
+
+      - name: Run code-intelligence nightly budgets
+        run: node config/scripts/run-code-intelligence-nightly.mjs
+
+      - name: Upload nightly budget report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: code-intelligence-nightly-report
+          path: ${{ env.ORCA_CODE_INTELLIGENCE_NIGHTLY_REPORT }}
+          retention-days: 14
+          if-no-files-found: warn
+
+  ssh-matrix:
+    name: SSH release-route matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install xvfb and ssh tooling
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        run_install: false
+
+      - name: Use external node-gyp to avoid pnpm's bundled copy
+        run: |
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run SSH C++ setup matrix
+        run: xvfb-run --auto-servernum node config/scripts/run-code-intelligence-ssh-matrix-e2e.mjs
+
+      - name: Upload SSH matrix traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: code-intelligence-ssh-matrix-traces
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  typing-paint:
+    name: typing-to-paint p95
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        run_install: false
+
+      - name: Use external node-gyp to avoid pnpm's bundled copy
+        run: |
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Electron app for typing paint
+        run: npx electron-vite build --mode e2e
+
+      # Why: headful under Xvfb — Monaco renders through rAF and a never-shown
+      # headless window throttles it to ~1fps, faking second-scale latencies.
+      - name: Run typing-to-paint budget
+        run: xvfb-run --auto-servernum env SKIP_BUILD=1 pnpm run test:e2e:ci-typing-paint
+
+      - name: Upload typing paint traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: code-intelligence-typing-paint-traces
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import type { WorkspaceSymbol } from 'vscode-languageserver-protocol'
+import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import { buildSymbolSearchRows } from './symbol-search-rows'
 import { visibleWorkspaceSymbols } from '@/lib/language-server/code-intelligence-workspace'
 
@@ -129,7 +131,7 @@ describe('buildSymbolSearchRows', () => {
 
 describe('buildSymbolSearchRows Phase 1 budget (#14)', () => {
   it('filters, groups, and projects 10,000 symbols within 100 ms', () => {
-    const scope = {
+    const scope: CodeIntelligenceScope = {
       id: 's1',
       name: 'proj',
       executionHostId: 'local',
@@ -140,10 +142,10 @@ describe('buildSymbolSearchRows Phase 1 budget (#14)', () => {
       serverSource: { type: 'automatic' },
       enabled: true,
       revision: 1
-    } as const
+    }
     const symbols = Array.from({ length: 10_000 }, (_, index) => ({
       name: `symbol_${(9_999 - index).toString().padStart(5, '0')}`,
-      kind: (index % 26) + 1,
+      kind: ((index % 26) + 1) as WorkspaceSymbol['kind'],
       containerName: `ns${index % 50}`,
       location: loc(`file:///repo/src/mod${index % 50}/file${index % 500}.cpp`)
     }))

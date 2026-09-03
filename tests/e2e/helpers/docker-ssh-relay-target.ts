@@ -122,7 +122,16 @@ export function writeDockerSshRelayTargetFile(
   )
 }
 
-export function startDockerSshRelayTarget(testInfo: TestInfo): DockerSshRelayTarget {
+export type DockerSshRelayTargetOptions = {
+  /** Extra `docker run` flags (e.g. --cap-add=NET_ADMIN, --tmpfs) inserted
+   * before the image name — used by the C++ setup matrix variants (#87). */
+  dockerRunArgs?: readonly string[]
+}
+
+export function startDockerSshRelayTarget(
+  testInfo: TestInfo,
+  options: DockerSshRelayTargetOptions = {}
+): DockerSshRelayTarget {
   const host = process.env.ORCA_E2E_SSH_TARGET_HOST?.trim() || '127.0.0.1'
   if (host === 'localhost' || host === '::1' || host.startsWith('127.')) {
     if (process.env.ORCA_E2E_SSH_TARGET_HOST) {
@@ -150,6 +159,7 @@ export function startDockerSshRelayTarget(testInfo: TestInfo): DockerSshRelayTar
         `${bindHost}::22`,
         '-e',
         `AUTHORIZED_KEY=${publicKey}`,
+        ...(options.dockerRunArgs ?? []),
         getDockerSshRelayImage(),
         'bash',
         '-lc',
