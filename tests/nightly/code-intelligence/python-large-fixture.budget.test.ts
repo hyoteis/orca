@@ -11,7 +11,7 @@ import {
   pythonModuleText
 } from './large-fixture-generators'
 import { NightlyLspClient, resolveNightlyServerCommand } from './lsp-roundtrip'
-import { budgetRow, infoRow, installNightlyReportWriter } from './nightly-report'
+import { budgetRow, infoRow, installNightlyReportWriter, median } from './nightly-report'
 
 const FILE_COUNT = Number(process.env.ORCA_NIGHTLY_PY_FILES ?? '100000')
 const pyrightExecutable = resolveNightlyServerCommand('basedpyright-langserver', process.env)
@@ -27,11 +27,6 @@ const root = mkdtempSync(join(tmpdir(), 'orca-nightly-py-'))
 
 installNightlyReportWriter()
 afterAll(() => rmSync(root, { recursive: true, force: true }))
-
-function median(values: readonly number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.floor(sorted.length / 2)]
-}
 
 describe('100k-file Python monorepo generation', () => {
   it('writes the deterministic tree', async () => {

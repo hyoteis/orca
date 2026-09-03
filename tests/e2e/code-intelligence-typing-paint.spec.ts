@@ -1,5 +1,7 @@
 import { mkdtemp } from 'node:fs/promises'
 import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
@@ -216,6 +218,24 @@ test.describe('Code intelligence typing-to-paint budget', () => {
     const summary = `p95=${p95.toFixed(1)}ms median=${median(latencies).toFixed(1)}ms worst=${worst.toFixed(1)}ms samples=${latencies.length}`
     console.log(`[ci-typing-paint] ${summary}`)
     testInfo.annotations.push({ type: 'ci-typing-paint', description: summary })
+    const reportPath =
+      process.env.ORCA_CODE_INTELLIGENCE_TYPING_PAINT_REPORT ??
+      'test-results/code-intelligence-typing-paint.json'
+    await mkdir(dirname(reportPath), { recursive: true })
+    await writeFile(
+      reportPath,
+      JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          rows: [
+            { name: 'typing-to-paint p95', value: p95, budget: MAX_P95_KEY_TO_PAINT_MS, unit: 'ms', pass: p95 < MAX_P95_KEY_TO_PAINT_MS },
+            { name: 'typing-to-paint worst', value: worst, budget: MAX_WORST_KEY_TO_PAINT_MS, unit: 'ms', pass: worst < MAX_WORST_KEY_TO_PAINT_MS }
+          ]
+        },
+        null,
+        2
+      )
+    )
     expect(p95).toBeLessThan(MAX_P95_KEY_TO_PAINT_MS)
     expect(worst).toBeLessThan(MAX_WORST_KEY_TO_PAINT_MS)
   })

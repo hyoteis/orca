@@ -44,8 +44,9 @@ jobs:
         uses: pnpm/action-setup@v6
         run_install: false
 
-      # Why: same native install path as PR CI, which needs pnpm to bypass its
-      # bundled gyp_main.py.
+      # Why: the shared composite action installs with --ignore-scripts, which
+      # skips the native postinstall builds these jobs run against; the inline
+      # preamble mirrors terminal-perf.yml, which needs the full install.
       - name: Use external node-gyp to avoid pnpm's bundled copy
         run: |
           npm install -g node-gyp@11.5.0
@@ -54,6 +55,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Why: the mixed-version suites run under the main vitest config, which
+      # needs the node-flavored native runtime like `pnpm test`.
       - name: Ensure native runtime
         run: node config/scripts/ensure-native-runtime.mjs --runtime=node
 
@@ -147,7 +150,18 @@ jobs:
       # Why: headful under Xvfb — Monaco renders through rAF and a never-shown
       # headless window throttles it to ~1fps, faking second-scale latencies.
       - name: Run typing-to-paint budget
+        env:
+          ORCA_CODE_INTELLIGENCE_TYPING_PAINT_REPORT: test-results/code-intelligence-typing-paint.json
         run: xvfb-run --auto-servernum env SKIP_BUILD=1 pnpm run test:e2e:ci-typing-paint
+
+      - name: Upload typing paint report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: code-intelligence-typing-paint-report
+          path: test-results/code-intelligence-typing-paint.json
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload typing paint traces
         if: failure()

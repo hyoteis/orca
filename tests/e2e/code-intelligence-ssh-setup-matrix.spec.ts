@@ -139,6 +139,20 @@ async function startContainerAndWaitForSsh(target: DockerSshRelayTarget): Promis
   throw new Error(`container did not come back: ${target.containerName}`)
 }
 
+function remoteMergedCdbExists(target: DockerSshRelayTarget): boolean {
+  const output = execDockerSshRelayTargetCommand(
+    target,
+    `node -e ${shellQuote(
+      [
+        `const fs = require('node:fs')`,
+        `const scopes = '/root/.orca/code-intelligence/cpp/scopes'`,
+        `console.log(fs.existsSync(scopes) && fs.readdirSync(scopes).some((dir) => fs.existsSync(scopes + '/' + dir + '/compile_commands.json')) ? 'yes' : 'no')`
+      ].join(';')
+    )}`
+  )
+  return output.trim().endsWith('yes')
+}
+
 test.describe('C++ code intelligence SSH setup matrix', () => {
   test.skip(!RUN_DOCKER_SSH, 'Set ORCA_E2E_SSH_DOCKER=1 to run Docker-backed SSH C++ setup matrix.')
   test.skip(process.platform === 'win32', 'Docker SSH matrix uses POSIX ssh tooling.')
@@ -244,6 +258,8 @@ test.describe('C++ code intelligence SSH setup matrix', () => {
       expect(result.ok).toBe(false)
       expect(result.message.length).toBeGreaterThan(0)
       expect(result.log).toContain('Error')
+      // Atomic failure: the ENOSPC write must leave no torn merged CDB behind.
+      expect(remoteMergedCdbExists(target)).toBe(false)
       testInfo.annotations.push({
         type: 'ci-ssh-setup-low-disk',
         description: result.message

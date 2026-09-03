@@ -58,10 +58,6 @@ export class NightlyLspClient {
     return this.pending.size
   }
 
-  get stderr(): string {
-    return this.stderrTail.join('')
-  }
-
   private send(message: unknown): void {
     const body = JSON.stringify(message)
     this.process.stdin!.write(`Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`)

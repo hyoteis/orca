@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join, posix } from 'node:path'
+import { dirname, join } from 'node:path'
 
 export type FixtureFile = { path: string; content: string }
 
@@ -29,7 +29,7 @@ export function cppSourcePath(root: string, index: number): string {
  * that $/cancelRequest observably interrupts it mid-flight. */
 export const CPP_HEAVY_TU_INDEX = 2
 
-export function isCppHeavyTu(index: number): boolean {
+function isCppHeavyTu(index: number): boolean {
   return index === CPP_HEAVY_TU_INDEX
 }
 
@@ -49,11 +49,14 @@ export function cppSourceText(index: number): string {
 const CPP_HEADER = `#ifndef NIGHTLY_HELPER_H\n#define NIGHTLY_HELPER_H\n\ninline int nightly_helper(void) {\n    return 42;\n}\n\n#endif\n`
 
 export type CppFixture = {
-  /** POSIX-style entry (arguments form) for canonical TUs. */
-  argumentsEntry: (index: number) => Record<string, unknown>
   shardPaths: readonly string[]
   scopeDirectory: string
   tuCount: number
+}
+
+/** Host path → POSIX spelling, shared with the budget tests' CDB assertions. */
+export function toPosixPath(value: string): string {
+  return value.split('\\').join('/')
 }
 
 /**
@@ -127,11 +130,6 @@ export async function generateCppTuFixture(
     writeFile(shardPaths[2], JSON.stringify(gnShard))
   ])
   return {
-    argumentsEntry: (index) => ({
-      directory,
-      file: fileAt(index),
-      arguments: ['clang++', '-std=c++17', '-c', fileAt(index)]
-    }),
     shardPaths,
     scopeDirectory: join(root, 'scope'),
     tuCount
@@ -174,7 +172,54 @@ export async function generatePythonMonorepoFixture(
   return { fileCount }
 }
 
-/** Human-visible spec of the fixture for report rows (POSIX separators). */
-export function posixPathOf(value: string): string {
-  return posix.normalize(value.split('\\').join('/'))
+// ---------------------------------------------------------------------------
+// Dependent repositories, multi-scope layout: repo A exposes include/a-lib.h;
+// repo B's TUs depend on it. Two member shards merge into one scope CDB.
+// ---------------------------------------------------------------------------
+
+const DEPENDENT_REPO_A_HEADERS = 3
+const DEPENDENT_REPO_B_TUS = 4
+
+export type DependentRepoFixture = {
+  repoAIncludeDir: string
+  repoBIncludeFlag: string
+  shardPaths: readonly string[]
+  expectedTus: number
+}
+
+export async function generateDependentCppScopesFixture(
+  root: string
+): Promise<DependentRepoFixture> {
+  const repoAIncludeDir = join(root, 'repo-a', 'include')
+  const repoBRoot = join(root, 'repo-b')
+  const files: FixtureFile[] = Array.from({ length: DEPENDENT_REPO_A_HEADERS }, (_, index) => ({
+    path: join(repoAIncludeDir, `a-lib-${index}.h`),
+    content: `inline int a_lib_${index}(void) { return ${index}; }\n`
+  }))
+  for (let index = 0; index < DEPENDENT_REPO_B_TUS; index++) {
+    files.push({
+      path: join(repoBRoot, 'src', `app-${index}.cpp`),
+      content: `#include "a-lib-${index % DEPENDENT_REPO_A_HEADERS}.h"\n\nint app_${index}(void) { return a_lib_${index % DEPENDENT_REPO_A_HEADERS}(); }\n`
+    })
+  }
+  await writeAll(files)
+
+  const repoBIncludeFlag = `-I${toPosixPath(repoAIncludeDir)}`
+  const scopeDir = join(root, 'scope')
+  await mkdir(scopeDir, { recursive: true })
+  const shardPaths = [join(scopeDir, 'shard-repo-a.json'), join(scopeDir, 'shard-repo-b.json')]
+  // Repo A contributes headers only — an empty shard plus its include path
+  // (#47: a member without sources still feeds every other member's commands).
+  await writeFile(shardPaths[0], JSON.stringify([]))
+  await writeFile(
+    shardPaths[1],
+    JSON.stringify(
+      Array.from({ length: DEPENDENT_REPO_B_TUS }, (_, index) => ({
+        directory: toPosixPath(repoBRoot),
+        file: toPosixPath(join(repoBRoot, 'src', `app-${index}.cpp`)),
+        arguments: ['clang++', '-std=c++17', repoBIncludeFlag, '-c', toPosixPath(join(repoBRoot, 'src', `app-${index}.cpp`))]
+      }))
+    )
+  )
+  return { repoAIncludeDir, repoBIncludeFlag, shardPaths, expectedTus: DEPENDENT_REPO_B_TUS }
 }
