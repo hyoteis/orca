@@ -11628,7 +11628,6 @@
             "9fffaf17c1": "Toggle right sidebar ({{value0}})",
             "aiVaultSessionHistory": "Agents",
             "b37ff4a89a": "ports",
-            "codeTab": "Code",
             "e8e2e4ce74": "Toggle right sidebar",
             "ef182dcb12": "search",
             "fc3095d2ed": "explorer",
@@ -14816,16 +14815,13 @@
           "notProjectTitle": "This folder is not a project yet",
           "browseBlocked": "Authorize code intelligence to browse this folder",
           "configureCode": "Configure Code…",
-          "emptyCopy": "Add a folder to create a C++ or Python scope.",
-          "emptyTitle": "No code scopes for this workspace on this host.",
           "listFailed": "Could not list this folder",
           "loading": "Loading…",
           "noWorkspace": "No active workspace owns this folder",
           "openAsWorkspace": "Open as Workspace",
           "remove": "Remove",
           "reveal": "Reveal in File Manager",
-          "scopeEmptyKept": "{{value0}} scope is empty — kept",
-          "title": "Code"
+          "scopeEmptyKept": "{{value0}} scope is empty — kept"
         },
         "FolderWorkspacePrChecksPanel": {
           "unavailable": "PR checks are only shown for folder workspaces.",

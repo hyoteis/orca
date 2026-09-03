@@ -1,5 +1,9 @@
 # Explorer absorbs the Code panel as the single file workbench
 
+## Status
+
+Accepted — 2026-09-03
+
 Turning the Code panel into a one-stop code workbench (open editors, file find, content search) would have duplicated the Explorer's surface, so we merged instead: the Code tab is removed from the activity bar (immediately, no degraded transition) and Explorer moves to first position, inheriting the reachability goal of #69. Scope members become a collapsible "Code scopes" section in Explorer with its own browsable member tree and an in-section add-member affordance; the find strip gains a pre-search range switch [◆ Scope | Worktree]. Out-of-tree and SSH members display as section rows with consent-gated browsing rather than being mapped into the remote tree. Open Editors, Names find, and Contents search stay where they are; the settings page remains the full scope editor and the status-bar popover the code-intelligence entry.
 
 ## Considered Options

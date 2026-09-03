@@ -28,6 +28,10 @@ export function normalizeRightSidebarRoute(
   if (tab === 'search') {
     return { rightSidebarTab: 'explorer', rightSidebarExplorerView: 'search' }
   }
+  // Why: builds before #83 persisted the Code tab; Explorer absorbed it.
+  if (tab === 'code') {
+    return { rightSidebarTab: 'explorer', rightSidebarExplorerView: 'files' }
+  }
   // Why: plugin tabs are open-ended keys; validate their shape so a persisted
   // plugin tab isn't reset to Explorer on restart.
   if (typeof tab === 'string' && isPluginPanelTabKey(tab)) {
@@ -37,7 +41,6 @@ export function normalizeRightSidebarRoute(
     return { rightSidebarTab: tab, rightSidebarExplorerView: 'files' }
   }
   if (
-    tab === 'code' ||
     tab === 'explorer' ||
     tab === 'vault' ||
     tab === 'workspaces' ||

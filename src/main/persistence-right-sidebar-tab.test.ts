@@ -29,8 +29,9 @@ describe('normalizeRightSidebarTab', () => {
     expect(normalizeRightSidebarTab('pr-checks')).toBe('pr-checks')
   })
 
-  it('preserves the code panel tab across restarts', () => {
-    expect(normalizeRightSidebarTab('code')).toBe('code')
+  // Why: #83 retired the Code tab; persisted 'code' must land on Explorer.
+  it('resets the retired code panel tab to Explorer across restarts', () => {
+    expect(normalizeRightSidebarTab('code')).toBe('explorer')
   })
 
   it('preserves well-formed plugin panel tabs', () => {

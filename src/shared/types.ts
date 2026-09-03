@@ -3397,7 +3397,6 @@ export type TaskResumeState = {
 }
 
 export type RightSidebarTab =
-  | 'code'
   | 'explorer'
   | 'search'
   | 'vault'

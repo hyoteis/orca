@@ -333,8 +333,8 @@ describe('rendered right sidebar titlebar drag regions', () => {
 
     const markup = renderToStaticMarkup(<RightSidebar />)
 
-    // Why: the fallback lands on the first visible tab, which is Code since #69.
-    expect(buttonOpeningTag(markup, 'Code')).toContain('text-foreground')
+    // Why: the fallback lands on the first visible tab, which is Explorer since #83.
+    expect(buttonOpeningTag(markup, 'Explorer')).toContain('text-foreground')
     expect(markup).not.toContain('data-folder-workspace-worktrees-panel')
     expect(mockAppState.setRightSidebarTab).not.toHaveBeenCalled()
   })
@@ -346,7 +346,7 @@ describe('rendered right sidebar titlebar drag regions', () => {
 
     const markup = renderToStaticMarkup(<RightSidebar />)
 
-    expect(buttonOpeningTag(markup, 'Code')).toContain('text-foreground')
+    expect(buttonOpeningTag(markup, 'Explorer')).toContain('text-foreground')
     expect(markup).not.toContain('data-folder-workspace-pr-checks-panel')
     expect(mockAppState.setRightSidebarTab).not.toHaveBeenCalled()
   })

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Why: the right sidebar owns activity-bar visibility, routing, and resize behavior as one interaction surface; splitting the tab table away would make hidden-tab fallbacks harder to audit. */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Plug, CodeXml, Files, GitBranch, ListChecks, PanelRight, Workflow } from 'lucide-react'
+import { Plug, Files, GitBranch, ListChecks, PanelRight, Workflow } from 'lucide-react'
 import { useAppStore } from '@/store'
 import type { ActiveRightSidebarTab, ActivityBarPosition } from '@/store/slices/editor'
 import { useRepoById } from '@/store/selectors'
@@ -107,13 +107,8 @@ function RightSidebarInner(): React.JSX.Element {
   const activityItems = useMemo<ActivityBarItem[]>(
     () => [
       {
-        // Why: first position per #69; no flags so every workspace type keeps it.
-        id: 'code',
-        icon: CodeXml,
-        title: translate('auto.components.right.sidebar.index.codeTab', 'Code'),
-        shortcut: ''
-      },
-      {
+        // Why: first position per #69/#83 — Explorer absorbed the Code panel,
+        // so it is the file workbench entry for every workspace type.
         id: 'explorer',
         icon: Files,
         title: translate('auto.components.right.sidebar.index.8bc2bbc3a0', 'Explorer'),
