@@ -86,6 +86,11 @@ jobs:
       - name: Install xvfb and ssh tooling
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
+      # Why: the docker overlay + app build + toolchain image overflow the
+      # runner's stock free space; the 2026 runner images ship ~8 GB free.
+      - name: Free runner disk for docker
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:

@@ -122,15 +122,30 @@ async function stopContainer(target: DockerSshRelayTarget): Promise<void> {
   })
 }
 
-/** docker start + poll until sshd answers exec again. */
+/** docker start + poll until sshd actually LISTENS — `docker exec` succeeds
+ * before the port is bound, and an early reconnect gets ECONNREFUSED. */
 async function startContainerAndWaitForSsh(target: DockerSshRelayTarget): Promise<void> {
   spawnSync('docker', ['start', target.containerName], { stdio: 'ignore', timeout: 60_000 })
   const deadline = Date.now() + 60_000
   while (Date.now() < deadline) {
-    const probe = spawnSync('docker', ['exec', target.containerName, 'true'], {
-      stdio: 'ignore',
-      timeout: 10_000
-    })
+    const probe = spawnSync(
+      'ssh',
+      [
+        '-i',
+        target.identityFile,
+        '-o',
+        'IdentitiesOnly=yes',
+        '-o',
+        'StrictHostKeyChecking=no',
+        '-o',
+        'UserKnownHostsFile=/dev/null',
+        '-p',
+        String(target.port),
+        `root@${target.host}`,
+        'true'
+      ],
+      { stdio: 'ignore', timeout: 10_000 }
+    )
     if (probe.status === 0) {
       return
     }
@@ -168,7 +183,7 @@ test.describe('C++ code intelligence SSH setup matrix', () => {
       const connected = await connectDockerSshRelayTarget(orcaPage, target)
       const result = await runSetupWithPlatformRetry(orcaPage, connected.repoId)
       expect(result.ok).toBe(true)
-      expect(result.configurationMode).toBe('BASIC')
+      expect(result.configurationMode).toBe('basic')
       expect(result.clangdExecutable).toBeTruthy()
       expect(result.compileCommandCount).toBe(6)
       expect(readRemoteCdbEntryCount(target)).toBe(6)

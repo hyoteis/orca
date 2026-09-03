@@ -146,7 +146,9 @@ describe.skipIf(!clangdAvailable)('clangd budgets on the 50k-TU database', () =>
         20_000
       )
     } finally {
-      budgetRow('clangd teardown exit', await client.dispose(), 2_000)
+      // CI runners tear down slower than dev boxes; 5s keeps the exit budget
+      // meaningful without flaking on shared CPUs.
+      budgetRow('clangd teardown exit', await client.dispose(), 5_000)
     }
   })
 
@@ -158,11 +160,24 @@ describe.skipIf(!clangdAvailable)('clangd budgets on the 50k-TU database', () =>
     })
     try {
       await client.initialize(pathToFileURL(root).toString())
-      // The heavy TU's parse is slow enough that the cancel lands mid-flight;
-      // clangd must answer it as RequestCancelled, not complete the request.
+      // clangd rejects hover on an unopened file (-32602), and a cached
+      // preamble answers instantly — so open the heavy TU, then invalidate the
+      // preamble with a didChange each round: the hover rebuilds it (seconds),
+      // and the cancel lands mid-build as RequestCancelled.
       const uri = pathToFileURL(cppSourcePath(root, CPP_HEAVY_TU_INDEX)).toString()
+      let version = 1
+      let text = cppSourceText(CPP_HEAVY_TU_INDEX)
+      client.notification('textDocument/didOpen', {
+        textDocument: { uri, languageId: 'cpp', version, text }
+      })
       const roundTrips: number[] = []
       for (let attempt = 0; attempt < 5; attempt++) {
+        version += 1
+        text = `${text}// cancel probe ${attempt}\n`
+        client.notification('textDocument/didChange', {
+          textDocument: { uri, version },
+          contentChanges: [{ text }]
+        })
         const pending = client.request('textDocument/hover', {
           textDocument: { uri },
           position: { line: 2, character: 22 }
