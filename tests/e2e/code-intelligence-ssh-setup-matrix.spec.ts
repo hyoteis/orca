@@ -115,18 +115,21 @@ function setDockerSshNetem(target: DockerSshRelayTarget, action: 'add' | 'del'):
   execDockerSshRelayTargetCommand(target, `${qdisc} 2>/dev/null || true`)
 }
 
-async function stopContainer(target: DockerSshRelayTarget): Promise<void> {
-  spawnSync('docker', ['stop', '-t', '1', target.containerName], {
-    stdio: 'ignore',
-    timeout: 30_000
-  })
+/** Severs every ssh connection with TCP RSTs without stopping the container —
+ * a docker stop/start cycle also drops and rebinds the random host port,
+ * which couples the disconnect case to docker's port-reallocation behavior. */
+function setDockerSshReject(target: DockerSshRelayTarget, action: 'insert' | 'delete'): void {
+  const flag = action === 'insert' ? '-I' : '-D'
+  for (const rule of [
+    'INPUT -p tcp --dport 22 -j REJECT --reject-with tcp-reset',
+    'OUTPUT -p tcp --sport 22 -j REJECT --reject-with tcp-reset'
+  ]) {
+    execDockerSshRelayTargetCommand(target, `iptables ${flag} ${rule} 2>/dev/null || true`)
+  }
 }
 
-/** docker start + poll until sshd actually LISTENS — `docker exec` succeeds
- * before the port is bound, and an early reconnect gets ECONNREFUSED. */
-async function startContainerAndWaitForSsh(target: DockerSshRelayTarget): Promise<void> {
-  spawnSync('docker', ['start', target.containerName], { stdio: 'ignore', timeout: 60_000 })
-  const deadline = Date.now() + 60_000
+async function waitForSshProbe(target: DockerSshRelayTarget, timeoutMs = 30_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const probe = spawnSync(
       'ssh',
@@ -139,6 +142,8 @@ async function startContainerAndWaitForSsh(target: DockerSshRelayTarget): Promis
         'StrictHostKeyChecking=no',
         '-o',
         'UserKnownHostsFile=/dev/null',
+        '-o',
+        'ConnectTimeout=5',
         '-p',
         String(target.port),
         `root@${target.host}`,
@@ -151,7 +156,7 @@ async function startContainerAndWaitForSsh(target: DockerSshRelayTarget): Promis
     }
     await new Promise((resolveDone) => setTimeout(resolveDone, 1_000))
   }
-  throw new Error(`container did not come back: ${target.containerName}`)
+  throw new Error(`ssh never became reachable: ${target.host}:${target.port}`)
 }
 
 function remoteMergedCdbExists(target: DockerSshRelayTarget): boolean {
@@ -230,7 +235,7 @@ test.describe('C++ code intelligence SSH setup matrix', () => {
       target = startDockerSshRelayTarget(testInfo, {
         dockerRunArgs: ['--cap-add=NET_ADMIN']
       })
-      // netem stretches the setup's serial exec queue so the stop lands mid-run.
+      // netem stretches the setup's serial exec queue so the RST lands mid-run.
       seedCppSources(target, 60)
       setDockerSshNetem(target, 'add')
       await waitForSessionReady(orcaPage)
@@ -239,12 +244,14 @@ test.describe('C++ code intelligence SSH setup matrix', () => {
 
       const interrupted = runSetup(orcaPage, connected.repoId)
       await orcaPage.waitForTimeout(3_000)
-      await stopContainer(target)
+      setDockerSshReject(target, 'insert')
       const failed = await interrupted
       expect(failed.ok).toBe(false)
       expect(failed.message).toContain('interrupted')
 
-      await startContainerAndWaitForSsh(target)
+      setDockerSshReject(target, 'delete')
+      setDockerSshNetem(target, 'del')
+      await waitForSshProbe(target)
       await reconnectDisconnectedDockerSshRelayTarget(orcaPage, connected.targetId)
       const rerun = await runSetupWithPlatformRetry(orcaPage, connected.repoId)
       expect(rerun.ok).toBe(true)

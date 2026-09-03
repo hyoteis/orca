@@ -3,7 +3,7 @@ FROM node:22-bookworm@sha256:5647be709086c696ff32edaaf1c70cd26d1da6ab2b39c32f3c7
 # Why: immutable snapshot inputs keep the SSH/Git fixture identical across rebuild dates.
 # The snapshot pin freezes resolved versions, so these packages stay unpinned but
 # still reproducible: clangd/ninja/cmake power the C++ setup matrix (#87), and
-# iproute2 ships `tc` for the 100 ms netem RTT variant.
+# iproute2 + iptables ship `tc`/REJECT for the RTT and disconnect variants.
 RUN sed -i \
       -e 's|http://deb.debian.org/debian-security|https://snapshot.debian.org/archive/debian-security/20260713T000000Z|' \
       -e 's|http://deb.debian.org/debian|https://snapshot.debian.org/archive/debian/20260713T000000Z|' \
@@ -16,6 +16,7 @@ RUN sed -i \
       cmake \
       ninja-build \
       iproute2 \
+      iptables \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd /root/.ssh \
     && chmod 700 /root/.ssh
