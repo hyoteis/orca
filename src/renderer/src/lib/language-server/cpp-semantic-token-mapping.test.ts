@@ -30,7 +30,7 @@ describe('C++ semantic token mapping', () => {
       1,
       2,
       5,
-      CPP_SEMANTIC_TOKEN_TYPES.indexOf('variable'),
+      CPP_SEMANTIC_TOKEN_TYPES.indexOf('unknown'),
       0
     ])
   })

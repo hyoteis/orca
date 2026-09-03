@@ -36,6 +36,14 @@ describe('C++ semantic highlight decorations', () => {
     ])
   })
 
+  it('skips decorations for unmapped clangd token types', () => {
+    const unknownType = CPP_SEMANTIC_TOKEN_TYPES.indexOf('unknown')
+
+    expect(
+      decodeCppSemanticTokenDecorations(Uint32Array.from([0, 0, 2, unknownType, 0]))
+    ).toEqual([])
+  })
+
   it('names the consent cause when stale authorization pauses highlighting', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     vi.mocked(getCppSemanticTokens).mockRejectedValue(
