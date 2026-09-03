@@ -10270,6 +10270,11 @@
             "7e4b2a19c0": "无法确定要回复的 GitHub PR。",
             "430f1a62d4": "无法在主机上解决选中的讨论串。"
           },
+          "CodeScopesSection": {
+            "addMember": "添加文件夹到代码范围",
+            "title": "代码范围",
+            "toggleSection": "切换代码范围段"
+          },
           "CreatePullRequestDialog": {
             "2bc1b4345e": "取消",
             "27ef4b195c": "在创建 {{value0}} 之前，请选择其他基础分支。",

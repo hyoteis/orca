@@ -1,0 +1,115 @@
+import React from 'react'
+import { ChevronRight, ExternalLink, FolderInput, Settings2, ShieldOff, Trash2 } from 'lucide-react'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '@/components/ui/context-menu'
+import { useAppStore } from '@/store'
+import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
+import type { CodePanelMemberRow } from './code-panel-member-tree'
+import { LanguageBadge } from './code-panel-language-badge'
+import { CodePanelDirChildren } from './code-panel-dir-children'
+import type { LazyDirectoryListing } from './use-lazy-directory-listing'
+
+function stopRightButtonMenuSelection(event: React.PointerEvent): void {
+  if (event.button !== 2) {
+    return
+  }
+  // Why: Radix opens context menus under the pointer; on some macOS/Electron
+  // paths the right-button release lands on the first item and selects it.
+  event.preventDefault()
+}
+
+/** One scope member: browsable dir row + the four-action context menu (#70). */
+export function CodePanelMemberTreeRow({
+  row,
+  listing,
+  configureRepoId,
+  onOpenAsWorkspace,
+  onReveal,
+  onRemove,
+  onOpenFile
+}: {
+  row: CodePanelMemberRow
+  listing: LazyDirectoryListing
+  configureRepoId: string | null
+  onOpenAsWorkspace: (row: CodePanelMemberRow) => void
+  onReveal: (row: CodePanelMemberRow) => void
+  onRemove: (row: CodePanelMemberRow) => void
+  onOpenFile: (filePath: string, fileName: string) => void
+}): React.JSX.Element {
+  const openModal = useAppStore((s) => s.openModal)
+  const { expandedDirs, toggleDir } = listing
+  const dirPath = row.directory
+  const expanded = expandedDirs.has(dirPath)
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex h-[26px] w-full items-center gap-1.5 px-2 text-left text-[13px] text-foreground hover:bg-accent"
+          title={
+            row.browseBlocked
+              ? translate(
+                  'auto.components.rightSidebar.CodePanel.browseBlocked',
+                  'Authorize code intelligence to browse this folder'
+                )
+              : dirPath
+          }
+          onClick={() => {
+            if (!row.browseBlocked) {
+              toggleDir(dirPath)
+            }
+          }}
+        >
+          {row.browseBlocked ? (
+            <ShieldOff className="size-3 shrink-0 text-amber-500" />
+          ) : (
+            <ChevronRight
+              className={cn(
+                'size-3 shrink-0 text-muted-foreground transition-transform',
+                expanded && 'rotate-90'
+              )}
+            />
+          )}
+          <span className="min-w-0 flex-1 truncate font-mono text-xs">{row.path}</span>
+          {row.languages.map((language) => (
+            <LanguageBadge key={language} language={language} />
+          ))}
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent
+        className="w-64 bg-[rgba(255,255,255,0.82)] dark:bg-[rgba(0,0,0,0.72)]"
+        onPointerUpCapture={stopRightButtonMenuSelection}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
+        <ContextMenuItem onSelect={() => onOpenAsWorkspace(row)}>
+          <FolderInput />
+          {translate('auto.components.rightSidebar.CodePanel.openAsWorkspace', 'Open as Workspace')}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => onReveal(row)}>
+          <ExternalLink />
+          {translate('auto.components.rightSidebar.CodePanel.reveal', 'Reveal in File Manager')}
+        </ContextMenuItem>
+        {row.languages.includes('cpp') && configureRepoId ? (
+          <ContextMenuItem
+            onSelect={() => openModal('code-intelligence-cpp-setup', { repoId: configureRepoId })}
+          >
+            <Settings2 />
+            {translate('auto.components.rightSidebar.CodePanel.configureCode', 'Configure Code…')}
+          </ContextMenuItem>
+        ) : null}
+        <ContextMenuSeparator />
+        <ContextMenuItem variant="destructive" onSelect={() => onRemove(row)}>
+          <Trash2 />
+          {translate('auto.components.rightSidebar.CodePanel.remove', 'Remove')}
+        </ContextMenuItem>
+      </ContextMenuContent>
+      <CodePanelDirChildren dirPath={dirPath} depth={1} listing={listing} onOpenFile={onOpenFile} />
+    </ContextMenu>
+  )
+}

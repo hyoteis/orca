@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import type { CodePanelDirectoryLister } from './CodePanel'
+import type { CodePanelDirectoryLister } from './use-code-scopes-section'
 import { useLazyDirectoryListing } from './use-lazy-directory-listing'
 
 export type CodePanelAddFolderScopeSeed = {

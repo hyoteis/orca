@@ -41,7 +41,7 @@ export function CodePanelDirChildren({
         <button
           type="button"
           key={childPath}
-          className="flex h-[24px] w-full items-center gap-1.5 text-left font-mono text-xs text-foreground hover:bg-accent"
+          className="flex h-[26px] w-full items-center gap-1.5 text-left font-mono text-xs text-foreground hover:bg-accent"
           style={{ paddingLeft: `${depth * 14 + 22}px` }}
           title={childPath}
           onClick={() => onOpenFile(childPath, entry.name)}
@@ -56,7 +56,7 @@ export function CodePanelDirChildren({
       <React.Fragment key={childPath}>
         <button
           type="button"
-          className="flex h-[24px] w-full items-center gap-1.5 text-left font-mono text-xs text-foreground hover:bg-accent"
+          className="flex h-[26px] w-full items-center gap-1.5 text-left font-mono text-xs text-foreground hover:bg-accent"
           style={{ paddingLeft: `${depth * 14 + 8}px` }}
           onClick={() => toggleDir(childPath)}
         >

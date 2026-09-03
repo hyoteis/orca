@@ -59,6 +59,7 @@ import {
 import { isRenameHotspotTarget, resolveDirToggleTiming } from './file-explorer-dir-toggle-timing'
 import type { TreeNode } from './file-explorer-types'
 import { OpenEditorsSection } from './OpenEditorsSection'
+import { CodeScopesSection } from './CodeScopesSection'
 import { useFileExplorerSelection } from './useFileExplorerSelection'
 import { useFileExplorerVisibleRowProjection } from './useFileExplorerVisibleRowProjection'
 import { translate } from '@/i18n/i18n'
@@ -744,6 +745,7 @@ function FileExplorerFiles(): React.JSX.Element {
           onToggleDotfiles={handleToggleDotfiles}
         />
         <OpenEditorsSection />
+        <CodeScopesSection />
         <FileExplorerQueryStrip view={explorerView} onSelectView={handleSelectExplorerView}>
           {/* Why: keep both query rows mounted and cross-fade so the Names/Contents
              switch does not remount or shift when changing modes. */}
