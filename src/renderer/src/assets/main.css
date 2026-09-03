@@ -1,4 +1,4 @@
-﻿@import 'tailwindcss';
+@import 'tailwindcss';
 @import 'tw-animate-css';
 @import '@xterm/xterm/css/xterm.css';
 @import 'katex/dist/katex.min.css';
@@ -121,7 +121,7 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* 鈹€鈹€ Light Mode 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Light Mode ──────────────────────────────────────── */
 
 :root {
   --app-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -228,14 +228,14 @@
   --annotation-highlight: #f59e0b;
   --markdown-search-match: #facc15;
   --markdown-search-match-active: #fb923c;
-  /* Why: tab-group splits use a dedicated divider 鈥?`--border` is too faint on
+  /* Why: tab-group splits use a dedicated divider — `--border` is too faint on
      card/editor surfaces when panes are side-by-side or stacked. Default must
      meet >=3:1 against `--card`, not only the hover/drag strong state. */
   --tab-group-split-divider: #868690;
   --tab-group-split-divider-strong: #71717a;
 }
 
-/* 鈹€鈹€ Dark Mode 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Dark Mode ───────────────────────────────────────── */
 
 .dark {
   --orca-security-background: #0a0a0a;
@@ -446,7 +446,7 @@
   background: var(--accent);
 }
 
-/* 鈹€鈹€ Base Layer 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Base Layer ──────────────────────────────────────── */
 
 @layer base {
   *,
@@ -488,7 +488,7 @@
   }
 }
 
-/* 鈹€鈹€ Sleek scrollbar (VS Code-like) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Sleek scrollbar (VS Code-like) ─────────────────── */
 
 .scrollbar-sleek {
   scrollbar-width: thin;
@@ -540,7 +540,7 @@
   scrollbar-color: color-mix(in srgb, var(--muted-foreground, #737373) 48%, transparent) transparent;
 }
 
-/* Why: no reserved `scrollbar-gutter` 鈥?paired with `overflow-y: auto`, a list
+/* Why: no reserved `scrollbar-gutter` — paired with `overflow-y: auto`, a list
    that fits shows no scrollbar (and no Windows scrollbar arrow buttons), so its
    rows stay flush with the fixed header controls, matching macOS. The gutter is
    only taken while actually scrolling. Thumb still fades in on hover. */
@@ -555,7 +555,7 @@
 
 .worktree-sidebar-scrollbar::-webkit-scrollbar-thumb {
   background-color: transparent;
-  /* Why: no right inset 鈥?a 3px transparent right border left a visible strip
+  /* Why: no right inset — a 3px transparent right border left a visible strip
      beside the sidebar resize seam that read like a gap in the drag handle. */
   border-width: 3px 0 3px 0;
 }
@@ -594,7 +594,7 @@
   overscroll-behavior: contain;
 }
 
-/* 鈹€鈹€ Editor-style scrollbar (matches Monaco) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Editor-style scrollbar (matches Monaco) ────────── */
 
 .scrollbar-editor,
 .xterm .xterm-viewport {
@@ -684,7 +684,7 @@
    ::before/::after pseudo-elements stay free for drag-and-drop feedback. See
    drop-indicator.ts and SortableTab.tsx for the implementation. */
 
-/* 鈹€鈹€ Layout 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Layout ──────────────────────────────────────────── */
 
 #root {
   height: 100dvh;
@@ -708,7 +708,7 @@ html.native-shell .app-layout {
   height: 100%;
 }
 
-/* Tab-group split resize handle 鈥?wide hit area, visible center line. */
+/* Tab-group split resize handle — wide hit area, visible center line. */
 .tab-group-split-resize-handle {
   flex-shrink: 0;
   position: relative;
@@ -754,10 +754,10 @@ html.native-shell .app-layout {
   background: var(--tab-group-split-divider-strong);
 }
 
-/* 鈹€鈹€ Titlebar 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Titlebar ────────────────────────────────────────── */
 
 /* Why: Radix portals (dropdowns, popovers, dialogs, sheets) render at the
-   document root. Electron's OS-level drag hit-test ignores z-index 鈥?portaled
+   document root. Electron's OS-level drag hit-test ignores z-index — portaled
    content that visually overlaps a -webkit-app-region: drag element is
    unclickable without an explicit no-drag. These rules cover every Radix
    portal variant: popper wrappers (dropdowns, popovers), dialog/sheet
@@ -796,7 +796,7 @@ html.native-shell .app-layout {
   overflow: hidden;
   flex-shrink: 0;
   /* Why: in workspace view this strip sits directly above the worktree
-     sidebar 鈥?match its surface so the left column reads as one panel. */
+     sidebar — match its surface so the left column reads as one panel. */
   background: var(--worktree-sidebar);
   /* Why: draw the divider via inset shadow instead of border-bottom so the
      flex content area spans the full 36px. With border-bottom + border-box,
@@ -879,7 +879,7 @@ html.native-shell .app-layout {
 }
 
 /* Why: flex spacer that reserves the width occupied by the three window-control
-   buttons (3 脳 46px) so that the preceding titlebar content is not obscured by
+   buttons (3 × 46px) so that the preceding titlebar content is not obscured by
    the fixed-position overlay when custom desktop chrome is active. */
 .window-controls-titlebar-spacer {
   flex-shrink: 0;
@@ -927,7 +927,7 @@ html.native-shell .app-layout {
 }
 
 /* Why: in side activity-bar mode the panel header does NOT extend to the window
-   edge 鈥?the 40px icon strip sits to its right. But the window-controls overlay
+   edge — the 40px icon strip sits to its right. But the window-controls overlay
    is 138px wide when custom desktop chrome is active, so it still overlaps the
    panel by (138 - 40) = 98px. Apply exactly that remainder as padding-right so
    the close button clears the minimize button. max(0px, ...) keeps this a no-op
@@ -1122,7 +1122,7 @@ html.native-shell .app-layout {
   transform: translateY(0);
 }
 
-/* 鈹€鈹€ Content 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Content ─────────────────────────────────────────── */
 
 .content-area {
   display: flex;
@@ -1131,13 +1131,13 @@ html.native-shell .app-layout {
   overflow: hidden;
 }
 
-/* 鈹€鈹€ Jump palette (Cmd+J) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Jump palette (Cmd+J) ─────────────────────────────── */
 
 /* Why the data-slot qualifier: CommandItem also sets data-[selected=true]:bg-accent;
    this selector must beat that utility so light-mode selection is actually visible. */
 [data-slot='command-item'].jump-palette-item[data-selected='true'] {
   /* Why: flat --accent (#f5f5f5) on the palette surface (#fff) is nearly invisible
-     in light mode 鈥?the keyboard cursor has to read as a solid selected row.
+     in light mode — the keyboard cursor has to read as a solid selected row.
      Mix foreground into background and draw an inset ring; expose the surface
      as a var so status-pip cutouts can match without hardcoding. */
   --jump-palette-selection-surface: color-mix(in srgb, var(--foreground) 12%, var(--background));
@@ -1156,10 +1156,10 @@ html.native-shell .app-layout {
   color: var(--accent-foreground);
 }
 
-/* 鈹€鈹€ Sidebar 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Sidebar ─────────────────────────────────────────── */
 
 [data-file-explorer-row][data-selected='true'] {
-  /* Why: flat bg-accent 鈮?panel background in light mode, so selection mixes
+  /* Why: flat bg-accent ≈ panel background in light mode, so selection mixes
      foreground into accent and adds an inset ring to stay legible in both themes. */
   background: color-mix(in srgb, var(--foreground) 8%, var(--accent));
   box-shadow: inset 0 0 0 1px var(--border);
@@ -1234,7 +1234,7 @@ html.native-shell .app-layout {
 }
 
 .worktree-agent-row-hover[data-focused-agent-pane='true'] {
-  /* Why: a borderless fill. --sidebar-accent 鈮?--sidebar in light mode, so the
+  /* Why: a borderless fill. --sidebar-accent ≈ --sidebar in light mode, so the
      selection wash mixes sidebar-foreground into the accent to stay legible
      without going so dark that muted text (timestamp) drops out. */
   background: color-mix(in srgb, var(--sidebar-foreground) 12%, var(--sidebar-accent));
@@ -1485,9 +1485,9 @@ html.native-shell .app-layout {
   grid-template-rows: 1fr;
 }
 
-/* Why: must stay a compositor-driven CSS animation 鈥?a JS clock writing
+/* Why: must stay a compositor-driven CSS animation — a JS clock writing
    per-element transforms blocks the renderer input thread (STA-3328: 41
-   spinners 鈬?~490 style writes/s, keystroke p90 363ms). The component anchors
+   spinners ⇒ ~490 style writes/s, keystroke p90 363ms). The component anchors
    each animation's startTime once; steps(12) preserves the retired cadence. */
 @keyframes agent-spinner-rotate {
   to {
@@ -2018,7 +2018,7 @@ html.native-shell .app-layout {
   text-overflow: ellipsis;
 }
 
-/* 鈹€鈹€ Misc 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Misc ────────────────────────────────────────────── */
 
 .number-input-clean {
   appearance: textfield;
@@ -2030,7 +2030,7 @@ html.native-shell .app-layout {
   margin: 0;
 }
 
-/* 鈹€鈹€ Landing 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Landing ─────────────────────────────────────────── */
 
 .landing {
   flex: 1;
@@ -2075,7 +2075,7 @@ html.native-shell .app-layout {
   color: var(--muted-foreground);
 }
 
-/* 鈹€鈹€ fix: ensure Monaco find widget layout is not reversed 鈹€鈹€ */
+/* ── fix: ensure Monaco find widget layout is not reversed ── */
 .monaco-editor .find-widget,
 .monaco-editor .find-widget .monaco-inputbox,
 .monaco-editor .find-widget .matchesCount {
@@ -2134,7 +2134,7 @@ html.native-shell .app-layout {
 }
 
 /* Why: Monaco's faded scrollbar uses the class `invisible`, which collides with
-   Tailwind's `.invisible` utility (visibility: hidden) 鈥?so also restore visibility. */
+   Tailwind's `.invisible` utility (visibility: hidden) — so also restore visibility. */
 .monaco-editor
   .reference-zone-widget
   .monaco-scrollable-element
@@ -2173,7 +2173,7 @@ html.native-shell .app-layout {
 
 /* Why: Monaco leaves the peek preview container `inline-block` and only sizes the
    editor child, so the container shrink-wraps the child in BOTH axes while the
-   inherited automaticLayout ResizeObserver measures the container 鈥?a feedback
+   inherited automaticLayout ResizeObserver measures the container — a feedback
    loop that ratchets the preview to blank at fractional zoom/DPI (issue #7405).
    Pinning both dimensions to the splitview slot severs the loop. */
 .monaco-editor .reference-zone-widget .preview.inline {
@@ -2181,7 +2181,7 @@ html.native-shell .app-layout {
   width: 100%;
 }
 
-/* 鈹€鈹€ Git conflict decorations 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Git conflict decorations ───────────────────────────────────── */
 
 .monaco-editor .orca-conflict-marker-line {
   background: color-mix(in srgb, var(--destructive) 12%, transparent);
@@ -2227,20 +2227,20 @@ html.native-shell .app-layout {
 }
 
 /* Why: Monaco's find-widget button tooltips (Close, Find in Selection, etc.)
-   render inside a `.context-view` wrapper 鈫?`.workbench-hover-container` 鈫?
+   render inside a `.context-view` wrapper → `.workbench-hover-container` →
    `.workbench-hover.compact`, positioned above the target button. The wrapper's
    bounding box (z-index 2576, `pointer-events: auto`) overlaps the button hit
-   area, so as the tooltip appears it fires `mouseleave` on the button 鈫?200ms
-   debounce 鈫?hover disposes 鈫?mouse is again "over" the button 鈫?`mouseover`
-   re-fires a new tooltip 鈫?loop. The visible effect is an infinitely flashing
+   area, so as the tooltip appears it fires `mouseleave` on the button → 200ms
+   debounce → hover disposes → mouse is again "over" the button → `mouseover`
+   re-fires a new tooltip → loop. The visible effect is an infinitely flashing
    tooltip that also blocks clicks on the button beneath it. The overlap is
    only reliably reproducible when the right sidebar is open, because the find
    widget's x-position shifts the wrapper onto the button rect; with the
    sidebar closed the wrapper often lands slightly offset and doesn't intercept.
 
-   These are compact tooltips (`HoverStyle.Pointer` 鈫?`.workbench-hover.compact`)
+   These are compact tooltips (`HoverStyle.Pointer` → `.workbench-hover.compact`)
    configured with `hideOnHover: true`, so the CompositeMouseTracker only tracks
-   the target element 鈥?not the wrapper. Making the entire wrapper chain
+   the target element — not the wrapper. Making the entire wrapper chain
    non-interactive breaks the overlap feedback loop without affecting tracker
    logic, keyboard focus traps, or interactive markdown hovers (which are never
    `.compact`). The `:has()` selector ensures we only disable pointer events on
@@ -2251,18 +2251,18 @@ html.native-shell .app-layout {
   pointer-events: none;
 }
 
-/* Why: compact hovers for simple label strings (e.g. "Find in Selection (鈱モ寴L)")
+/* Why: compact hovers for simple label strings (e.g. "Find in Selection (⌥⌘L)")
    get `white-space: pre-wrap` inline-set by Monaco, so when the tooltip lands
-   near the viewport edge its max-width clamps and the label wraps to 2鈥? lines,
+   near the viewport edge its max-width clamps and the label wraps to 2–3 lines,
    pushing the tooltip down over the find-widget buttons. These labels are
    single-line by design; forcing nowrap keeps the tooltip on one line and lets
    the positioning logic flip/shift as needed to fit. Only applies to compact
-   hovers 鈥?markdown hovers still wrap normally. */
+   hovers — markdown hovers still wrap normally. */
 .workbench-hover.compact .hover-contents {
   white-space: nowrap !important;
 }
 
-/* 鈹€鈹€ Update card animations 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Update card animations ───────────────────────────────────────── */
 
 @keyframes update-card-enter {
   from {
@@ -2303,7 +2303,7 @@ html.native-shell .app-layout {
   animation: update-card-exit 150ms ease-in both;
 }
 
-/* Waveform bars in the FeatureTipsModal voice tip 鈥?purely decorative. */
+/* Waveform bars in the FeatureTipsModal voice tip — purely decorative. */
 @keyframes waveform {
   0%,
   100% {
@@ -2321,7 +2321,7 @@ html.native-shell .app-layout {
   transform-origin: center;
 }
 
-/* CLI feature tip 鈥?terminal cursor inside the agent-control command. */
+/* CLI feature tip — terminal cursor inside the agent-control command. */
 @keyframes cli-tip-caret {
   0%,
   45% {
@@ -2396,7 +2396,7 @@ html.native-shell .app-layout {
   border-width: 1.5px;
 }
 
-/* Cmd+J feature tip 鈥?JS-driven sequence (keypress 鈫?palette 鈫?typing 鈫?results).
+/* Cmd+J feature tip — JS-driven sequence (keypress → palette → typing → results).
    The keypress press-down and palette entrance are handled inline by React state
    transitions; this file only defines the caret blink and the results fade-in. */
 
@@ -2415,7 +2415,7 @@ html.native-shell .app-layout {
   animation: cmd-j-tip-caret 1s step-end infinite;
 }
 
-/* Worktree rows fade in when the palette opens 鈥?mirrors the real palette,
+/* Worktree rows fade in when the palette opens — mirrors the real palette,
    which shows recent worktrees on empty query and filters synchronously. */
 @keyframes cmd-j-tip-result-in {
   0% {
@@ -2445,7 +2445,7 @@ html.native-shell .app-layout {
   }
 }
 
-/* 鈹€鈹€ Feature wall: agents-orchestration animations 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Feature wall: agents-orchestration animations ───────────────── */
 
 /* Why: drives the supported-agents marquee on page 1 of the agents tile.
    Track is duplicated in the DOM so a -50% translate loops seamlessly. */
@@ -2492,7 +2492,7 @@ html.native-shell .app-layout {
   }
 }
 
-/* Why: orchestrator 鈫?child connector arrows. Faint dashed strokes drawn in
+/* Why: orchestrator → child connector arrows. Faint dashed strokes drawn in
    JS so endpoints follow the real card geometry as cards animate between
    phase 1 (parent + nested child) and phase 2 (parent + spawned peer). */
 .feature-wall-orch-arrows {
@@ -2693,7 +2693,7 @@ html.native-shell .app-layout {
   }
 }
 
-/* 鈹€鈹€ Diff comment decorations 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€ */
+/* ── Diff comment decorations ────────────────────────────────────── */
 
 /* Why: the "+" button is appended into Monaco's editor DOM node by
    useDiffCommentDecorator. Keep it visually subtle until hovered so it does
@@ -2761,7 +2761,7 @@ html.native-shell .app-layout {
    with a foreground-tinted fill, a solid left accent bar, a soft shadow,
    and a bolded uppercase meta label. Dark mode uses 6% (vs light's 5%)
    to produce roughly the same absolute luminance delta above its editor
-   surface 鈥?the foreground color is different (white vs black) so equal
+   surface — the foreground color is different (white vs black) so equal
    percentages would not give equal contrast. Override lives in `.dark`. */
 .orca-diff-comment-card {
   position: relative;
