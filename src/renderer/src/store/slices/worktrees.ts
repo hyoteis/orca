@@ -2442,6 +2442,7 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
         tab === 'explorer' ||
         tab === 'vault' ||
         tab === 'workspaces' ||
+        tab === 'pr-checks' ||
         tab === 'source-control' ||
         tab === 'checks' ||
         tab === 'ports'

@@ -2176,6 +2176,34 @@ describe('fetchWorktrees', () => {
     expect(store.getState().sortEpoch).toBe(8)
   })
 
+  it('keeps a remembered pr-checks tab for a surviving worktree across a purge', async () => {
+    const store = createTestStore()
+    const removed = makeWorktree({
+      id: 'repo1::/path/removed',
+      repoId: 'repo1',
+      path: '/path/removed'
+    })
+    const surviving = makeWorktree({
+      id: 'repo1::/path/surviving',
+      repoId: 'repo1',
+      path: '/path/surviving'
+    })
+
+    mockApi.worktrees.list.mockResolvedValue([surviving])
+    store.setState({
+      worktreesByRepo: { repo1: [removed, surviving] },
+      sortEpoch: 7,
+      rightSidebarTabByWorktree: {
+        [removed.id]: 'checks',
+        [surviving.id]: 'pr-checks'
+      }
+    } as Partial<AppState>)
+
+    await store.getState().fetchWorktrees('repo1')
+
+    expect(store.getState().rightSidebarTabByWorktree).toEqual({ [surviving.id]: 'pr-checks' })
+  })
+
   it('purges hosted review link mutation bookkeeping for worktrees removed by refresh', async () => {
     const store = createTestStore()
     const removed = makeWorktree({
