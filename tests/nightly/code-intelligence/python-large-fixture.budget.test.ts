@@ -15,13 +15,21 @@ import { budgetRow, infoRow, installNightlyReportWriter, median } from './nightl
 
 const FILE_COUNT = Number(process.env.ORCA_NIGHTLY_PY_FILES ?? '100000')
 const pyrightExecutable = resolveNightlyServerCommand('basedpyright-langserver', process.env)
+// The langserver entrypoint has no --version; the CLI binary from the same
+// install is the availability probe.
+const pyrightProbeExecutable = resolveNightlyServerCommand('basedpyright', process.env)
 const pyrightAvailable = (() => {
   try {
-    return spawnSync(pyrightExecutable, ['--version'], { timeout: 15_000 }).status === 0
+    return spawnSync(pyrightProbeExecutable, ['--version'], { timeout: 15_000 }).status === 0
   } catch {
     return false
   }
 })()
+if (!pyrightAvailable) {
+  console.warn(
+    `[nightly] basedpyright unavailable (probed ${pyrightProbeExecutable}); startup budgets skipped`
+  )
+}
 
 const root = mkdtempSync(join(tmpdir(), 'orca-nightly-py-'))
 
