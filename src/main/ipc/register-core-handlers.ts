@@ -24,6 +24,7 @@ import { registerRateLimitHandlers } from './rate-limits'
 import { registerRuntimeHandlers } from './runtime'
 import { registerRuntimeEnvironmentHandlers } from './runtime-environments'
 import { registerLanguageServerSessionHandlers } from './language-server-sessions'
+import { resolveManagedLanguageServerLaunch } from './code-intelligence-managed-install'
 import { registerCodeIntelligenceHandlers } from './code-intelligence'
 import { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
@@ -217,7 +218,9 @@ export function registerCoreHandlers(
   registerFilesystemWatcherHandlers()
   registerRuntimeHandlers(runtime)
   registerRuntimeEnvironmentHandlers(store)
-  const codeIntelligenceScopes = new CodeIntelligenceScopeStore(store)
+  const codeIntelligenceScopes = new CodeIntelligenceScopeStore(store, (scope) =>
+    resolveManagedLanguageServerLaunch(store, scope)
+  )
   registerLanguageServerSessionHandlers(codeIntelligenceScopes)
   registerCodeIntelligenceHandlers(codeIntelligenceScopes, store)
   registerEphemeralVmHandlers(store, pluginService)

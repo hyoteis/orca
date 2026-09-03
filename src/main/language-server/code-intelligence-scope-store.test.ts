@@ -18,7 +18,7 @@ const scope = (overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligence
   ...overrides
 })
 
-function createStore(initial: CodeIntelligenceScope[] = []) {
+function createStore(initial: CodeIntelligenceScope[] = [], repoExecutionHostId = 'ssh:box') {
   let settings = { codeIntelligenceScopes: initial } as GlobalSettings
   return {
     getRepos: vi.fn(() => [
@@ -27,7 +27,7 @@ function createStore(initial: CodeIntelligenceScope[] = []) {
         path: '/workspace',
         displayName: 'Workspace',
         connectionId: 'box',
-        executionHostId: 'ssh:box' as const,
+        executionHostId: repoExecutionHostId as CodeIntelligenceScope['executionHostId'],
         kind: 'folder' as const,
         badgeColor: '#000000',
         addedAt: 1
@@ -42,7 +42,7 @@ function createStore(initial: CodeIntelligenceScope[] = []) {
 }
 
 describe('CodeIntelligenceScopeStore', () => {
-  it('owns revisions and invalidates consent when configuration changes', () => {
+  it('owns revisions and invalidates consent when configuration changes', async () => {
     const persisted = scope()
     const store = createStore([persisted])
     const catalog = new CodeIntelligenceScopeStore(store)
@@ -64,12 +64,12 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(result.scope.consent?.authorizedMembers).toEqual([
       { path: 'engine', visibleResults: true }
     ])
-    expect(() =>
+    await expect(
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
-    ).toThrow('consent')
+      ).rejects.toThrow('consent')
   })
 
-  it('requires a session restart only for changes beyond members', () => {
+  it('requires a session restart only for changes beyond members', async () => {
     const upsert = (next: CodeIntelligenceScope): boolean =>
       new CodeIntelligenceScopeStore(createStore([scope()])).upsert(next).restartRequired
     expect(upsert({ ...scope(), enabled: false })).toBe(true)
@@ -85,7 +85,7 @@ describe('CodeIntelligenceScopeStore', () => {
     ).toBe(false)
   })
 
-  it('keeps a member-emptied scope alive without a session restart', () => {
+  it('keeps a member-emptied scope alive without a session restart', async () => {
     const store = createStore([scope()])
     const result = new CodeIntelligenceScopeStore(store).upsert({ ...scope(), members: [] })
     expect(result.restartRequired).toBe(false)
@@ -94,15 +94,15 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(store.getSettings().codeIntelligenceScopes).toHaveLength(1)
   })
 
-  it('authorizes only the persisted enabled scope with current consent and revision', () => {
+  it('authorizes only the persisted enabled scope with current consent and revision', async () => {
     const store = createStore([scope()])
     const catalog = new CodeIntelligenceScopeStore(store)
-    expect(() =>
+    await expect(
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
-    ).toThrow('consent')
+      ).rejects.toThrow('consent')
     catalog.grantConsent('scope', 1)
     expect(
-      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+      await catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
     ).toMatchObject({
       sessionId: 's',
       scopeId: 'scope',
@@ -112,26 +112,26 @@ describe('CodeIntelligenceScopeStore', () => {
       executionHostId: 'ssh:box' as const,
       command: { executable: '/usr/bin/clangd', args: ['--background-index'] }
     })
-    expect(() =>
+    await expect(
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
-    ).toThrow('revision')
+      ).rejects.toThrow('revision')
   })
 
-  it('rejects a renderer-supplied root outside the persisted workspace', () => {
+  it('rejects a renderer-supplied root outside the persisted workspace', async () => {
     const catalog = new CodeIntelligenceScopeStore(createStore())
     expect(() => catalog.upsert(scope({ workspaceRoot: '/other' }))).toThrow('does not match')
   })
 
-  it('rejects disabled scopes even when they previously had consent', () => {
+  it('rejects disabled scopes even when they previously had consent', async () => {
     const store = createStore([scope({ enabled: false })])
     const catalog = new CodeIntelligenceScopeStore(store)
     catalog.grantConsent('scope', 1)
-    expect(() =>
+    await expect(
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
-    ).toThrow('disabled')
+      ).rejects.toThrow('disabled')
   })
 
-  it('lazily migrates legacy {relativePath} members on read and drops setupStatus', () => {
+  it('lazily migrates legacy {relativePath} members on read and drops setupStatus', async () => {
     const setupStatus: CodeIntelligenceScope['setupStatus'] = {
       state: 'ready',
       mode: 'cmake',
@@ -157,12 +157,12 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(persisted?.[0].members).toEqual([{ path: 'engine', visibleResults: true }])
     expect(store.updateSettings).toHaveBeenCalledTimes(1)
     // The stale fingerprint no longer matches, so consent must be re-granted.
-    expect(() =>
+    await expect(
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
-    ).toThrow('consent')
+      ).rejects.toThrow('consent')
   })
 
-  it('keeps setupStatus for scopes that already use {path} members', () => {
+  it('keeps setupStatus for scopes that already use {path} members', async () => {
     const setupStatus: CodeIntelligenceScope['setupStatus'] = {
       state: 'ready',
       mode: 'cmake',
@@ -175,7 +175,7 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(store.updateSettings).not.toHaveBeenCalled()
   })
 
-  it('round-trips a scope with mixed relative and absolute members', () => {
+  it('round-trips a scope with mixed relative and absolute members', async () => {
     const catalog = new CodeIntelligenceScopeStore(createStore())
     const mixed = scope({
       members: [
@@ -188,7 +188,7 @@ describe('CodeIntelligenceScopeStore', () => {
     expect(catalog.list()[0].members).toEqual(mixed.members)
   })
 
-  it('invalidates a consent fingerprint granted over the legacy member shape', () => {
+  it('invalidates a consent fingerprint granted over the legacy member shape', async () => {
     // A pre-upgrade fingerprint hashed the payload with the {relativePath} key
     // (canonical() from the shipped code-intelligence-scope-consent.ts), so
     // rebuild that value to prove migration — not a hand-picked stale string —
@@ -226,8 +226,54 @@ describe('CodeIntelligenceScopeStore', () => {
     } as CodeIntelligenceScope
     const catalog = new CodeIntelligenceScopeStore(createStore([legacy]))
 
-    expect(() =>
+    await expect(
       catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
-    ).toThrow('consent')
+      ).rejects.toThrow('consent')
+  })
+
+  it('resolves managed sources through the Host launch resolver', async () => {
+    const managed = scope({ serverSource: { type: 'managed', version: '22.1.6' } })
+    const catalog = new CodeIntelligenceScopeStore(
+      createStore([managed]),
+      async () => ({ executable: '/managed/clangd/22.1.6/bin/clangd', args: [] })
+    )
+    catalog.grantConsent('scope', 1)
+
+    await expect(
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+    ).resolves.toMatchObject({
+      kind: 'clangd',
+      command: { executable: '/managed/clangd/22.1.6/bin/clangd', args: [] },
+      managed: { tool: 'clangd', version: '22.1.6' }
+    })
+  })
+
+  it('refuses managed sources with no active install outside Runtime Hosts', async () => {
+    const managed = scope({ serverSource: { type: 'managed' } })
+    const catalog = new CodeIntelligenceScopeStore(createStore([managed]))
+    catalog.grantConsent('scope', 1)
+
+    await expect(
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+    ).rejects.toThrow('No managed clangd version is active')
+  })
+
+  it('lets Runtime Hosts resolve managed launches server-side', async () => {
+    const managed = scope({
+      serverSource: { type: 'managed' },
+      executionHostId: 'runtime:env' as const
+    })
+    const catalog = new CodeIntelligenceScopeStore(
+      createStore([managed], 'runtime:env')
+    )
+    catalog.grantConsent('scope', 1)
+
+    const launch = await catalog.authorizeSession({
+      sessionId: 's',
+      scopeId: 'scope',
+      revision: 1
+    })
+    expect(launch.command).toBeUndefined()
+    expect(launch.managed).toEqual({ tool: 'clangd' })
   })
 })

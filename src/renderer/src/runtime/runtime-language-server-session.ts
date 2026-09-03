@@ -1,5 +1,6 @@
 import {
   LANGUAGE_SERVER_CUSTOM_COMMAND_RUNTIME_CAPABILITY,
+  LANGUAGE_SERVER_MANAGED_INSTALL_RUNTIME_CAPABILITY,
   LANGUAGE_SERVER_SESSION_RUNTIME_CAPABILITY
 } from '../../../shared/protocol-version'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
@@ -25,6 +26,17 @@ export async function openRuntimeLanguageServerSession(
     throw new Error('Remote Runtime Host does not support language-server sessions')
   }
   const launch = await window.api.codeIntelligence.authorizeSession(request)
+  // Why: an old Host's zod schema silently strips the managed marker, which
+  // would downgrade the launch to PATH discovery — gate instead (#15).
+  if (
+    launch.managed &&
+    !(await runtimeEnvironmentSupportsCapability(
+      environmentId,
+      LANGUAGE_SERVER_MANAGED_INSTALL_RUNTIME_CAPABILITY
+    ))
+  ) {
+    throw new Error('Remote Runtime Host does not support managed language servers')
+  }
   if (
     launch.command &&
     !(await runtimeEnvironmentSupportsCapability(

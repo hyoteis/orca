@@ -13,13 +13,14 @@ import type {
   LanguageServerLaunchRequest,
   LanguageServerSessionOpenRequest
 } from '../../shared/language-server-session'
-import { getRepoExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 import { isFolderRepo } from '../../shared/repo-kind'
 import type { GlobalSettings, Repo } from '../../shared/types'
 import {
   grantCodeIntelligenceConsent,
   hasCurrentCodeIntelligenceConsent
 } from './code-intelligence-scope-consent'
+import { languageServerKindForScope } from '../../shared/code-intelligence-scope'
 
 type ScopeSettingsStore = {
   getRepos: () => Repo[]
@@ -62,7 +63,7 @@ function sameLaunchConfiguration(
 }
 
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {
-  return scope.language === 'cpp' ? 'clangd' : 'basedpyright'
+  return languageServerKindForScope(scope.language)
 }
 
 function validateWorkspaceRoot(scope: CodeIntelligenceScope): void {
@@ -74,8 +75,17 @@ function validateWorkspaceRoot(scope: CodeIntelligenceScope): void {
   }
 }
 
+/** Resolves the active managed version's launch command on the scope's Host;
+ * null when no managed install is active there. */
+export type ManagedLanguageServerLaunchResolver = (
+  scope: CodeIntelligenceScope
+) => Promise<{ executable: string; args: readonly string[] } | null>
+
 export class CodeIntelligenceScopeStore {
-  constructor(private readonly store: ScopeSettingsStore) {}
+  constructor(
+    private readonly store: ScopeSettingsStore,
+    private readonly resolveManagedLaunch: ManagedLanguageServerLaunchResolver = async () => null
+  ) {}
 
   list(): readonly CodeIntelligenceScope[] {
     const raw = this.store.getSettings().codeIntelligenceScopes ?? []
@@ -152,7 +162,7 @@ export class CodeIntelligenceScopeStore {
     return structuredClone(next)
   }
 
-  authorizeSession(request: LanguageServerSessionOpenRequest): LanguageServerLaunchRequest {
+  async authorizeSession(request: LanguageServerSessionOpenRequest): Promise<LanguageServerLaunchRequest> {
     const scope = this.requireScope(request.scopeId)
     if (scope.revision !== request.revision) {
       throw new Error('Code intelligence scope revision is stale')
@@ -174,13 +184,28 @@ export class CodeIntelligenceScopeStore {
     return scope
   }
 
-  private toLaunchRequest(
+  private async toLaunchRequest(
     scope: CodeIntelligenceScope,
     request: LanguageServerSessionOpenRequest
-  ): LanguageServerLaunchRequest {
+  ): Promise<LanguageServerLaunchRequest> {
     this.validateWorkspaceBinding(scope)
     if (scope.serverSource.type === 'managed') {
-      throw new Error('Managed language servers are not available in Phase 1')
+      const kind = languageServerKind(scope)
+      const command = await this.resolveManagedLaunch(scope)
+      if (!command && parseExecutionHostId(scope.executionHostId)?.kind !== 'runtime') {
+        throw new Error(
+          `No managed ${kind} version is active on this Host; install it before enabling the managed source`
+        )
+      }
+      return {
+        ...request,
+        kind,
+        workspaceRoot: scope.workspaceRoot,
+        executionHostId: scope.executionHostId,
+        ...(command ? { command: { executable: command.executable, args: [...command.args] } } : {}),
+        managed: { tool: kind, ...(scope.serverSource.version ? { version: scope.serverSource.version } : {}) },
+        members: structuredClone(scope.members)
+      }
     }
     return {
       ...request,

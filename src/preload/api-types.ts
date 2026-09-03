@@ -9,8 +9,16 @@ import type {
 import type {
   LanguageServerLaunchRequest,
   LanguageServerSessionOpenRequest,
-  LanguageServerSessionsApi
+  LanguageServerSessionsApi,
+  LanguageServerKind
 } from '../shared/language-server-session'
+import type {
+  ManagedLanguageServerInstallEvent,
+  ManagedLanguageServerInstallRequest,
+  ManagedLanguageServerInstallResult,
+  ManagedLanguageServerInstallState,
+  ManagedLanguageServerRollbackResult
+} from '../shared/managed-language-server'
 /* eslint-disable max-lines -- Why: the preload contract is intentionally centralized in one declaration file so renderer and preload stay in lockstep when IPC surfaces change. */
 import type {
   CreateHostedReviewArgs,
@@ -1136,6 +1144,24 @@ export type PreloadApi = {
     authorizeSession: (
       request: LanguageServerSessionOpenRequest
     ) => Promise<LanguageServerLaunchRequest>
+    managedInstallState: (request: {
+      executionHostId: ExecutionHostId
+      tool: LanguageServerKind
+    }) => Promise<ManagedLanguageServerInstallState>
+    installManagedLanguageServer: (
+      request: ManagedLanguageServerInstallRequest
+    ) => Promise<ManagedLanguageServerInstallResult>
+    cancelManagedLanguageServerInstall: (request: {
+      executionHostId: ExecutionHostId
+      tool: LanguageServerKind
+    }) => Promise<boolean>
+    rollbackManagedLanguageServer: (request: {
+      executionHostId: ExecutionHostId
+      tool: LanguageServerKind
+    }) => Promise<ManagedLanguageServerRollbackResult>
+    onManagedInstallEvent: (
+      callback: (event: ManagedLanguageServerInstallEvent) => void
+    ) => () => void
     onScopeChanged: (callback: (change: CodeIntelligenceScopeChange) => void) => () => void
   }
   languageServers: LanguageServerSessionsApi

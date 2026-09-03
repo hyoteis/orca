@@ -57,6 +57,32 @@ describe('openRuntimeLanguageServerSession', () => {
     expect((api as { subscribe: ReturnType<typeof vi.fn> }).subscribe).not.toHaveBeenCalled()
   })
 
+  it('refuses managed launches on Hosts without the managed-install capability', async () => {
+    // Old Hosts strip the managed marker silently; the gate prevents a
+    // PATH-discovery downgrade (#15).
+    supports.mockResolvedValueOnce(true).mockResolvedValueOnce(false)
+    authorizeSession.mockResolvedValueOnce({
+      sessionId: 's',
+      scopeId: 'scope',
+      revision: 1,
+      kind: 'clangd',
+      workspaceRoot: '/repo',
+      executionHostId: 'runtime:env',
+      managed: { tool: 'clangd' },
+      members: [{ relativePath: '.', visibleResults: true }]
+    })
+    const api = { subscribe: vi.fn() } as never
+    await expect(
+      openRuntimeLanguageServerSession(
+        api,
+        'env',
+        { sessionId: 's', scopeId: 'scope', revision: 1 },
+        { onEvent: vi.fn() }
+      )
+    ).rejects.toThrow('managed language servers')
+    expect((api as { subscribe: ReturnType<typeof vi.fn> }).subscribe).not.toHaveBeenCalled()
+  })
+
   it('bridges binary/status and closes the dedicated subscription', async () => {
     supports.mockResolvedValue(true)
     const callbacks: Record<string, (value?: unknown) => void> = {}

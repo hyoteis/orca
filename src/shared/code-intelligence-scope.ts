@@ -1,6 +1,7 @@
 import type { ExecutionHostId } from './execution-host'
 import { getRepoExecutionHostId } from './execution-host'
 import type { Repo } from './types'
+import type { LanguageServerKind } from './language-server-session'
 import {
   isRuntimePathAbsolute,
   normalizeRuntimePathForComparison,
@@ -8,6 +9,13 @@ import {
 } from './cross-platform-path'
 
 export type CodeIntelligenceLanguage = 'python' | 'cpp'
+
+/** The server a scope's language launches; Python scopes use basedpyright. */
+export function languageServerKindForScope(
+  language: CodeIntelligenceLanguage
+): LanguageServerKind {
+  return language === 'cpp' ? 'clangd' : 'basedpyright'
+}
 
 export function getCodeIntelligenceWorkspaceKey(
   repoId: string,

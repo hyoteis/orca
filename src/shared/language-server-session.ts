@@ -3,6 +3,9 @@ import type { CodeIntelligenceScopeMember } from './code-intelligence-scope'
 
 export type LanguageServerKind = 'basedpyright' | 'pyright' | 'clangd'
 
+/** Zod-friendly literal tuple of LanguageServerKind. */
+export const LANGUAGE_SERVER_KINDS = ['basedpyright', 'pyright', 'clangd'] as const
+
 export type LanguageServerSessionOpenRequest = {
   sessionId: string
   scopeId: string
@@ -19,12 +22,15 @@ export type LanguageServerLaunchRequest = LanguageServerSessionOpenRequest & {
   workspaceRoot: string
   executionHostId: ExecutionHostId
   command?: LanguageServerLaunchCommand
+  /** Managed source: the Host-side active-version launch target. Runtime
+   * Hosts resolve this server-side (client paths are meaningless there). */
+  managed?: { tool: LanguageServerKind; version?: string }
   members: readonly CodeIntelligenceScopeMember[]
 }
 
 export type RuntimeLanguageServerSessionParams = Pick<
   LanguageServerLaunchRequest,
-  'sessionId' | 'kind' | 'workspaceRoot' | 'executionHostId' | 'command'
+  'sessionId' | 'kind' | 'workspaceRoot' | 'executionHostId' | 'command' | 'managed'
 >
 
 export type LanguageServerSessionStatus =

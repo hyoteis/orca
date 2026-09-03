@@ -60,7 +60,7 @@ export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceSc
   ipcMain.handle(
     'languageServers:open',
     async (event, request: LanguageServerSessionOpenRequest) => {
-      const launch = scopes.authorizeSession(request)
+      const launch = await scopes.authorizeSession(request)
       const host = parseExecutionHostId(launch.executionHostId)
       if (!host || host.kind === 'runtime') {
         throw new Error('Runtime language-server sessions must use the Runtime adapter')

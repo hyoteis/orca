@@ -25,6 +25,7 @@ import {
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 import { getSshConnectionManager, getRegisteredSshState } from './ssh'
 import { subscribeSshTransportConnected } from './ssh-transport-connected'
+import { registerManagedLanguageServerInstallHandlers } from './code-intelligence-managed-install'
 
 function broadcastScopeChange(change: CodeIntelligenceScopeChange): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -173,4 +174,5 @@ export function registerCodeIntelligenceHandlers(
     'codeIntelligence:authorizeSession',
     (_event, request: LanguageServerSessionOpenRequest) => scopes.authorizeSession(request)
   )
+  registerManagedLanguageServerInstallHandlers(store)
 }

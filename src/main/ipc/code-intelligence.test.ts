@@ -20,7 +20,10 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
   ipcMain: { handle: handleMock, on: vi.fn() }
 }))
-vi.mock('./ssh', () => ({ getSshConnectionManager: connectionManagerMock }))
+vi.mock('./ssh', () => ({
+  getSshConnectionManager: connectionManagerMock,
+  getRegisteredSshState: () => ({ remotePlatform: 'linux' })
+}))
 // registerCodeIntelligenceHandlers runs once in production; mock the
 // subscription so repeated test registrations stay isolated.
 vi.mock('./ssh-transport-connected', () => ({
@@ -240,6 +243,51 @@ describe('SSH reconnect orphan sweep', () => {
     notifyLatestSshTransportConnected('box')
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(commands).toEqual([])
+  })
+
+  it('serves local managed install state from the shipped manifest', async () => {
+    const handlersForCall = await register([])
+    await expect(
+      handlersForCall.get('codeIntelligence:managedInstallState')!(undefined, {
+        executionHostId: 'local',
+        tool: 'pyright'
+      })
+    ).resolves.toMatchObject({
+      tool: 'pyright',
+      supported: true,
+      activeVersion: null,
+      latestEntry: { tool: 'pyright' }
+    })
+  })
+
+  it('rejects managed installs on Runtime Hosts', async () => {
+    const handlersForCall = await register([])
+    await expect(
+      handlersForCall.get('codeIntelligence:installManagedLanguageServer')!(undefined, {
+        executionHostId: 'runtime:env',
+        tool: 'pyright',
+        route: { type: 'host-download' }
+      })
+    ).rejects.toThrow('Runtime Hosts')
+  })
+
+  it('reads ssh managed install state through the remote queue', async () => {
+    const commands: string[] = []
+    const handlersForCall = await register([], commands)
+    const state = (await handlersForCall.get('codeIntelligence:managedInstallState')!(undefined, {
+      executionHostId: 'ssh:box',
+      tool: 'pyright'
+    })) as { supported: boolean; unsupportedReason?: unknown }
+    if (!state.supported) {
+      throw new Error(`SSH state unsupported: ${JSON.stringify(state.unsupportedReason)}`)
+    }
+    expect(state).toMatchObject({
+      tool: 'pyright',
+      activeVersion: null,
+      installedVersions: []
+    })
+    expect(commands.join('\n')).toContain('uname -m')
+    expect(commands.join('\n')).toContain('active.json')
   })
 })
 

@@ -499,6 +499,22 @@ const api = {
     removeScope: (scopeId) => ipcRenderer.invoke('codeIntelligence:removeScope', scopeId),
     grantConsent: (request) => ipcRenderer.invoke('codeIntelligence:grantConsent', request),
     authorizeSession: (request) => ipcRenderer.invoke('codeIntelligence:authorizeSession', request),
+    managedInstallState: (request) =>
+      ipcRenderer.invoke('codeIntelligence:managedInstallState', request),
+    installManagedLanguageServer: (request) =>
+      ipcRenderer.invoke('codeIntelligence:installManagedLanguageServer', request),
+    cancelManagedLanguageServerInstall: (request) =>
+      ipcRenderer.invoke('codeIntelligence:cancelManagedLanguageServerInstall', request),
+    rollbackManagedLanguageServer: (request) =>
+      ipcRenderer.invoke('codeIntelligence:rollbackManagedLanguageServer', request),
+    onManagedInstallEvent: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        event: Parameters<typeof callback>[0]
+      ): void => callback(event)
+      ipcRenderer.on('codeIntelligence:managedInstallEvent', listener)
+      return () => ipcRenderer.removeListener('codeIntelligence:managedInstallEvent', listener)
+    },
     onScopeChanged: (callback) => {
       const listener = (
         _event: Electron.IpcRendererEvent,
