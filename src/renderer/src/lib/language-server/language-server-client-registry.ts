@@ -1,12 +1,4 @@
-import {
-  AbstractMessageReader,
-  AbstractMessageWriter,
-  createMessageConnection,
-  type DataCallback,
-  type Disposable,
-  type Message,
-  type MessageConnection
-} from 'vscode-jsonrpc/browser'
+import type { MessageConnection } from 'vscode-jsonrpc/browser'
 import {
   InitializeRequest,
   type InitializeParams,
@@ -25,75 +17,6 @@ import type {
   LanguageServerSessionHandle,
   LanguageServerSessionOpenRequest
 } from '../../../../shared/language-server-session'
-
-const encoder = new TextEncoder(),
-  decoder = new TextDecoder()
-class ByteReader extends AbstractMessageReader {
-  private buffer = new Uint8Array()
-  private callback: DataCallback | null = null
-  listen(callback: DataCallback): Disposable {
-    this.callback = callback
-    return {
-      dispose: () => {
-        this.callback = null
-      }
-    }
-  }
-  push(bytes: Uint8Array<ArrayBufferLike>): void {
-    const next = new Uint8Array(this.buffer.length + bytes.byteLength)
-    next.set(this.buffer)
-    next.set(new Uint8Array(bytes), this.buffer.length)
-    this.buffer = next
-    this.drain()
-  }
-  close(): void {
-    this.fireClose()
-  }
-  private drain(): void {
-    for (;;) {
-      const text = decoder.decode(this.buffer)
-      const headerEnd = text.indexOf('\r\n\r\n')
-      if (headerEnd === -1) {
-        return
-      }
-      const match = /content-length:\s*(\d+)/i.exec(text.slice(0, headerEnd))
-      if (!match) {
-        this.fireError(new Error('Missing LSP Content-Length'))
-        this.buffer = new Uint8Array()
-        return
-      }
-      const bodyStart = encoder.encode(text.slice(0, headerEnd + 4)).byteLength,
-        length = Number(match[1])
-      if (this.buffer.byteLength < bodyStart + length) {
-        return
-      }
-      const body = this.buffer.slice(bodyStart, bodyStart + length)
-      this.buffer = this.buffer.slice(bodyStart + length)
-      try {
-        this.callback?.(JSON.parse(decoder.decode(body)) as Message)
-      } catch (error) {
-        this.fireError(error)
-      }
-    }
-  }
-}
-class ByteWriter extends AbstractMessageWriter {
-  constructor(private readonly handle: () => LanguageServerSessionHandle | null) {
-    super()
-  }
-  async write(message: Message): Promise<void> {
-    const body = encoder.encode(JSON.stringify(message)),
-      header = encoder.encode(`Content-Length: ${body.byteLength}\r\n\r\n`),
-      bytes = new Uint8Array(header.length + body.length)
-    bytes.set(header)
-    bytes.set(body, header.length)
-    this.handle()?.send(bytes)
-  }
-  end(): void {
-    this.handle()?.close()
-    this.fireClose()
-  }
-}
 
 export type LanguageServerClientKey = {
   executionHostId: ExecutionHostId
@@ -148,11 +71,17 @@ export class LanguageServerClientRegistry {
     this.lifecycles.set(id, lifecycle)
     const generation = lifecycle.beginGeneration()
     this.close(key)
-    const reader = new ByteReader()
-    let handle: LanguageServerSessionHandle | null = null
     // authorizeSession validates revision + consent; the resolved launch feeds
     // the main-process spawn, not this client.
     await this.scopeAuthority.authorizeSession(request)
+    // Dynamic import: keeps vscode-jsonrpc/browser (no node export) out of the
+    // static graph so node-environment tests can import this module.
+    const { createSessionConnection } = await import('./language-server-session-connection')
+    let handle: LanguageServerSessionHandle | null = null
+    const { reader, connection } = createSessionConnection({
+      send: (bytes) => handle?.send(bytes),
+      close: () => handle?.close()
+    })
     handle = await this.api.open(request, {
       onEvent: (event: LanguageServerSessionEvent) => {
         if (event.type === 'stdout') {
@@ -165,9 +94,6 @@ export class LanguageServerClientRegistry {
         }
       }
     })
-    const writer = new ByteWriter(() => handle),
-      connection = createMessageConnection(reader, writer)
-    connection.listen()
     const documents = new LanguageServerDocumentRegistry(connection)
     const sync = new LanguageServerDocumentSyncController(documents)
     this.clients.set(id, {
@@ -232,18 +158,6 @@ export class LanguageServerClientRegistry {
     return (
       current?.generation === sessionGeneration && current.requestGeneration === requestGeneration
     )
-  }
-  scheduleIdle(key: LanguageServerClientKey, onIdle: () => void): void {
-    this.lifecycles.get(JSON.stringify(key))?.scheduleIdle(onIdle)
-  }
-  markActive(key: LanguageServerClientKey): void {
-    this.lifecycles.get(JSON.stringify(key))?.cancelIdle()
-  }
-  disposeKey(key: LanguageServerClientKey): void {
-    this.close(key)
-    const id = JSON.stringify(key)
-    this.lifecycles.get(id)?.dispose()
-    this.lifecycles.delete(id)
   }
   close(key: LanguageServerClientKey): void {
     const current = this.clients.get(JSON.stringify(key))

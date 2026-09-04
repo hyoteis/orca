@@ -15,14 +15,4 @@ describe('LanguageServerDocumentRegistry', () => {
     expect(registry.snapshot()).toHaveLength(0)
     expect(sendNotification).toHaveBeenCalledTimes(3)
   })
-  it('reopens current drafts on reconnect', () => {
-    const first = vi.fn(),
-      second = vi.fn(),
-      registry = new LanguageServerDocumentRegistry({ sendNotification: first })
-    registry.open({ uri: 'file:///a.cpp', languageId: 'cpp', text: 'disk' })
-    registry.change('file:///a.cpp', 'draft')
-    registry.resynchronize({ sendNotification: second })
-    expect(second).toHaveBeenCalledOnce()
-    expect(second.mock.calls[0][1].textDocument).toMatchObject({ version: 1, text: 'draft' })
-  })
 })

@@ -190,7 +190,6 @@ export class PythonCodeIntelligenceSession {
   async ensureClient(scope: CodeIntelligenceScope): Promise<PythonActiveClient> {
     const current = this.clients.get(scope.id)
     if (current) {
-      this.registry.markActive(current.key)
       return current
     }
     const key: LanguageServerClientKey = {

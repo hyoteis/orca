@@ -2,13 +2,11 @@
 export class LanguageServerSessionLifecycle {
   private generation = 0
   private crashes: number[] = []
-  private idleTimer: ReturnType<typeof setTimeout> | null = null
   constructor(
     private readonly options: {
       crashWindowMs?: number
       maxCrashes?: number
       restartDelaysMs?: readonly number[]
-      idleTimeoutMs?: number
     } = {}
   ) {}
   beginGeneration(): number {
@@ -32,25 +30,7 @@ export class LanguageServerSessionLifecycle {
       delayMs: delays[Math.min(this.crashes.length - 1, delays.length - 1)]
     }
   }
-  clearCrashHistory(): void {
-    this.crashes = []
-  }
-  scheduleIdle(onIdle: () => void): void {
-    this.cancelIdle()
-    this.idleTimer = setTimeout(() => {
-      this.idleTimer = null
-      onIdle()
-    }, this.options.idleTimeoutMs ?? 300_000)
-    this.idleTimer.unref?.()
-  }
-  cancelIdle(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer)
-      this.idleTimer = null
-    }
-  }
   dispose(): void {
-    this.cancelIdle()
     this.generation += 1
   }
 }

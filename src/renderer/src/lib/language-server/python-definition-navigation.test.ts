@@ -15,69 +15,16 @@ vi.mock('@/store', () => ({
   }
 }))
 
-// Programmable fake connection per test: requestHandlers[method] answers
-// sendRequest; notificationRoutes[method] receives server notifications.
-// sessionOverrides[i] scopes a handler to the i-th opened session.
-const requestHandlers: Record<string, (params: unknown, token?: unknown) => unknown> = {}
-const sessionOverrides: Record<string, (params: unknown, token?: unknown) => unknown>[] = []
-const notificationRoutes: Record<string, (params: unknown) => void> = {}
-const requestCalls: string[] = []
-let mockCapabilities: Record<string, unknown> = {}
-let isCurrentRequest = true
+// Shared scripted client (in-memory, no jsonrpc): scripted.requestHandlers
+// answers sendRequest, scripted.notificationRoutes receives server
+// notifications, scripted.sessionOverrides[i] scopes a handler to the i-th
+// opened session.
+vi.mock('./language-server-client-registry', async () => {
+  const { ScriptedLanguageServerClient } = await import('./scripted-language-server-client')
+  return { LanguageServerClientRegistry: ScriptedLanguageServerClient }
+})
 
-const registryHandle = vi.hoisted(() => ({
-  instance: null as unknown as { restartScope(scopeId: string): void }
-}))
-
-vi.mock('./language-server-client-registry', () => ({
-  LanguageServerClientRegistry: class {
-    constructor(
-      _api: unknown,
-      private readonly onRestartDecision?: (key: { scopeId: string }) => void
-    ) {
-      registryHandle.instance = this
-    }
-    markActive(): void {}
-    nextRequestGeneration(): number {
-      return 1
-    }
-    isCurrentRequest(): boolean {
-      return isCurrentRequest
-    }
-    restartScope(scopeId: string): void {
-      this.onRestartDecision?.({ scopeId })
-    }
-    open = vi.fn(async () => {
-      const sessionIndex = sessionOverrides.length
-      sessionOverrides.push({})
-      return {
-        generation: 1,
-        connection: {
-          onRequest: () => ({ dispose: () => {} }),
-          onNotification: (type: { method: string }, handler: (params: unknown) => void) => {
-            notificationRoutes[type.method] = handler
-            return { dispose: () => delete notificationRoutes[type.method] }
-          },
-          sendNotification: () => {},
-          sendRequest: async (type: { method: string }, params: unknown, token?: unknown) => {
-            requestCalls.push(type.method)
-            if ((token as CancellationToken | undefined)?.isCancellationRequested) {
-              throw new Error('cancelled')
-            }
-            const handler =
-              sessionOverrides[sessionIndex][type.method] ?? requestHandlers[type.method]
-            return handler?.(params, token) ?? null
-          }
-        },
-        sync: { reconcile: () => {} },
-        initialize: async () => ({ capabilities: mockCapabilities })
-      }
-    })
-    close(): void {}
-    closeScope(): void {}
-    dispose(): void {}
-  }
-}))
+import { resetScriptedLanguageServerClient, scripted } from './scripted-language-server-client'
 
 import {
   getPythonDiagnostics,
@@ -148,16 +95,8 @@ const fullCapabilities = {
 }
 
 beforeEach(() => {
-  requestCalls.length = 0
-  for (const method of Object.keys(requestHandlers)) {
-    delete requestHandlers[method]
-  }
-  sessionOverrides.length = 0
-  for (const method of Object.keys(notificationRoutes)) {
-    delete notificationRoutes[method]
-  }
-  mockCapabilities = { ...fullCapabilities }
-  isCurrentRequest = true
+  resetScriptedLanguageServerClient()
+  scripted.capabilities = { ...fullCapabilities }
   resetPythonCodeIntelligence()
   ;(window as unknown as { api: unknown }).api = { languageServers: {} }
   settings = {
@@ -168,7 +107,7 @@ beforeEach(() => {
 
 describe('python definition navigation', () => {
   it('returns an in-workspace target and prefers it over external dependencies', async () => {
-    requestHandlers['textDocument/definition'] = () => [
+    scripted.requestHandlers['textDocument/definition'] = () => [
       { targetUri: 'file:///usr/lib/site-packages/dep.py', targetSelectionRange: location('').range },
       location('file:///repo/lib.py', 4)
     ]
@@ -180,7 +119,7 @@ describe('python definition navigation', () => {
   })
 
   it('labels targets outside the workspace root as external dependencies', async () => {
-    requestHandlers['textDocument/definition'] = () =>
+    scripted.requestHandlers['textDocument/definition'] = () =>
       location('file:///usr/lib/site-packages/dep.py')
     const result = await resolvePythonDefinition(request(2))
     expect(result?.external).toBe(true)
@@ -189,19 +128,19 @@ describe('python definition navigation', () => {
   it('returns null when no python scope matches', async () => {
     settings = { codeIntelligenceScopes: [] as CodeIntelligenceScope[] } as GlobalSettings
     expect(await resolvePythonDefinition(request(3))).toBeNull()
-    expect(requestCalls).not.toContain('textDocument/definition')
+    expect(scripted.requestCalls).not.toContain('textDocument/definition')
   })
 
   it('rejects results from a client dropped by a restart', async () => {
     await getPythonDiagnostics(request(3)) // open the session
     let release!: (value: unknown) => void
-    requestHandlers['textDocument/definition'] = () =>
+    scripted.requestHandlers['textDocument/definition'] = () =>
       new Promise((resolve) => {
         release = resolve
       })
     const pending = resolvePythonDefinition(request(4))
     await new Promise((resolve) => setTimeout(resolve, 0))
-    registryHandle.instance.restartScope('local:worktree:demo:python')
+    scripted.instance!.restartScope('local:worktree:demo:python')
     release(location('file:///repo/lib.py'))
     expect(await pending).toBeNull()
   })
@@ -213,7 +152,7 @@ describe('python definition navigation', () => {
     }
     // Cancelled results reject (never cached) so the next call re-requests.
     await expect(resolvePythonDefinition(request(5), cancelled)).rejects.toBeTruthy()
-    expect(requestCalls).not.toContain('textDocument/definition')
+    expect(scripted.requestCalls).not.toContain('textDocument/definition')
   })
 
   it('does not cache a cancelled result', async () => {
@@ -222,30 +161,30 @@ describe('python definition navigation', () => {
       onCancellationRequested: () => ({ dispose: () => {} })
     }
     await resolvePythonDefinition(request(6), cancelled).catch(() => null)
-    requestCalls.length = 0
-    requestHandlers['textDocument/hover'] = () => ({ contents: { kind: 'markdown', value: 'x' } })
+    scripted.requestCalls.length = 0
+    scripted.requestHandlers['textDocument/hover'] = () => ({ contents: { kind: 'markdown', value: 'x' } })
     await getPythonHover(request(6))
-    expect(requestCalls).toContain('textDocument/hover')
+    expect(scripted.requestCalls).toContain('textDocument/hover')
   })
 })
 
 describe('python hover', () => {
   it('returns the server hover', async () => {
     const hover = { contents: { kind: 'markdown', value: 'int' } }
-    requestHandlers['textDocument/hover'] = () => hover
+    scripted.requestHandlers['textDocument/hover'] = () => hover
     expect(await getPythonHover(request(1))).toEqual(hover)
   })
 
   it('is capability-gated', async () => {
-    mockCapabilities = {}
+    scripted.capabilities = {}
     expect(await getPythonHover(request(2))).toBeNull()
-    expect(requestCalls).not.toContain('textDocument/hover')
+    expect(scripted.requestCalls).not.toContain('textDocument/hover')
   })
 })
 
 describe('python references', () => {
   it('keeps only in-workspace references under visible members', async () => {
-    requestHandlers['textDocument/references'] = () => [
+    scripted.requestHandlers['textDocument/references'] = () => [
       location('file:///repo/pkg/a.py'),
       location('file:///repo/vendored/b.py'),
       location('file:///usr/lib/site-packages/dep.py')
@@ -260,7 +199,7 @@ describe('python document symbols', () => {
     const symbols = [
       { name: 'main', kind: 12, range: location('').range, selectionRange: location('').range }
     ]
-    requestHandlers['textDocument/documentSymbol'] = () => symbols
+    scripted.requestHandlers['textDocument/documentSymbol'] = () => symbols
     expect(await getPythonDocumentSymbols(request(1))).toEqual(symbols)
   })
 })
@@ -275,15 +214,15 @@ describe('python workspace symbols', () => {
     } as GlobalSettings
     repos = [repo('demo', '/repo'), repo('other', '/other')]
     // Open both sessions by exercising a per-document request in each workspace.
-    requestHandlers['textDocument/hover'] = () => null
+    scripted.requestHandlers['textDocument/hover'] = () => null
     await getPythonHover(request(1))
     await getPythonHover(request(2, { filePath: '/other/app.py', relativePath: 'app.py', worktreeId: 'other', fileId: 'f2' }))
 
-    requestHandlers['workspace/symbol'] = () => [
+    scripted.requestHandlers['workspace/symbol'] = () => [
       { name: 'a', kind: 12, location: location('file:///repo/pkg/a.py') }
     ]
     // The second-opened session (other workspace) fails; the first keeps its results.
-    sessionOverrides[1]['workspace/symbol'] = () => {
+    scripted.sessionOverrides[1]['workspace/symbol'] = () => {
       throw new Error('server down')
     }
     const result = await searchPythonWorkspaceSymbols('anything')
@@ -297,7 +236,7 @@ describe('python diagnostics', () => {
   it('stores published diagnostics and drops superseded versions', async () => {
     await getPythonDiagnostics(request(1))
     const publish = (params: { uri: string; diagnostics: unknown[]; version?: number }): void =>
-      notificationRoutes['textDocument/publishDiagnostics'](params)
+      scripted.notificationRoutes['textDocument/publishDiagnostics'](params)
     publish({
       uri: 'file:///repo/main.py',
       diagnostics: [{ message: 'old', range: location('').range, severity: 1 }],
@@ -315,14 +254,14 @@ describe('python diagnostics', () => {
 
   it('clears diagnostics when a restart drops the client', async () => {
     await getPythonDiagnostics(request(1))
-    notificationRoutes['textDocument/publishDiagnostics']({
+    scripted.notificationRoutes['textDocument/publishDiagnostics']({
       uri: 'file:///repo/main.py',
       diagnostics: [{ message: 'e', range: location('').range, severity: 1 }],
       version: 1
     })
     const notified: string[] = []
     const unsubscribe = subscribePythonDiagnostics((uri) => notified.push(uri))
-    registryHandle.instance.restartScope('local:worktree:demo:python')
+    scripted.instance!.restartScope('local:worktree:demo:python')
     expect(notified).toContain('file:///repo/main.py')
     expect(await getPythonDiagnostics(request(2))).toEqual([])
     unsubscribe()
@@ -330,12 +269,12 @@ describe('python diagnostics', () => {
 
   it('clears diagnostics on empty publish', async () => {
     await getPythonDiagnostics(request(1))
-    notificationRoutes['textDocument/publishDiagnostics']({
+    scripted.notificationRoutes['textDocument/publishDiagnostics']({
       uri: 'file:///repo/main.py',
       diagnostics: [{ message: 'e', range: location('').range, severity: 1 }],
       version: 1
     })
-    notificationRoutes['textDocument/publishDiagnostics']({
+    scripted.notificationRoutes['textDocument/publishDiagnostics']({
       uri: 'file:///repo/main.py',
       diagnostics: [],
       version: 2

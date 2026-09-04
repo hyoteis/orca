@@ -14,43 +14,15 @@ vi.mock('@/store', () => ({
   }
 }))
 
-const requestHandlers: Record<string, (params: unknown) => unknown> = {}
-const serverRequestRoutes: Record<string, (params: unknown) => unknown> = {}
-const requestCalls: string[] = []
-let mockCapabilities: Record<string, unknown> = {}
+vi.mock('./language-server-client-registry', async () => {
+  const { ScriptedLanguageServerClient } = await import('./scripted-language-server-client')
+  return { LanguageServerClientRegistry: ScriptedLanguageServerClient }
+})
 
-vi.mock('./language-server-client-registry', () => ({
-  LanguageServerClientRegistry: class {
-    markActive(): void {}
-    nextRequestGeneration(): number {
-      return 1
-    }
-    isCurrentRequest(): boolean {
-      return true
-    }
-    open = vi.fn(async () => ({
-      generation: 1,
-      connection: {
-        onRequest: (type: { method: string }, handler: (params: unknown) => unknown) => {
-          serverRequestRoutes[type.method] = handler
-          return { dispose: () => delete serverRequestRoutes[type.method] }
-        },
-        onNotification: () => ({ dispose: () => {} }),
-        sendNotification: () => {},
-        sendRequest: async (type: { method: string }, params: unknown) => {
-          requestCalls.push(type.method)
-          return requestHandlers[type.method]?.(params) ?? null
-        }
-      },
-      sync: { reconcile: () => {} },
-      initialize: async () => ({ capabilities: mockCapabilities })
-    }))
-    close(): void {}
-    closeScope(): void {}
-    dispose(): void {}
-  }
-}))
-
+import {
+  resetScriptedLanguageServerClient,
+  scripted
+} from './scripted-language-server-client'
 import {
   getCppCompletion,
   getCppRenameEdit,
@@ -87,14 +59,8 @@ const request: CppCodeIntelligenceRequest = {
 }
 
 beforeEach(() => {
-  requestCalls.length = 0
-  for (const method of Object.keys(requestHandlers)) {
-    delete requestHandlers[method]
-  }
-  for (const method of Object.keys(serverRequestRoutes)) {
-    delete serverRequestRoutes[method]
-  }
-  mockCapabilities = {
+  resetScriptedLanguageServerClient()
+  scripted.capabilities = {
     completionProvider: { resolveProvider: true },
     renameProvider: true
   }
@@ -118,15 +84,15 @@ beforeEach(() => {
 describe('cpp semantic editing requests', () => {
   it('returns completion items', async () => {
     const item: CompletionItem = { label: 'vector' }
-    requestHandlers['textDocument/completion'] = () => [item]
+    scripted.requestHandlers['textDocument/completion'] = () => [item]
     expect(await getCppCompletion(request, { triggerKind: 1 })).toEqual([item])
   })
 
   it('sends no feature request when the capability is absent', async () => {
-    mockCapabilities = {}
+    scripted.capabilities = {}
     expect(await getCppCompletion(request, { triggerKind: 1 })).toBeNull()
     expect(await getCppRenameEdit(request, 'renamed')).toBeNull()
-    expect(requestCalls).toEqual([])
+    expect(scripted.requestCalls).toEqual([])
   })
 })
 
@@ -155,7 +121,7 @@ describe('cpp workspace/applyEdit interception', () => {
       worktreePathFor: () => '/repo'
     }))
     await getCppCompletion(request, { triggerKind: 1 })
-    const handler = serverRequestRoutes['workspace/applyEdit']
+    const handler = scripted.serverRequestRoutes['workspace/applyEdit']
     expect(handler).toBeDefined()
     const result = (await handler!({
       edit: { changes: {} }

@@ -146,7 +146,6 @@ export class CppCodeIntelligenceSession {
       // Member-only edits keep the clangd session alive (spec §5): the running
       // process picks up the atomically rewritten CDB lazily. Only a launch
       // change restarts, and that arrives via the registry's restart broadcast.
-      this.registry.markActive(current.key)
       return current
     }
     const key: LanguageServerClientKey = {

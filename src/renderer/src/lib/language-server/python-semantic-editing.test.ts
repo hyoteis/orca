@@ -14,42 +14,12 @@ vi.mock('@/store', () => ({
   }
 }))
 
-const requestHandlers: Record<string, (params: unknown) => unknown> = {}
-const serverRequestRoutes: Record<string, (params: unknown) => unknown> = {}
-const requestCalls: string[] = []
-let mockCapabilities: Record<string, unknown> = {}
+vi.mock('./language-server-client-registry', async () => {
+  const { ScriptedLanguageServerClient } = await import('./scripted-language-server-client')
+  return { LanguageServerClientRegistry: ScriptedLanguageServerClient }
+})
 
-vi.mock('./language-server-client-registry', () => ({
-  LanguageServerClientRegistry: class {
-    markActive(): void {}
-    nextRequestGeneration(): number {
-      return 1
-    }
-    isCurrentRequest(): boolean {
-      return true
-    }
-    open = vi.fn(async () => ({
-      generation: 1,
-      connection: {
-        onRequest: (type: { method: string }, handler: (params: unknown) => unknown) => {
-          serverRequestRoutes[type.method] = handler
-          return { dispose: () => delete serverRequestRoutes[type.method] }
-        },
-        onNotification: () => ({ dispose: () => {} }),
-        sendNotification: () => {},
-        sendRequest: async (type: { method: string }, params: unknown) => {
-          requestCalls.push(type.method)
-          return requestHandlers[type.method]?.(params) ?? null
-        }
-      },
-      sync: { reconcile: () => {} },
-      initialize: async () => ({ capabilities: mockCapabilities })
-    }))
-    close(): void {}
-    closeScope(): void {}
-    dispose(): void {}
-  }
-}))
+import { resetScriptedLanguageServerClient, scripted } from './scripted-language-server-client'
 
 import {
   executePythonServerCommand,
@@ -89,14 +59,8 @@ const request: PythonCodeIntelligenceRequest = {
 }
 
 beforeEach(() => {
-  requestCalls.length = 0
-  for (const method of Object.keys(requestHandlers)) {
-    delete requestHandlers[method]
-  }
-  for (const method of Object.keys(serverRequestRoutes)) {
-    delete serverRequestRoutes[method]
-  }
-  mockCapabilities = {
+  resetScriptedLanguageServerClient()
+  scripted.capabilities = {
     completionProvider: { resolveProvider: true },
     renameProvider: true,
     documentFormattingProvider: true
@@ -121,22 +85,22 @@ beforeEach(() => {
 describe('python semantic editing requests', () => {
   it('returns completion items from a CompletionList', async () => {
     const item: CompletionItem = { label: 'sqrt' }
-    requestHandlers['textDocument/completion'] = () => ({ items: [item] })
+    scripted.requestHandlers['textDocument/completion'] = () => ({ items: [item] })
     const items = await getPythonCompletion(request, { triggerKind: 1 })
     expect(items).toEqual([item])
   })
 
   it('sends no request when the server lacks the capability', async () => {
-    mockCapabilities = {}
+    scripted.capabilities = {}
     expect(await getPythonCompletion(request, { triggerKind: 1 })).toBeNull()
     expect(await getPythonRenameEdit(request, 'renamed')).toBeNull()
     expect(await getPythonFormattingEdits(request, { tabSize: 4, insertSpaces: true })).toBeNull()
-    expect(requestCalls).toEqual([])
+    expect(scripted.requestCalls).toEqual([])
   })
 
   it('rejects server commands the server never declared (#20)', async () => {
-    mockCapabilities = { executeCommandProvider: { commands: ['allowed.command'] } }
-    requestHandlers['workspace/executeCommand'] = () => 'ran'
+    scripted.capabilities = { executeCommandProvider: { commands: ['allowed.command'] } }
+    scripted.requestHandlers['workspace/executeCommand'] = () => 'ran'
     expect(
       await executePythonServerCommand(request, 'unknown.command', [])
     ).toBeNull()
@@ -144,14 +108,14 @@ describe('python semantic editing requests', () => {
   })
 
   it('drops empty rename and formatting results', async () => {
-    requestHandlers['textDocument/rename'] = () => ({ changes: {} })
-    requestHandlers['textDocument/formatting'] = () => []
+    scripted.requestHandlers['textDocument/rename'] = () => ({ changes: {} })
+    scripted.requestHandlers['textDocument/formatting'] = () => []
     expect(await getPythonRenameEdit(request, 'renamed')).toBeNull()
     expect(await getPythonFormattingEdits(request, { tabSize: 4, insertSpaces: true })).toBeNull()
   })
 
   it('returns a rename edit when the server produces changes', async () => {
-    requestHandlers['textDocument/rename'] = () => ({
+    scripted.requestHandlers['textDocument/rename'] = () => ({
       changes: {
         'file:///repo/main.py': [
           { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, newText: 'y' }
@@ -198,7 +162,7 @@ describe('python workspace/applyEdit interception', () => {
     }))
     // Open a client so the interceptor installs on it.
     await getPythonCompletion(request, { triggerKind: 1 })
-    const handler = serverRequestRoutes['workspace/applyEdit']
+    const handler = scripted.serverRequestRoutes['workspace/applyEdit']
     expect(handler).toBeDefined()
     const result = (await handler!(applyEditParams)) as { applied: boolean }
     expect(result.applied).toBe(false)
@@ -208,7 +172,7 @@ describe('python workspace/applyEdit interception', () => {
   it('reports a missing context without confirming', async () => {
     installPythonWorkspaceApplyEditInterceptor(() => null)
     await getPythonCompletion(request, { triggerKind: 1 })
-    const handler = serverRequestRoutes['workspace/applyEdit']!
+    const handler = scripted.serverRequestRoutes['workspace/applyEdit']!
     const result = (await handler(applyEditParams)) as {
       applied: boolean
       failureReason?: string

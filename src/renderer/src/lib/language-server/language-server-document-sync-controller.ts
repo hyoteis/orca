@@ -1,5 +1,4 @@
-﻿import type { TextDocumentContentChangeEvent } from 'vscode-languageserver-protocol'
-import type { LanguageServerDocumentRegistry } from './language-server-document-registry'
+﻿import type { LanguageServerDocumentRegistry } from './language-server-document-registry'
 
 export type LanguageServerDocumentSource = {
   documentId: string
@@ -49,23 +48,6 @@ export class LanguageServerDocumentSyncController {
     for (const [id, source] of next) {
       this.sources.set(id, source)
     }
-  }
-
-  applyIncremental(
-    documentId: string,
-    text: string,
-    changes: TextDocumentContentChangeEvent[]
-  ): number {
-    const source = this.sources.get(documentId)
-    if (!source) {
-      throw new Error(`Language server document source is not registered: ${documentId}`)
-    }
-    source.text = text
-    return this.documents.changeIncremental(source.uri, text, changes)
-  }
-
-  resynchronize(connection: Parameters<LanguageServerDocumentRegistry['resynchronize']>[0]): void {
-    this.documents.resynchronize(connection)
   }
 
   syncedVersionFor(uri: string): number | null {

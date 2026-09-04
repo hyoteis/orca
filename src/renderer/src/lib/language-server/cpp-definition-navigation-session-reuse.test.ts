@@ -30,48 +30,15 @@ vi.mock('@/store', () => ({
   }
 }))
 
-const opens: unknown[] = []
-const closes: unknown[] = []
+// The real registry's session-reuse behavior is covered by the scripted
+// client (in-memory, no jsonrpc): what is under test is ensureClient's
+// restart decision, not the registry plumbing.
+vi.mock('./language-server-client-registry', async () => {
+  const { ScriptedLanguageServerClient } = await import('./scripted-language-server-client')
+  return { LanguageServerClientRegistry: ScriptedLanguageServerClient }
+})
 
-// The real registry cannot load under node test conditions (its jsonrpc
-// browser build has no node export); the behavior under test is ensureClient's
-// session-reuse decision, not the registry plumbing.
-vi.mock('./language-server-client-registry', () => ({
-  LanguageServerClientRegistry: class {
-    constructor(
-      _api: unknown,
-      private readonly onRestartDecision?: (key: unknown) => void
-    ) {}
-    markActive(): void {}
-    nextRequestGeneration(): number {
-      return 1
-    }
-    isCurrentRequest(): boolean {
-      return true
-    }
-    open = vi.fn(async (key: { revision: number }) => {
-      opens.push(key.revision)
-      return {
-        generation: 1,
-        connection: {
-          onRequest: () => ({ dispose: () => {} }),
-          sendNotification: () => {},
-          // initialize params carry no textDocument; definition requests do.
-          sendRequest: async (_type: unknown, params: { textDocument?: unknown }) =>
-            params.textDocument ? null : { capabilities: {} }
-        },
-        sync: { reconcile: () => {} },
-        initialize: async () => ({ capabilities: {} })
-      }
-    })
-    close = vi.fn((key: unknown) => closes.push(key))
-    disposeKey = this.close
-    closeScope(): void {}
-    restartScope(_scopeId: string, revision: number): void {
-      this.onRestartDecision?.({ revision })
-    }
-  }
-}))
+import { resetScriptedLanguageServerClient, scripted } from './scripted-language-server-client'
 
 import { resolveCppDefinition } from './cpp-definition-navigation'
 import type { CppCodeIntelligenceRequest } from './cpp-definition-navigation'
@@ -102,8 +69,7 @@ const request = (documentVersion: number): CppCodeIntelligenceRequest => ({
 })
 
 beforeEach(() => {
-  opens.length = 0
-  closes.length = 0
+  resetScriptedLanguageServerClient()
   ;(window as unknown as { api: unknown }).api = { languageServers: {} }
   settings = { codeIntelligenceScopes: [scope(1)] } as GlobalSettings
 })
@@ -111,13 +77,13 @@ beforeEach(() => {
 describe('cpp definition navigation sessions', () => {
   it('reuses the clangd session across member-only revision bumps', async () => {
     expect(await resolveCppDefinition(request(1))).toBeNull()
-    expect(opens).toEqual([1])
+    expect(scripted.opens.map((key) => key.revision)).toEqual([1])
 
     // Member-only change: revision and consent move, the session must not
     // restart (spec §5) — no reopen, no close.
     settings = { codeIntelligenceScopes: [scope(2)] } as GlobalSettings
     expect(await resolveCppDefinition(request(2))).toBeNull()
-    expect(opens).toEqual([1])
-    expect(closes).toEqual([])
+    expect(scripted.opens.map((key) => key.revision)).toEqual([1])
+    expect(scripted.closes).toEqual([])
   })
 })
