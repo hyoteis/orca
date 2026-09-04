@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { access, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { access, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { constants } from 'node:fs'
 import { join, posix } from 'node:path'
 import type {
@@ -11,14 +11,6 @@ import type { CppBuildRoot } from './code-intelligence-cmake-root-selection'
 export const SETUP_MANIFEST_FILE = 'setup-manifest.json'
 // Structural cache-root children; everything else is a legacy hash directory.
 const RETAINED_CPP_CACHE_DIRECTORIES = new Set(['tools', 'scopes'])
-
-async function modifiedAt(path: string): Promise<number> {
-  try {
-    return (await stat(path)).mtimeMs
-  } catch {
-    return 0
-  }
-}
 
 export function cppScopeDirectoryName(scopeId: string): string {
   return createHash('sha256').update(scopeId).digest('hex').slice(0, 16)
@@ -36,25 +28,6 @@ export function remoteCppScopesRootPath(home: string): string {
 export function remoteCppScopeDirectoryPath(home: string, scopeId: string): string {
   // posix.join: the remote layout is POSIX regardless of the local platform.
   return posix.join(remoteCppScopesRootPath(home), cppScopeDirectoryName(scopeId))
-}
-
-export async function createCodeIntelligenceSetupFingerprint(args: {
-  repoId: string
-  roots: readonly string[]
-  request: CodeIntelligenceCppSetupRequest
-  buildRoots: readonly CppBuildRoot[]
-}): Promise<string> {
-  const buildInputs = await Promise.all(
-    args.buildRoots.map(async (root) => ({
-      path: root.sourceDir,
-      system: root.system,
-      directoryModifiedAt: await modifiedAt(root.sourceDir),
-      cmakeModifiedAt: await modifiedAt(join(root.sourceDir, 'CMakeLists.txt')),
-      gnModifiedAt: await modifiedAt(join(root.sourceDir, 'BUILD.gn')),
-      dotGnModifiedAt: await modifiedAt(join(root.sourceDir, '.gn'))
-    }))
-  )
-  return codeIntelligenceSetupFingerprintDigest({ ...args, buildInputs })
 }
 
 export type CppSetupFingerprintBuildInput = {

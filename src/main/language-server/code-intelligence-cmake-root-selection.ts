@@ -1,6 +1,14 @@
 import { access, readdir } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { dirname, isAbsolute, join, parse, relative, resolve } from 'node:path'
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  parse,
+  relative,
+  resolve
+} from 'node:path'
 import { isRuntimePathAbsolute } from '../../shared/cross-platform-path'
 
 export type CppBuildRoot = {
@@ -51,6 +59,8 @@ export type CppBuildRootDetection = {
   resolve: typeof resolve
   relative: typeof relative
   dirname: typeof dirname
+  basename: typeof basename
+  isAbsolute: typeof isAbsolute
   isReadablePath: (path: string) => Promise<boolean>
   /** Direct child directories; empty when the directory is missing or unreadable. */
   listSubdirectories: (directory: string) => Promise<string[]>
@@ -61,6 +71,8 @@ export const localCppBuildRootDetection: CppBuildRootDetection = {
   resolve,
   relative,
   dirname,
+  basename,
+  isAbsolute,
   isReadablePath,
   listSubdirectories
 }

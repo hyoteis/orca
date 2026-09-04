@@ -119,6 +119,8 @@ export function sshBuildRootDetection(queue: SshSetupExecQueue): CppBuildRootDet
     resolve: posix.resolve,
     relative: posix.relative,
     dirname: posix.dirname,
+    basename: posix.basename,
+    isAbsolute: posix.isAbsolute,
     isReadablePath: async (path) =>
       (await queue.exec(buildRemoteReadablePathCommand(path))).code === 0,
     listSubdirectories: async (directory) => {

@@ -15,6 +15,22 @@ A single filesystem path in one of two forms: relative to the workspace root,
 or absolute on the execution Host. The form is a property of the path string
 itself (is-absolute), not a tag. Python scopes accept the relative form only.
 
+## C++ setup pipeline
+
+The one step sequence every C++ setup run follows: normalize scope members,
+classify build roots, provision tools, generate compile-command shards
+(cmake, gn, or basic), merge, and record the cached result. One
+implementation for all Hosts — a Host never carries its own copy of the
+sequence.
+
+## CppSetupHost
+
+The execution surface a setup step runs against: run a command, read and
+atomically write a file, stat mtimes, list directories, resolve the scope
+directory. The local filesystem and the SSH exec queue are the two
+realizations; the differences between them (mtime precision, cache re-checks,
+transport errors) belong to each realization, not to the pipeline.
+
 ## Managed language server
 
 An Orca-supplied language server installed per execution Host from a trusted,

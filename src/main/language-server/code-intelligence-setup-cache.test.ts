@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import {
   cppScopeDirectoryName,
   cppScopeDirectoryPath,
-  createCodeIntelligenceSetupFingerprint,
+  codeIntelligenceSetupFingerprintDigest,
   readCachedCodeIntelligenceSetupResult,
   sweepOrphanCppScopeDirectories,
   writeCachedCodeIntelligenceSetupResult
@@ -23,13 +23,6 @@ const result = {
   healthState: 'ready' as const,
   compileCommandCount: 1,
   warnings: []
-}
-
-const fingerprintArgs = {
-  repoId: 'repo-1',
-  roots: ['.'] as const,
-  request: { repoId: 'repo-1', relativeRoots: ['.'], installMissingTools: true },
-  buildRoots: [] as const
 }
 
 describe('cppScopeDirectoryName', () => {
@@ -80,17 +73,59 @@ describe('setup manifest', () => {
     }
   })
 
-  it('changes the fingerprint when setup inputs change', async () => {
-    const base = await createCodeIntelligenceSetupFingerprint(fingerprintArgs)
-    const changed = await createCodeIntelligenceSetupFingerprint({
-      ...fingerprintArgs,
-      request: {
-        ...fingerprintArgs.request,
-        defines: ['FEATURE=1']
-      }
-    })
-    expect(changed).not.toBe(base)
-    expect(await createCodeIntelligenceSetupFingerprint(fingerprintArgs)).toBe(base)
+  it('changes the fingerprint when setup inputs change', () => {
+    const digestArgs = {
+      repoId: 'repo-1',
+      roots: ['module'] as const,
+      request: { repoId: 'repo-1', relativeRoots: ['module'], installMissingTools: true },
+      buildInputs: [
+        {
+          path: '/srv/project/module',
+          system: 'cmake' as const,
+          directoryModifiedAt: 1000,
+          cmakeModifiedAt: 2000,
+          gnModifiedAt: 0,
+          dotGnModifiedAt: 0
+        }
+      ]
+    }
+    const base = codeIntelligenceSetupFingerprintDigest(digestArgs)
+    expect(
+      codeIntelligenceSetupFingerprintDigest({
+        ...digestArgs,
+        request: { ...digestArgs.request, defines: ['FEATURE=1'] }
+      })
+    ).not.toBe(base)
+    expect(codeIntelligenceSetupFingerprintDigest(digestArgs)).toBe(base)
+  })
+
+  it('keeps the digest byte-stable across refactors (setup caches depend on it)', () => {
+    // Golden sha256: any change to the payload shape or key order invalidates
+    // every user's local and remote setup cache. Update only deliberately.
+    expect(
+      codeIntelligenceSetupFingerprintDigest({
+        repoId: 'repo-1',
+        roots: ['module'],
+        request: {
+          repoId: 'repo-1',
+          relativeRoots: ['module'],
+          installMissingTools: true,
+          defines: ['FEATURE=1'],
+          additionalIncludeDirectories: ['vendor/include'],
+          cppStandard: 'c++20'
+        },
+        buildInputs: [
+          {
+            path: '/srv/project/module',
+            system: 'cmake',
+            directoryModifiedAt: 1000,
+            cmakeModifiedAt: 2000,
+            gnModifiedAt: 0,
+            dotGnModifiedAt: 0
+          }
+        ]
+      })
+    ).toBe('9ca0611531ea76f926d75f106258f1ef51c41cf84c83065fb23aa808664ac6da')
   })
 })
 
