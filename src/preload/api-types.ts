@@ -1162,6 +1162,10 @@ export type PreloadApi = {
     onManagedInstallEvent: (
       callback: (event: ManagedLanguageServerInstallEvent) => void
     ) => () => void
+    /** Offline guidance (#35): client-side Downloads folder for manual saves. */
+    managedInstallDownloadsPath: () => Promise<string>
+    /** Resolves a picked File object to its client path (preload webUtils). */
+    localFilePathForFile: (file: File) => string
     onScopeChanged: (callback: (change: CodeIntelligenceScopeChange) => void) => () => void
   }
   languageServers: LanguageServerSessionsApi

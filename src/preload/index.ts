@@ -515,6 +515,10 @@ const api = {
       ipcRenderer.on('codeIntelligence:managedInstallEvent', listener)
       return () => ipcRenderer.removeListener('codeIntelligence:managedInstallEvent', listener)
     },
+    managedInstallDownloadsPath: () =>
+      ipcRenderer.invoke('codeIntelligence:managedInstallDownloadsPath'),
+    // Offline archive selection (#35): File→path needs preload's webUtils.
+    localFilePathForFile: (file) => webUtils.getPathForFile(file),
     onScopeChanged: (callback) => {
       const listener = (
         _event: Electron.IpcRendererEvent,

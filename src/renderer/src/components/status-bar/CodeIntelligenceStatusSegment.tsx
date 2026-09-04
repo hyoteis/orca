@@ -38,6 +38,8 @@ import {
   getCodeIntelligenceMemberDisplayPath,
   getStatusBarCodeIntelligenceScopes
 } from './code-intelligence-status-scopes'
+import { ManagedLanguageServerStatusSection } from './ManagedLanguageServerStatusSection'
+import { useManagedInstallEventCacheKeeper } from './managed-install-event-feed'
 
 type Props = { iconOnly: boolean }
 
@@ -48,6 +50,8 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
   const activeWorktreeId = useAppStore((state) => state.activeWorktreeId)
   const openModal = useAppStore((state) => state.openModal)
   const [open, setOpen] = useState(false)
+  // Caches managed-install events while closed (#35); flags failures on the icon.
+  const installFailure = useManagedInstallEventCacheKeeper()
   const worktreeMap = useWorktreeMap()
   const activeWorktree = activeWorktreeId ? worktreeMap.get(activeWorktreeId) : null
   const activeRepo = activeWorktree
@@ -180,13 +184,16 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
               type="button"
               {...STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-accent/70 hover:text-foreground ${
-                pendingReconsent ? 'text-amber-500' : healthColor
+                pendingReconsent || installFailure ? 'text-amber-500' : healthColor
               }`}
               aria-label={triggerLabel}
             >
-              {pendingReconsent ? <AlertTriangle className="size-3" /> : <Braces className="size-3" />}
-              {!iconOnly ? (
-                <span className="text-[11px] font-medium tabular-nums">{folderCount}</span>
+              {pendingReconsent || installFailure ? (
+                <AlertTriangle className="size-3" />
+              ) : (
+                <Braces className="size-3" />
+              )}
+              {!iconOnly ? (                <span className="text-[11px] font-medium tabular-nums">{folderCount}</span>
               ) : null}
             </button>
           </PopoverTrigger>
@@ -313,6 +320,7 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
               </p>
             ) : null}
           </div>
+          <ManagedLanguageServerStatusSection scopes={scopes} executionHostId={executionHostId} />
           <div className="max-h-[24rem] overflow-y-auto p-1.5 scrollbar-sleek">
             {scopes.map((scope) => (
               <section key={scope.id} className="rounded-md px-1.5 py-1.5">

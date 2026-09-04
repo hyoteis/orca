@@ -4,9 +4,13 @@ import zh from './locales/zh.json'
 describe('code intelligence localization', () => {
   it('ships real Chinese text instead of encoding replacement characters', () => {
     const catalog = zh.settings.codeIntelligence
-    expect(catalog.setupMenu).toBe('\u914d\u7f6e\u4ee3\u7801')
-    for (const [key, value] of Object.entries(catalog)) {
-      expect(value, `${key} contains replacement text`).not.toMatch(/[?\uFFFD]/)
+    expect(catalog.setupMenu).toBe('配置代码')
+    const flatten = (node: unknown): string[] =>
+      typeof node === 'string'
+        ? [node]
+        : Object.values((node ?? {}) as Record<string, unknown>).flatMap(flatten)
+    for (const text of flatten(catalog)) {
+      expect(text, 'contains replacement text').not.toMatch(/[?�]/)
     }
   })
 })

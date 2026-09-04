@@ -269,4 +269,9 @@ export function registerManagedLanguageServerInstallHandlers(store: Store): void
       return installer.rollback(request.tool)
     }
   )
+  ipcMain.handle('codeIntelligence:managedInstallDownloadsPath', (): string =>
+    // Offline guidance (#35): where the client should save the archive it
+    // downloads manually for the client-file route.
+    app.getPath('downloads')
+  )
 }
