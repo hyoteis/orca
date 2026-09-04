@@ -35,3 +35,17 @@ The `active.json` file beside a tool's immutable version directories. Names
 the active version and one retained rollback version; swapped atomically
 (tmp + rename). Installing never mutates a running session — new sessions
 pick up the newly activated version.
+
+## Workspace-edit transaction
+
+The guarded path every mutating semantic result takes onto the Host's files
+(`language-server.workspace-edit.v1`): authorized scope/Host/path targets,
+version-and-signature-checked bases, per-file atomic commits, and an
+all-or-nothing journal — any failure rolls every completed file back. Its
+inverse lives only in the renderer session (global undo, never persisted).
+
+## Preimage
+
+The on-disk content a journal step captured immediately before it ran. The
+rollback, the recovery artifact (what an incomplete rollback could not
+restore), and session undo all derive from preimages alone.
