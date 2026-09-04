@@ -63,6 +63,20 @@ describe('authorizeWorkspaceEditTargets', () => {
     expect(result.blocks[0]?.reason).toBe('non-file-uri')
   })
 
+  it('blocks dot-dot traversal that lexically starts inside a member', () => {
+    const result = authorizeWorkspaceEditTargets({
+      scope,
+      operationHostId: 'local',
+      targets: [
+        {
+          uri: 'file:///repo/src/../../etc/passwd',
+          hostPath: '/repo/src/../../etc/passwd'
+        }
+      ]
+    })
+    expect(result.blocks[0]?.reason).toBe('out-of-scope')
+  })
+
   it('resolves relative members against the workspace root', () => {
     const result = authorizeWorkspaceEditTargets({
       scope: { ...scope, members: [{ path: 'src', visibleResults: true }] },

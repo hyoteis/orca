@@ -1,6 +1,7 @@
 import {
   isPathInsideOrEqual,
   isRuntimePathAbsolute,
+  normalizeRuntimePathDots,
   resolveRuntimePath
 } from '../../../../shared/cross-platform-path'
 import type { CodeIntelligenceScopeMember } from '../../../../shared/code-intelligence-scope'
@@ -61,7 +62,9 @@ function targetBlockReason(args: {
   if (args.operationHostId !== args.scopeHostId) {
     return 'host-mismatch'
   }
-  const normalized = args.hostPath.replace(/\\/g, '/')
+  // Why dot resolution: a lexically-inside path (`member/../escape`) passes a
+  // prefix match but the Host filesystem resolves it outside the member.
+  const normalized = normalizeRuntimePathDots(args.hostPath.replace(/\\/g, '/'))
   const inScope = args.boundaries.some((boundary) => isPathInsideOrEqual(boundary, normalized))
   return inScope ? null : 'out-of-scope'
 }

@@ -142,4 +142,83 @@ test.describe('Semantic workspace-edit drawer', () => {
     await expect(drawer.getByText('Undone — files restored')).toBeVisible()
     expect(readFileSync(headerPath, 'utf8')).toBe(ORIGINAL_HEADER)
   })
+
+  test('renders the review drawer in Chinese', async ({ orcaPage, registerPostElectronShutdownCleanup }) => {
+    const rootPath = realpathSync(await mkdtemp(path.join(os.tmpdir(), 'orca-e2e-drawer-zh-')))
+    registerPostElectronShutdownCleanup(async () => {
+      rmSync(rootPath, { recursive: true, force: true })
+    })
+    const headerPath = path.join(rootPath, 'engine/core/engine.h')
+    mkdirSync(path.dirname(headerPath), { recursive: true })
+    writeFileSync(headerPath, ORIGINAL_HEADER)
+    writeFileSync(
+      path.join(rootPath, 'engine/core/engine.cpp'),
+      '#include "engine.h"\n\nint engine_main() {\n    return engine_start();\n}\n'
+    )
+
+    await waitForSessionReady(orcaPage)
+    await orcaPage.evaluate(() => window.__store?.getState().updateSettings({ uiLanguage: 'zh' }))
+    const repoId = (await orcaPage.evaluate(async (p) => {
+      const repo = await window.__store?.getState().addNonGitFolder(p)
+      if (!repo) {
+        throw new Error('addNonGitFolder returned null')
+      }
+      return repo.id
+    }, rootPath)) as string
+    await waitForActiveWorktree(orcaPage)
+
+    const scopeId = `local:folder:${repoId}:cpp`
+    await orcaPage.evaluate(
+      async ({ id, repo, root, script, pidLog, header, text }) => {
+        await window.api.codeIntelligence.upsertScope({
+          id,
+          name: 'Drawer C++ zh',
+          executionHostId: 'local',
+          workspaceKey: `folder:${repo}`,
+          workspaceRoot: root,
+          language: 'cpp',
+          members: [{ path: 'engine', visibleResults: true }],
+          serverSource: {
+            type: 'custom',
+            executable: 'node',
+            args: [
+              script,
+              `--compile-commands-dir=${root}`,
+              `--pid-log=${pidLog}`,
+              `--apply-edit-file=${header}`,
+              `--apply-edit-new-text=${text}`
+            ]
+          },
+          enabled: true,
+          revision: 0
+        })
+        await window.api.codeIntelligence.grantConsent({ scopeId: id, revision: 1 })
+        await window.__store?.getState().fetchSettings()
+      },
+      {
+        id: scopeId,
+        repo: repoId,
+        root: rootPath,
+        script: fakeClangdScript,
+        pidLog: path.join(rootPath, 'clangd-pids.log'),
+        header: headerPath,
+        text: TOUCHED_HEADER
+      }
+    )
+    await openEngineCpp(orcaPage, rootPath)
+
+    const pidLogPath = path.join(rootPath, 'clangd-pids.log')
+    await expect
+      .poll(
+        () => (existsSync(pidLogPath) ? readFileSync(pidLogPath, 'utf8').trim() : ''),
+        { timeout: 20_000 }
+      )
+      .toContain('sent-applyEdit')
+    const drawer = orcaPage.locator('[data-slot="sheet-content"]')
+    await expect(drawer).toBeVisible({ timeout: 20_000 })
+    await expect(drawer.getByText('审阅工作区编辑')).toBeVisible()
+    await expect(drawer.getByRole('button', { name: '应用' })).toBeVisible()
+    // Review gate holds in Chinese too: nothing is written before confirmation.
+    expect(readFileSync(headerPath, 'utf8')).toBe(ORIGINAL_HEADER)
+  })
 })

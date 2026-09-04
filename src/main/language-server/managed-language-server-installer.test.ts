@@ -153,6 +153,18 @@ describe('ManagedLanguageServerInstaller', () => {
     await expect(readdir(join(root, 'clangd'))).resolves.toEqual([])
   })
 
+  it('rejects an archive root that escapes the staging directory', async () => {
+    const entry = makeEntry({ archiveRootDirectory: '../escaped' })
+    const { installer, root } = makeInstaller({ entries: [entry] })
+
+    const result = await installer.install({ tool: 'clangd', route: { type: 'host-download' } })
+    expect(result).toMatchObject({ status: 'failed' })
+    if (result.status === 'failed') {
+      expect(result.error).toContain('outside its staging directory')
+    }
+    await expect(readdir(join(root, 'clangd'))).resolves.toEqual([])
+  })
+
   it('cancels mid-download and keeps the active version', async () => {
     const v1 = makeEntry({ id: 'clangd@1.0.0:test', version: '1.0.0' })
     const v2Body = 'z'.repeat(1024 * 1024)
