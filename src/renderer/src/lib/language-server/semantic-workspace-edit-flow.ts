@@ -6,6 +6,7 @@ import type {
   WorkspaceEditTransactionOutcome
 } from '../../../../shared/language-server-workspace-edit'
 import { planWorkspaceEdit, type WorkspaceEditPlanView } from './workspace-edit-plan'
+import { openSemanticEditDrawer } from './semantic-workspace-edit-drawer-store'
 import {
   runWorkspaceEditTransaction,
   type WorkspaceEditTransactionPorts
@@ -62,7 +63,8 @@ export type SemanticWorkspaceEditContext = {
   operationHostId: ExecutionHostId
   view: WorkspaceEditPlanView
   ports: WorkspaceEditTransactionPorts
-  confirm: (proposal: {
+  /** Omitted in the renderer: the #38 preview drawer drives confirmation. */
+  confirm?: (proposal: {
     steps: readonly WorkspaceEditPlannedStep[]
     scope: CodeIntelligenceScope
     operationHostId: ExecutionHostId
@@ -77,9 +79,10 @@ export type SemanticEditProjectionArgs = {
 }
 
 /**
- * Tier-2 pipeline (#20/#36): plan → preview confirmation → guarded journal
- * transaction → projection + session undo record. The `confirm` gate is the
- * #38 preview drawer seam; nothing touches the host before it returns true.
+ * Tier-2 pipeline (#20/#36/#38): plan → preview confirmation → guarded journal
+ * transaction → projection + session undo record. Without an injected confirm,
+ * the #38 preview drawer owns the whole loop (review, conflict refresh, apply
+ * progress, undo, recovery); nothing touches the host before it resolves true.
  */
 export async function commitGuardedWorkspaceEdit(
   args: {
@@ -88,7 +91,7 @@ export async function commitGuardedWorkspaceEdit(
     operationHostId: ExecutionHostId
     view: WorkspaceEditPlanView
     ports: WorkspaceEditTransactionPorts
-    confirm: (proposal: {
+    confirm?: (proposal: {
       steps: readonly WorkspaceEditPlannedStep[]
       scope: CodeIntelligenceScope
       operationHostId: ExecutionHostId
@@ -98,6 +101,9 @@ export async function commitGuardedWorkspaceEdit(
     now?: () => number
   } & SemanticEditProjectionArgs
 ): Promise<GuardedSemanticEditResult> {
+  if (!args.confirm) {
+    return openSemanticEditDrawer(args)
+  }
   const plan = await planWorkspaceEdit({
     edit: args.edit,
     scope: args.scope,

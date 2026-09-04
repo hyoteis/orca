@@ -1739,7 +1739,8 @@ export class RuntimeFileCommands {
     newRelativePath: string,
     expectedSshConnectionGeneration?: number,
     expectedSshTargetId?: string,
-    expectedExecutionHostId?: string
+    expectedExecutionHostId?: string,
+    overwrite?: boolean
   ): Promise<{ ok: true }> {
     const [oldTarget, newTarget] = await this.resolveFileExplorerPaths(worktreeSelector, [
       oldRelativePath,
@@ -1758,14 +1759,18 @@ export class RuntimeFileCommands {
       if (!provider) {
         throw new Error(SSH_FILESYSTEM_PROVIDER_UNAVAILABLE_MESSAGE)
       }
-      await provider.renameNoClobber(oldTarget.path, newTarget.path)
+      // Overwrite is reserved for staged atomic writes; explorer moves stay
+      // no-clobber so a user never silently replaces a file.
+      await (overwrite
+        ? provider.rename(oldTarget.path, newTarget.path)
+        : provider.renameNoClobber(oldTarget.path, newTarget.path))
       return { ok: true }
     }
 
     const store = this.host.requireStore()
     const oldPath = await resolveAuthorizedPath(oldTarget.path, store, { preserveSymlink: true })
     const newPath = await resolveAuthorizedPath(newTarget.path, store, { preserveSymlink: true })
-    await renameLocalPathSerializedByDestination(oldPath, newPath)
+    await renameLocalPathSerializedByDestination(oldPath, newPath, { overwrite })
     return { ok: true }
   }
 

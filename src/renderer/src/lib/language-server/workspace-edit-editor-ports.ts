@@ -80,11 +80,13 @@ export function createWorkspaceEditEditorPorts(args: {
     exists: (hostPath) => runtimePathExists(context, hostPath),
     writeAtomic: async (hostPath, content) => {
       // Per-file atomic commit: stage beside the target, then rename over it.
+      // The replace-rename is overwrite-flagged because plain fs:rename is the
+      // no-clobber contract used by explorer moves.
       stagingSequence += 1
       const staged = workspaceEditStagingPath(hostPath, stagingSequence)
       try {
         await writeRuntimeFile(context, staged, content)
-        await renameRuntimePath(context, staged, hostPath)
+        await renameRuntimePath(context, staged, hostPath, { overwrite: true })
       } catch (error) {
         void deleteRuntimePath(context, staged).catch(() => undefined)
         throw error

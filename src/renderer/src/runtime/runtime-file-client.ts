@@ -536,14 +536,20 @@ export async function createRuntimePath(
 export async function renameRuntimePath(
   context: RuntimeFileOperationArgs,
   oldPath: string,
-  newPath: string
+  newPath: string,
+  options: { overwrite?: boolean } = {}
 ): Promise<void> {
   const oldRemoteArgs = getRemoteFileArgs(context, oldPath)
   const newRelativePath = getRelativePathInsideWorktree(context.worktreePath, newPath)
   if (!oldRemoteArgs || newRelativePath === null) {
     assertLocalFilesystemFallbackAllowed(context)
     await window.api.fs.rename(
-      withSshMutationExpectation(context, { oldPath, newPath, connectionId: context.connectionId })
+      withSshMutationExpectation(context, {
+        oldPath,
+        newPath,
+        connectionId: context.connectionId,
+        ...(options.overwrite ? { overwrite: true } : {})
+      })
     )
     return
   }
@@ -553,7 +559,9 @@ export async function renameRuntimePath(
     withSshMutationExpectation(context, {
       worktree: oldRemoteArgs.worktreeSelector,
       oldRelativePath: oldRemoteArgs.relativePath,
-      newRelativePath
+      newRelativePath,
+      // Optional on the wire: old runtimes ignore it and keep no-clobber.
+      ...(options.overwrite ? { overwrite: true } : {})
     }),
     15_000
   )

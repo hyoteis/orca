@@ -213,6 +213,7 @@ import { translate } from '@/i18n/i18n'
 import PinnedTabCloseDialog from './components/terminal-pane/PinnedTabCloseDialog'
 import RunningTerminalCloseDialog from './components/terminal-pane/RunningTerminalCloseDialog'
 import WorktreeBaseFallbackDialog from './components/WorktreeBaseFallbackDialog'
+import { SemanticWorkspaceEditDrawer } from './components/editor/SemanticWorkspaceEditDrawer'
 import { useOsc52ClipboardDefaultOnNotice } from './components/terminal-pane/osc52-clipboard-default-on-notice'
 import {
   hasRequestedBackgroundTerminalWorktreeMount,
@@ -2817,6 +2818,7 @@ function App(): React.JSX.Element {
       <Toaster closeButton toastOptions={{ className: 'font-sans text-sm' }} />
       <SkillFreshnessNudge />
       <WorktreeBaseFallbackDialog />
+      <SemanticWorkspaceEditDrawer />
       <PinnedTabCloseDialog />
       <RunningTerminalCloseDialog />
       {/* Why: Electron's drag-region hit-test is DOM-order-based (ignores z-index); render last so WindowControls stay clickable. */}

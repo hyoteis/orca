@@ -12,6 +12,16 @@ if (logFile) {
 }
 // Optional canned textDocument/definition answer for jump-navigation e2e.
 const definitionUri = /--definition-uri=(.+)/.exec(args.join('\n'))?.[1]
+// Optional #38 drawer e2e: push a server-initiated workspace/applyEdit after
+// initialization so the guarded transaction (and its preview drawer) engages.
+const applyEditFile = /--apply-edit-file=(.+)/.exec(args.join('\n'))?.[1]
+const applyEditNewText = /--apply-edit-new-text=(.+)/.exec(args.join('\n'))?.[1]
+
+const sendMessage = (message) => {
+  const body = Buffer.from(JSON.stringify(message))
+  process.stdout.write(`Content-Length: ${body.length}\r\n\r\n`)
+  process.stdout.write(body)
+}
 
 let buffer = ''
 process.stdin.on('data', (chunk) => {
@@ -27,7 +37,42 @@ process.stdin.on('data', (chunk) => {
     }
     const message = JSON.parse(buffer.slice(headerEnd + 4, headerEnd + 4 + length))
     buffer = buffer.slice(headerEnd + 4 + length)
+    if (message.method === undefined) {
+      // A response to our own server-initiated request; nothing to answer.
+      continue
+    }
     if (message.id === undefined) {
+      if (message.method === 'initialized' && applyEditFile && applyEditNewText) {
+        if (logFile) {
+          fs.appendFileSync(logFile, 'sent-applyEdit\n')
+        }
+        const uri = `file:///${applyEditFile.replaceAll('\\', '/')}`
+        sendMessage({
+          jsonrpc: '2.0',
+          id: 9001,
+          method: 'workspace/applyEdit',
+          params: {
+            edit: {
+              documentChanges: [
+                {
+                  textDocument: { uri, version: null },
+                  edits: [
+                    {
+                      // Whole first line; the arg parser is newline-delimited,
+                      // so the replacement text itself carries no newline.
+                      range: {
+                        start: { line: 0, character: 0 },
+                        end: { line: 1, character: 0 }
+                      },
+                      newText: applyEditNewText
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        })
+      }
       continue
     }
     let result

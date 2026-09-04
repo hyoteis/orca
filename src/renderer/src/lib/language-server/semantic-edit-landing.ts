@@ -1,19 +1,16 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import {
-  confirmSemanticWorkspaceEditViaToast,
-  confirmServerCommandViaToast
-} from './semantic-edit-confirmation'
+import { confirmServerCommandViaToast } from './semantic-edit-confirmation'
 import type { CodeAction, Command } from 'vscode-languageserver-protocol'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { CodeIntelligenceDocumentRequest } from './code-intelligence-workspace'
 import { toServerFileUri } from './language-server-document-uri'
 import { applyDocumentTextEdits, type EditEditor, type EditModel } from './document-semantic-edits'
 import {
   commitGuardedWorkspaceEdit,
-  describeSemanticEditOutcome,
   singleDocumentWorkspaceEdits,
   undoLatestSemanticWorkspaceEdit,
   type SemanticWorkspaceEditContext
@@ -43,15 +40,8 @@ export function semanticWorkspaceEditContextFor(args: {
   confirm?: SemanticWorkspaceEditContext['confirm']
 }): SemanticWorkspaceEditContext | null {
   const state = useAppStore.getState()
-  const repo = args.worktreeId
-    ? state.repos.find((candidate) => candidate.id === args.worktreeId)
-    : undefined
-  const folder = args.worktreeId
-    ? state.folderWorkspaces?.find(
-        (candidate) => folderWorkspaceKey(candidate.id) === args.worktreeId
-      )
-    : undefined
-  const worktreePath = repo?.path ?? folder?.folderPath ?? null
+  const owner = resolveWorkspaceOwner(state, args.worktreeId)
+  const worktreePath = owner.path
   if (!worktreePath) {
     return null
   }
@@ -59,10 +49,8 @@ export function semanticWorkspaceEditContextFor(args: {
     settings: state.settings,
     worktreeId: args.worktreeId,
     worktreePath,
-    connectionId: (repo?.connectionId ?? folder?.connectionId ?? undefined) || undefined,
-    expectedExecutionHostId: (repo?.executionHostId ??
-      folder?.executionHostId ??
-      'local') as 'local' | `ssh:${string}`
+    connectionId: owner.connectionId,
+    expectedExecutionHostId: owner.executionHostId
   }
   const openFiles = () => state.openFiles
   const ports = createWorkspaceEditEditorPorts({
@@ -76,18 +64,64 @@ export function semanticWorkspaceEditContextFor(args: {
     ports,
     confirm:
       args.confirm ??
-      ((proposal) =>
-        confirmSemanticWorkspaceEditViaToast({
-          steps: proposal.steps,
-          scope: { name: proposal.scope.name }
-        })),
+      // No default here: an omitted confirm routes tier-2 through the #38
+      // preview drawer (see commitGuardedWorkspaceEdit).
+      undefined,
     openFiles: state.openFiles,
-    worktreePathFor: (worktreeId) =>
-      state.repos.find((candidate) => candidate.id === worktreeId)?.path ??
-      state.folderWorkspaces?.find(
-        (candidate) => folderWorkspaceKey(candidate.id) === worktreeId
-      )?.folderPath ??
-      null
+    worktreePathFor: (worktreeId) => resolveWorkspaceOwner(useAppStore.getState(), worktreeId).path
+  }
+}
+
+type WorkspaceOwner = {
+  path: string | null
+  connectionId?: string
+  executionHostId?: 'local' | `ssh:${string}`
+}
+
+/**
+ * Resolve a worktree id or folder workspace key to its owner. A `folder:` key
+ * may address a real folder workspace OR the linked non-git folder repo (#72
+ * bridge scopes carry `folder:<repoId>`), so both collections are checked.
+ */
+function resolveWorkspaceOwner(
+  state: ReturnType<typeof useAppStore.getState>,
+  worktreeId: string | null
+): WorkspaceOwner {
+  if (!worktreeId) {
+    return { path: null }
+  }
+  const repo = state.repos.find((candidate) => candidate.id === worktreeId)
+  if (repo) {
+    return ownerOf(repo.path, repo.connectionId, repo.executionHostId)
+  }
+  const parsed = parseWorkspaceKey(worktreeId)
+  // A folder key may address a real folder workspace or, through the #72
+  // bridge, the linked non-git folder repo that owns the scope.
+  const bridgedRepo =
+    parsed?.type === 'folder'
+      ? state.repos.find((candidate) => candidate.id === parsed.folderWorkspaceId)
+      : undefined
+  if (bridgedRepo) {
+    return ownerOf(bridgedRepo.path, bridgedRepo.connectionId, bridgedRepo.executionHostId)
+  }
+  const folder = state.folderWorkspaces?.find(
+    (candidate) => folderWorkspaceKey(candidate.id) === worktreeId
+  )
+  if (folder) {
+    return ownerOf(folder.folderPath, folder.connectionId, folder.executionHostId)
+  }
+  return { path: null }
+}
+
+function ownerOf(
+  path: string,
+  connectionId: string | null | undefined,
+  executionHostId: ExecutionHostId | null | undefined
+): WorkspaceOwner {
+  return {
+    path,
+    connectionId: connectionId || undefined,
+    executionHostId: (executionHostId ?? 'local') as 'local' | `ssh:${string}`
   }
 }
 
@@ -148,31 +182,13 @@ export async function applySemanticWorkspaceEdit(args: {
   if (result.kind === 'cancelled') {
     return 'cancelled'
   }
-  switch (result.outcome?.status) {
-    case 'committed':
-      return 'committed'
-    case 'blocked':
-      toast.warning(
-        translate(
-          'settings.codeIntelligence.semanticEditBlocked',
-          'Edit blocked: {{value0}}',
-          {
-            value0:
-              result.outcome.status === 'blocked'
-                ? describeSemanticEditOutcome(result.outcome)
-                : ''
-          }
-        )
-      )
-      return 'blocked'
-    default:
-      toast.error(
-        translate('settings.codeIntelligence.semanticEditFailed', 'Edit failed: {{value0}}', {
-          value0: describeSemanticEditOutcome(result.outcome)
-        })
-      )
-      return 'failed'
-  }
+  // Blocked/failed surfaces live in the preview drawer; the caller only needs
+  // the terminal status. ('stale' above is tier-1 and has no drawer.)
+  return result.outcome?.status === 'committed'
+    ? 'committed'
+    : result.outcome?.status === 'blocked'
+      ? 'blocked'
+      : 'failed'
 }
 
 /**

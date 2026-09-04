@@ -125,7 +125,13 @@ export function registerFilesystemMutationHandlers(store: Store): void {
     'fs:rename',
     async (
       _event,
-      args: { oldPath: string; newPath: string; connectionId?: string } & SshMutationExpectation
+      args: {
+        oldPath: string
+        newPath: string
+        connectionId?: string
+        /** Replace an existing destination file (staged atomic writes only). */
+        overwrite?: boolean
+      } & SshMutationExpectation
     ): Promise<void> => {
       assertSshMutationExpectation(
         args.connectionId,
@@ -135,7 +141,9 @@ export function registerFilesystemMutationHandlers(store: Store): void {
       )
       if (args.connectionId) {
         const provider = requireSshFilesystemProvider(args.connectionId)
-        return provider.renameNoClobber(args.oldPath, args.newPath)
+        return args.overwrite
+          ? provider.rename(args.oldPath, args.newPath)
+          : provider.renameNoClobber(args.oldPath, args.newPath)
       }
       // Why: rename() operates on directory entries, not file contents. If
       // oldPath is a symlink, we must rename the link itself rather than
@@ -145,7 +153,9 @@ export function registerFilesystemMutationHandlers(store: Store): void {
       // accidentally write into a symlinked destination name.
       const oldPath = await resolveAuthorizedPath(args.oldPath, store, { preserveSymlink: true })
       const newPath = await resolveAuthorizedPath(args.newPath, store, { preserveSymlink: true })
-      await renameLocalPathSerializedByDestination(oldPath, newPath)
+      await renameLocalPathSerializedByDestination(oldPath, newPath, {
+        overwrite: args.overwrite
+      })
     }
   )
 

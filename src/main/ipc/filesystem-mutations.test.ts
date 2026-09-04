@@ -171,6 +171,22 @@ describe('registerFilesystemMutationHandlers', () => {
     expect(renameMock).toHaveBeenCalledWith(oldPath, newPath)
   })
 
+  it('replaces an existing destination file when overwrite is set', async () => {
+    const oldPath = path.resolve('/workspace/repo/.staged-target.ts')
+    const destinationPath = path.resolve('/workspace/repo/target.ts')
+    lstatMock.mockImplementation(async (filePath: string) => {
+      if (filePath === destinationPath || filePath === oldPath) {
+        return mockStats(1, 10)
+      }
+      throw enoent()
+    })
+
+    await expect(
+      handlers.get('fs:rename')!(null, { oldPath, newPath: destinationPath, overwrite: true })
+    ).resolves.toBeUndefined()
+    expect(renameMock).toHaveBeenCalledWith(oldPath, destinationPath)
+  })
+
   it('serializes concurrent local renames targeting the same destination', async () => {
     const firstPath = path.resolve('/workspace/repo/first.ts')
     const secondPath = path.resolve('/workspace/repo/second.ts')

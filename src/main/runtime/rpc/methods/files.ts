@@ -158,7 +158,10 @@ const FileRename = WorktreeSelector.extend({
   newRelativePath: z
     .unknown()
     .transform((v) => (typeof v === 'string' ? v : ''))
-    .pipe(z.string().min(1, 'Missing destination path'))
+    .pipe(z.string().min(1, 'Missing destination path')),
+  // Optional (wire-compat): replace an existing destination file — staged
+  // atomic writes only, never explorer moves.
+  overwrite: z.boolean().optional()
 })
 
 const FileCopy = WorktreeSelector.extend({
@@ -405,7 +408,8 @@ export const FILE_METHODS: RpcAnyMethod[] = [
         params.worktree,
         params.oldRelativePath,
         params.newRelativePath,
-        ...sshMutationArguments(params)
+        ...sshMutationArguments(params),
+        params.overwrite
       )
   }),
   defineMethod({

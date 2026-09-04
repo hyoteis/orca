@@ -3237,7 +3237,12 @@ const api = {
       args: { dirPath: string; connectionId?: string } & SshMutationExpectation
     ): Promise<void> => ipcRenderer.invoke('fs:createDir', args),
     rename: (
-      args: { oldPath: string; newPath: string; connectionId?: string } & SshMutationExpectation
+      args: {
+        oldPath: string
+        newPath: string
+        connectionId?: string
+        overwrite?: boolean
+      } & SshMutationExpectation
     ): Promise<void> => ipcRenderer.invoke('fs:rename', args),
     copy: (
       args: {

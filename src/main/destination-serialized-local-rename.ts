@@ -27,7 +27,8 @@ async function destinationParentKey(filePath: string): Promise<string> {
 
 export async function renameLocalPathSerializedByDestination(
   oldPath: string,
-  newPath: string
+  newPath: string,
+  options: { overwrite?: boolean } = {}
 ): Promise<void> {
   const key = await destinationParentKey(newPath)
   const previous = pendingRenamesByParent.get(key) ?? Promise.resolve()
@@ -39,7 +40,12 @@ export async function renameLocalPathSerializedByDestination(
 
   await previous
   try {
-    await assertNoClobberRenameDestinationAvailable(oldPath, newPath)
+    // Overwrite replaces an existing destination FILE atomically (Node's
+    // rename maps to MoveFileEx|REPLACE_EXISTING on Windows); it is reserved
+    // for staged atomic writes and never for explorer moves.
+    if (!options.overwrite) {
+      await assertNoClobberRenameDestinationAvailable(oldPath, newPath)
+    }
     await rename(oldPath, newPath)
   } finally {
     release()
