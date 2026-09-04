@@ -27,10 +27,16 @@ import {
 } from './code-intelligence-workspace'
 import { installDefinitionLinkAffordance } from './definition-link-affordance'
 import { toServerFileUri } from './language-server-document-uri'
-import {
-  installPythonSemanticMonacoProviders,
-  registerPythonSemanticMonacoDocument
-} from './python-monaco-semantic-providers'
+import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
+import { createSemanticMonacoStack } from './semantic-monaco-stack'
+import { getPythonCodeIntelligenceSession } from './python-code-intelligence-session'
+
+const pythonStack = createSemanticMonacoStack({
+  serverLabel: 'basedpyright',
+  languages: ['python'],
+  findScope: (request) => findCodeIntelligenceScope(request, 'python'),
+  session: getPythonCodeIntelligenceSession
+})
 
 type MonacoApi = typeof Monaco
 type DocumentContext = {
@@ -194,7 +200,7 @@ function installProviders(monaco: MonacoApi): void {
     return
   }
   installed = true
-  installPythonSemanticMonacoProviders(monaco)
+  pythonStack.installProviders(monaco)
   monaco.languages.registerHoverProvider('python', {
     provideHover: async (model, position, token) => {
       const request = contextForModel(model)?.requestAt(position)
@@ -263,7 +269,7 @@ export function registerPythonMonacoDocument(
   const key = model.uri.toString()
   const context = { token: Symbol(key), requestAt }
   documents.set(key, context)
-  const unregisterSemantic = registerPythonSemanticMonacoDocument(editor, requestAt)
+  const unregisterSemantic = registerSemanticMonacoDocument(editor, requestAt)
   const uninstallAffordance = installDefinitionLinkAffordance(monaco, editor, requestAt, {
     actionId: 'orca.goToDefinition.python',
     resolve: resolvePythonDefinition,

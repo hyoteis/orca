@@ -4,16 +4,22 @@ import { translate } from '@/i18n/i18n'
 import type { CppDefinitionTarget } from './cpp-definition-locations'
 import { installCppDefinitionLinkAffordance } from './cpp-definition-link-affordance'
 import { installCppSemanticHighlightDecorations } from './cpp-semantic-highlight-decorations'
-import { CPP_LANGUAGES } from './cpp-code-intelligence-workspace'
+import { CPP_LANGUAGES, findCppCodeIntelligenceScope } from './cpp-code-intelligence-workspace'
+import { getCppSession } from './cpp-code-intelligence-session'
 import {
   getCppHover,
   openCppDefinitionTarget,
   type CppCodeIntelligenceRequest
 } from './cpp-definition-navigation'
-import {
-  installCppSemanticMonacoProviders,
-  registerCppSemanticMonacoDocument
-} from './cpp-monaco-semantic-providers'
+import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
+import { createSemanticMonacoStack } from './semantic-monaco-stack'
+
+const cppStack = createSemanticMonacoStack({
+  serverLabel: 'clangd',
+  languages: [...CPP_LANGUAGES],
+  findScope: findCppCodeIntelligenceScope,
+  session: getCppSession
+})
 
 type MonacoApi = typeof Monaco
 type DocumentContext = {
@@ -77,7 +83,7 @@ function installProviders(monaco: MonacoApi): void {
     return
   }
   installed = true
-  installCppSemanticMonacoProviders(monaco)
+  cppStack.installProviders(monaco)
   for (const language of CPP_LANGUAGES) {
     monaco.languages.registerHoverProvider(language, {
       provideHover: async (model, position, token) => {
@@ -130,7 +136,7 @@ export function registerCppMonacoDocument(
   const key = model.uri.toString()
   const context = { token: Symbol(key), requestAt }
   documents.set(key, context)
-  const unregisterSemantic = registerCppSemanticMonacoDocument(editor, requestAt)
+  const unregisterSemantic = registerSemanticMonacoDocument(editor, requestAt)
   const uninstallDefinitionLink = installCppDefinitionLinkAffordance(monaco, editor, requestAt)
   const uninstallSemanticHighlights = installCppSemanticHighlightDecorations(
     monaco,
