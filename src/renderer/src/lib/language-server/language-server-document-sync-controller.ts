@@ -68,6 +68,10 @@ export class LanguageServerDocumentSyncController {
     this.documents.resynchronize(connection)
   }
 
+  syncedVersionFor(uri: string): number | null {
+    return this.documents.versionFor(uri)
+  }
+
   dispose(): void {
     this.sources.clear()
     this.documents.closeAll()

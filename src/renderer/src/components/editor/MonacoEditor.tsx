@@ -68,6 +68,8 @@ import { monacoFindOptions } from './monaco-find-options'
 import { matchesPendingEditorFocusRequest } from './pending-editor-focus-request'
 import { registerCppMonacoDocument } from '@/lib/language-server/cpp-monaco-language-features'
 import { registerPythonMonacoDocument } from '@/lib/language-server/python-monaco-language-features'
+import { formatDocumentBeforeSave } from '@/lib/language-server/semantic-monaco-documents'
+import { undoLatestSemanticEditForRequest } from '@/lib/language-server/semantic-edit-landing'
 
 type MonacoEditorProps = {
   fileId: string
@@ -424,8 +426,15 @@ export default function MonacoEditor({
 
       const editorDomNode = editorInstance.getContainerDomNode()
       const cleanupSaveShortcut = installEditorSaveShortcut(editorDomNode, () => {
-        const value = editorInstance.getValue()
-        propsRef.current.onSave(value)
+        void (async () => {
+          const position = editorInstance.getPosition() ?? { lineNumber: 1, column: 1 }
+          const request = codeIntelligenceRequestAt?.(position)
+          // Per-scope format-on-save (#20, default off); failures never block the save.
+          if (request) {
+            await formatDocumentBeforeSave(request, editorInstance).catch(() => false)
+          }
+          propsRef.current.onSave(editorInstance.getValue())
+        })()
       })
       const cleanupFindShortcut = installMonacoEditorFindShortcut(editorInstance)
       // Opens the same composer as the selection "+" button.
@@ -452,6 +461,39 @@ export default function MonacoEditor({
         return true
       })
 
+      const undoWorkspaceEditAction = editorInstance.addAction({
+        id: 'orca.undoWorkspaceEdit',
+        label: translate(
+          'settings.codeIntelligence.undoWorkspaceEdit',
+          'Undo workspace edit'
+        ),
+        contextMenuGroupId: 'navigation',
+        contextMenuOrder: 3,
+        run: () => {
+          const position = editorInstance.getPosition() ?? { lineNumber: 1, column: 1 }
+          const request = codeIntelligenceRequestAt?.(position)
+          if (!request) {
+            return
+          }
+          void undoLatestSemanticEditForRequest(request).then((result) => {
+            if (result === 'nothing-to-undo') {
+              toast.info(
+                translate(
+                  'settings.codeIntelligence.undoWorkspaceEditEmpty',
+                  'No workspace edit to undo'
+                )
+              )
+            } else if (result !== 'committed') {
+              toast.warning(
+                translate(
+                  'settings.codeIntelligence.undoWorkspaceEditBlocked',
+                  'Could not undo — files changed since the edit'
+                )
+              )
+            }
+          })
+        }
+      })
       const searchInFilesAction = editorInstance.addAction({
         id: 'orca.searchInFiles',
         label: translate('auto.components.editor.MonacoEditor.fd68ae03b3', 'Search in Files'),
@@ -550,6 +592,7 @@ export default function MonacoEditor({
         cleanupAddReviewNoteShortcut()
         editorDomNode.removeEventListener('paste', onLargeTextPaste, { capture: true })
         searchInFilesAction.dispose()
+        undoWorkspaceEditAction.dispose()
         autoHeightSub?.dispose()
         if (autoHeightFrame !== null) {
           window.cancelAnimationFrame(autoHeightFrame)

@@ -107,6 +107,10 @@ export class LanguageServerDocumentRegistry {
   snapshot(): readonly Readonly<Entry>[] {
     return [...this.documents.values()].map((entry) => ({ ...entry }))
   }
+  /** LSP-synced version by uri; null when the document is not synchronized. */
+  versionFor(uri: string): number | null {
+    return this.documents.get(uri)?.version ?? null
+  }
   private require(uri: string): Entry {
     const entry = this.documents.get(uri)
     if (!entry) {

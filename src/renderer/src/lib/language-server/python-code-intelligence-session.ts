@@ -1,10 +1,14 @@
 import {
+  ApplyWorkspaceEditRequest,
   InitializedNotification,
   MarkupKind,
   PublishDiagnosticsNotification,
+  type ApplyWorkspaceEditResult,
+  type CancellationToken,
   type Diagnostic,
   type InitializeParams,
   type SymbolInformation,
+  type WorkspaceEdit,
   type WorkspaceSymbol
 } from 'vscode-languageserver-protocol'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
@@ -13,7 +17,15 @@ import {
   type LanguageServerClientKey
 } from './language-server-client-registry'
 import { toServerFileUri } from './language-server-document-uri'
-import type { CodeIntelligenceDocumentRequest } from './code-intelligence-workspace'
+import {
+  readSemanticServerCapabilities,
+  semanticEditingClientCapabilities,
+  workspaceEditClientCapabilities
+} from './semantic-editing-capabilities'
+import {
+  findCodeIntelligenceScope,
+  type CodeIntelligenceDocumentRequest
+} from './code-intelligence-workspace'
 
 // Kept here (jsonrpc import chain) like CPP_LANGUAGES' counterpart split: UI
 // gating modules should not need this file.
@@ -27,7 +39,7 @@ export type PythonCapabilities = {
   references: boolean
   documentSymbol: boolean
   workspaceSymbol: boolean
-}
+} & ReturnType<typeof readSemanticServerCapabilities>
 
 export type PythonDefinitionResult = {
   target: { uri: string; range: { start: { line: number; character: number }; end: { line: number; character: number } } }
@@ -75,6 +87,19 @@ export class PythonCodeIntelligenceSession {
     this.dropClient(key.scopeId)
   )
   private readonly clients = new Map<string, PythonActiveClient>()
+  private workspaceApplyEditHandler:
+    | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
+    | null = null
+
+  /** Server-initiated workspace/applyEdit interception (#37): every future
+   * client routes server edits through the guarded transaction. */
+  setWorkspaceApplyEditHandler(
+    handler:
+      | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
+      | null
+  ): void {
+    this.workspaceApplyEditHandler = handler
+  }
 
   activeClient(scopeId: string): PythonActiveClient | undefined {
     return this.clients.get(scopeId)
@@ -87,6 +112,64 @@ export class PythonCodeIntelligenceSession {
 
   activeClients(): [string, PythonActiveClient][] {
     return [...this.clients.entries()]
+  }
+
+  /** Capability-gated typed request with document sync and stale rejection. */
+  async semanticRequest<Result>(
+    request: PythonCodeIntelligenceRequest,
+    type: { method: string },
+    params: object,
+    options: {
+      capability?: keyof PythonCapabilities
+      satisfies?: (capabilities: PythonActiveClient['capabilities']) => boolean
+      token?: CancellationToken
+    } = {}
+  ): Promise<{ scope: CodeIntelligenceScope; active: PythonActiveClient; result: Result } | null> {
+    if (!PYTHON_LANGUAGES.has(request.language)) {
+      return null
+    }
+    const scope = findCodeIntelligenceScope(request, 'python')
+    if (!scope) {
+      return null
+    }
+    const active = await this.ensureClient(scope)
+    if (options.capability && !active.capabilities[options.capability]) {
+      return null
+    }
+    if (options.satisfies && !options.satisfies(active.capabilities)) {
+      return null
+    }
+    const uri = toServerFileUri(request.filePath)
+    active.client.sync.reconcile([
+      {
+        documentId: request.fileId,
+        uri,
+        languageId: request.language,
+        diskText: request.text,
+        draftText: request.text,
+        references: 1
+      }
+    ])
+    const sendRequest = active.client.connection.sendRequest as unknown as (
+      type: unknown,
+      params: object,
+      token?: CancellationToken
+    ) => Promise<Result>
+    const result = await sendRequest(type, params, options.token)
+    if (options.token?.isCancellationRequested || !this.isActive(scope.id, active)) {
+      return null
+    }
+    return { scope, active, result }
+  }
+
+  private async resolveApplyEdit(
+    scope: CodeIntelligenceScope,
+    edit: WorkspaceEdit
+  ): Promise<ApplyWorkspaceEditResult> {
+    if (!this.workspaceApplyEditHandler) {
+      return { applied: false, failureReason: 'guarded edits not available' }
+    }
+    return this.workspaceApplyEditHandler(scope, edit)
   }
 
   private dropClient(scopeId: string): void {
@@ -124,6 +207,9 @@ export class PythonCodeIntelligenceSession {
     client.connection.onRequest('workspace/configuration', () => [])
     client.connection.onRequest('client/registerCapability', () => null)
     client.connection.onRequest('window/workDoneProgress/create', () => null)
+    client.connection.onRequest(ApplyWorkspaceEditRequest.type, (params) =>
+      this.resolveApplyEdit(scope, params.edit)
+    )
     const active: PythonActiveClient = {
       key,
       client,
@@ -132,7 +218,8 @@ export class PythonCodeIntelligenceSession {
         hover: false,
         references: false,
         documentSymbol: false,
-        workspaceSymbol: false
+        workspaceSymbol: false,
+        ...readSemanticServerCapabilities({})
       },
       diagnostics: new Map()
     }
@@ -160,12 +247,17 @@ export class PythonCodeIntelligenceSession {
       clientInfo: { name: 'Orca', version: '1' },
       rootUri,
       capabilities: {
-        workspace: { configuration: false, workspaceFolders: true },
+        workspace: {
+          configuration: false,
+          workspaceFolders: true,
+          ...workspaceEditClientCapabilities()
+        },
         textDocument: {
           definition: { linkSupport: true },
           hover: { contentFormat: [MarkupKind.Markdown, MarkupKind.PlainText] },
           references: {},
           documentSymbol: { hierarchicalDocumentSymbolSupport: true },
+          ...semanticEditingClientCapabilities(),
           synchronization: {}
         }
       },
@@ -179,7 +271,8 @@ export class PythonCodeIntelligenceSession {
       hover: Boolean(capabilities.hoverProvider),
       references: Boolean(capabilities.referencesProvider),
       documentSymbol: Boolean(capabilities.documentSymbolProvider),
-      workspaceSymbol: Boolean(capabilities.workspaceSymbolProvider)
+      workspaceSymbol: Boolean(capabilities.workspaceSymbolProvider),
+      ...readSemanticServerCapabilities(capabilities)
     }
     this.clients.set(scope.id, active)
     return active
@@ -189,4 +282,17 @@ export class PythonCodeIntelligenceSession {
     this.registry.dispose()
     this.clients.clear()
   }
+}
+
+let sessionSingleton: PythonCodeIntelligenceSession | null = null
+
+/** Shared basedpyright session singleton; provider layers install handlers here. */
+export function getPythonCodeIntelligenceSession(): PythonCodeIntelligenceSession {
+  sessionSingleton ??= new PythonCodeIntelligenceSession()
+  return sessionSingleton
+}
+
+export function resetPythonCodeIntelligenceSession(): void {
+  sessionSingleton?.dispose()
+  sessionSingleton = null
 }

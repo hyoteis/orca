@@ -10,6 +10,10 @@ import {
   openCppDefinitionTarget,
   type CppCodeIntelligenceRequest
 } from './cpp-definition-navigation'
+import {
+  installCppSemanticMonacoProviders,
+  registerCppSemanticMonacoDocument
+} from './cpp-monaco-semantic-providers'
 
 type MonacoApi = typeof Monaco
 type DocumentContext = {
@@ -73,6 +77,7 @@ function installProviders(monaco: MonacoApi): void {
     return
   }
   installed = true
+  installCppSemanticMonacoProviders(monaco)
   for (const language of CPP_LANGUAGES) {
     monaco.languages.registerHoverProvider(language, {
       provideHover: async (model, position, token) => {
@@ -125,6 +130,7 @@ export function registerCppMonacoDocument(
   const key = model.uri.toString()
   const context = { token: Symbol(key), requestAt }
   documents.set(key, context)
+  const unregisterSemantic = registerCppSemanticMonacoDocument(editor, requestAt)
   const uninstallDefinitionLink = installCppDefinitionLinkAffordance(monaco, editor, requestAt)
   const uninstallSemanticHighlights = installCppSemanticHighlightDecorations(
     monaco,
@@ -132,6 +138,7 @@ export function registerCppMonacoDocument(
     requestAt
   )
   return () => {
+    unregisterSemantic()
     uninstallDefinitionLink()
     uninstallSemanticHighlights()
     if (documents.get(key)?.token === context.token) {

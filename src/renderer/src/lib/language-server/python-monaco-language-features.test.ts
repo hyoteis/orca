@@ -30,6 +30,11 @@ vi.mock('./definition-link-affordance', () => ({
   installDefinitionLinkAffordance: vi.fn(() => () => {})
 }))
 
+vi.mock('./python-monaco-semantic-providers', () => ({
+  installPythonSemanticMonacoProviders: vi.fn(),
+  registerPythonSemanticMonacoDocument: vi.fn(() => () => {})
+}))
+
 import { toast } from 'sonner'
 import {
   lspDiagnosticToMonacoMarkers,

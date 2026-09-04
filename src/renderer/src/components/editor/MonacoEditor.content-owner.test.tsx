@@ -29,6 +29,9 @@ vi.mock('@/store', () => ({
 vi.mock('../diff-comments/useDiffCommentDecorator', () => ({
   useDiffCommentDecorator: vi.fn()
 }))
+vi.mock('@/lib/language-server/semantic-monaco-providers', () => ({
+  formatDocumentBeforeSave: vi.fn(async () => false)
+}))
 vi.mock('./useContextualCopySetup', () => ({
   useContextualCopySetup: () => ({ setupCopy: vi.fn(), toastNode: null })
 }))

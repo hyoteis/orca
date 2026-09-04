@@ -81,6 +81,9 @@ export type CodeIntelligenceScope = {
   serverSource: CodeIntelligenceServerSource
   consent?: CodeIntelligenceScopeConsent
   setupStatus?: CodeIntelligenceSetupStatus
+  /** Per-scope format-on-save (#20): off unless explicitly enabled; deliberately
+   * outside scopeConfigurationPayload so flipping it never demands re-consent. */
+  formatOnSave?: boolean
   enabled: boolean
   revision: number
 }

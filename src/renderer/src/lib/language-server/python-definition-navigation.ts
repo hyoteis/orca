@@ -31,7 +31,9 @@ import {
 } from './navigation-request-cache'
 import {
   PYTHON_LANGUAGES,
-  PythonCodeIntelligenceSession,
+  getPythonCodeIntelligenceSession,
+  resetPythonCodeIntelligenceSession,
+  type PythonCodeIntelligenceSession,
   type PythonCapabilities,
   type PythonCodeIntelligenceRequest,
   type PythonActiveClient,
@@ -51,17 +53,13 @@ export type {
   PythonWorkspaceSymbols
 } from './python-code-intelligence-session'
 
-let session: PythonCodeIntelligenceSession | null = null
-
 function service(): PythonCodeIntelligenceSession {
-  session ??= new PythonCodeIntelligenceSession()
-  return session
+  return getPythonCodeIntelligenceSession()
 }
 
 /** Drops sessions and caches; used by tests and hot reloads. */
 export function resetPythonCodeIntelligence(): void {
-  session?.dispose()
-  session = null
+  resetPythonCodeIntelligenceSession()
   definitionCache.clear()
   hoverCache.clear()
   referencesCache.clear()
