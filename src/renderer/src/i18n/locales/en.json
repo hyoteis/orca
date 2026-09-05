@@ -10937,8 +10937,8 @@
             "updateReactionFailed": "Failed to update reaction."
           },
           "CodeScopesSection": {
-            "title": "Code scopes",
-            "toggleSection": "Toggle Code scopes section",
+            "title": "Workspace",
+            "toggleSection": "Toggle workspace section",
             "configureCode": "Configure Code"
           },
           "CreatePullRequestDialog": {
@@ -11777,7 +11777,8 @@
             "ef182dcb12": "search",
             "fc3095d2ed": "explorer",
             "folderWorkspaces": "Attached worktrees",
-            "parentPrChecks": "PR Checks"
+            "parentPrChecks": "PR Checks",
+            "searchTab": "Search"
           },
           "right": {
             "panel": {
@@ -12348,8 +12349,11 @@
             "toggleSection": "Toggle Open Editors section"
           },
           "WorktreeSection": {
-            "title": "Worktree",
-            "toggleSection": "Toggle worktree section"
+            "title": "Files",
+            "toggleSection": "Toggle files section"
+          },
+          "SearchResultsPane": {
+            "searching": "Searching…"
           }
         }
       },

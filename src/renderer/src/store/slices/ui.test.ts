@@ -84,7 +84,6 @@ function createUIStore(): StoreApi<AppState> {
     markdownTocPanelWidth: 240,
     combinedDiffFileTreeWidth: 256,
     rightSidebarTab: 'explorer',
-    rightSidebarExplorerView: 'files',
     ...createSettingsSearchState(args[0]),
     ...createWorktreeNavHistorySlice(...(args as Parameters<typeof createWorktreeNavHistorySlice>)),
     ...createUISlice(...(args as Parameters<typeof createUISlice>))
@@ -887,7 +886,6 @@ describe('createUISlice hydratePersistedUI', () => {
     store.getState().hydratePersistedUI(makePersistedUI({ rightSidebarTab: 'checks' }))
 
     expect(store.getState().rightSidebarTab).toBe('checks')
-    expect(store.getState().rightSidebarExplorerView).toBe('files')
   })
 
   it('preserves persisted repo filters until repos are loaded', () => {
@@ -951,21 +949,7 @@ describe('createUISlice hydratePersistedUI', () => {
 
     store.getState().hydratePersistedUI(makePersistedUI({ rightSidebarTab: 'search' }))
 
-    expect(store.getState().rightSidebarTab).toBe('explorer')
-    expect(store.getState().rightSidebarExplorerView).toBe('search')
-  })
-
-  it('hydrates persisted Explorer search view', () => {
-    const store = createUIStore()
-
-    store
-      .getState()
-      .hydratePersistedUI(
-        makePersistedUI({ rightSidebarTab: 'explorer', rightSidebarExplorerView: 'search' })
-      )
-
-    expect(store.getState().rightSidebarTab).toBe('explorer')
-    expect(store.getState().rightSidebarExplorerView).toBe('search')
+    expect(store.getState().rightSidebarTab).toBe('search')
   })
 
   it('hydrates a persisted workspace host scope', () => {
@@ -1238,7 +1222,6 @@ describe('createUISlice hydratePersistedUI', () => {
       )
 
     expect(store.getState().rightSidebarTab).toBe('explorer')
-    expect(store.getState().rightSidebarExplorerView).toBe('files')
   })
 
   it('clamps persisted sidebar widths into the supported range', () => {

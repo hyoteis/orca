@@ -3,14 +3,12 @@ import type { SearchFileResult, SearchMatch, SearchResult } from '../../../../sh
 import type { buildSearchRows } from './search-rows'
 import type { SearchQueryRowProps } from './SearchQueryRow'
 import type { SearchFiltersProps } from './SearchFilters'
-import type { FileExplorerRangeSwitchProps } from './FileExplorerRangeSwitch'
 
 export type FileSearchPanelModel = {
   activeWorktreeId: string | null
+  /** Includes the #77 range fields — the pill lives inside the query row. */
   queryRowProps: SearchQueryRowProps
   filtersProps: SearchFiltersProps
-  /** One range shared by Names find and Contents search (#77). */
-  rangeProps: FileExplorerRangeSwitchProps
   /** #13 labelled fallback: leave Symbols mode and rerun as text search. */
   fallbackToTextSearch: () => void
   resultsProps: {

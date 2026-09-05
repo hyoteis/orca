@@ -13,7 +13,6 @@ function pollArgs(
     worktreePath: '/Users/me/Library/Containers/com.apple.TextEdit/Data/Documents/repo',
     rightSidebarOpen: false,
     rightSidebarTab: 'explorer' as ActiveRightSidebarTab,
-    rightSidebarExplorerView: 'files',
     openFiles: [],
     userAgent: MAC,
     ...overrides
@@ -44,16 +43,26 @@ describe('shouldPollActiveGitStatus', () => {
     ).toBe(true)
   })
 
-  it('does not treat Explorer search as a file-tree visibility signal', () => {
+  it('treats the open Explorer tab as a visibility signal in any search state', () => {
     expect(
       shouldPollActiveGitStatus(
         pollArgs({
           rightSidebarOpen: true,
-          rightSidebarTab: 'explorer',
-          rightSidebarExplorerView: 'search'
+          rightSidebarTab: 'explorer'
         })
       )
-    ).toBe(false)
+    ).toBe(true)
+  })
+
+  it('allows polling while the standalone Search tab is open', () => {
+    expect(
+      shouldPollActiveGitStatus(
+        pollArgs({
+          rightSidebarOpen: true,
+          rightSidebarTab: 'search'
+        })
+      )
+    ).toBe(true)
   })
 
   it('allows polling when an editor file is open in the worktree', () => {

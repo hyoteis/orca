@@ -1,8 +1,16 @@
 import React from 'react'
-import { Search as SearchIcon, Braces, CaseSensitive, WholeWord, Regex, X, Loader2 } from 'lucide-react'
+import { Search as SearchIcon, Braces, CaseSensitive, WholeWord, Regex, X, Loader2, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { ToggleButton } from './SearchResultItems'
 import { translate } from '@/i18n/i18n'
+import { cn } from '@/lib/utils'
+import type { FileSearchRange } from '../../../../shared/types'
 
 export type SearchQueryRowProps = {
   inputRef: React.Ref<HTMLInputElement>
@@ -13,6 +21,10 @@ export type SearchQueryRowProps = {
   useRegex: boolean
   /** #32 Symbols mode: workspace-symbol Command center over the same query box. */
   symbolMode: boolean
+  /** #77 search range, collapsed into the field as a prefix pill (variant C). */
+  range: FileSearchRange
+  scopeRangeUnavailable: boolean
+  onSelectRange: (range: FileSearchRange) => void
   onQueryChange: (e: React.ChangeEvent<HTMLInputElement>) => void
   onKeyDown: (e: React.KeyboardEvent) => void
   onClearSearch: () => void
@@ -30,6 +42,9 @@ export function SearchQueryRow({
   wholeWord,
   useRegex,
   symbolMode,
+  range,
+  scopeRangeUnavailable,
+  onSelectRange,
   onQueryChange,
   onKeyDown,
   onClearSearch,
@@ -38,11 +53,60 @@ export function SearchQueryRow({
   onToggleRegex,
   onToggleSymbolMode
 }: SearchQueryRowProps): React.JSX.Element {
+  // Labels reuse the section-title keys so the pill always matches the
+  // sections its range hosts results in (Files block / Workspace section).
+  const rangeLabel =
+    range === 'scope'
+      ? translate('auto.components.right.sidebar.CodeScopesSection.title', 'Workspace')
+      : translate('auto.components.right.sidebar.WorktreeSection.title', 'Files')
   return (
     <div
       className="flex h-7 items-center gap-1 rounded-sm border border-border bg-input/50 px-1.5 focus-within:border-ring"
       data-ignore-file-explorer-keys="true"
     >
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            title={translate(
+              'auto.components.right.sidebar.FileExplorerRangeSwitch.43b9416a9a',
+              'Explorer search range'
+            )}
+            aria-label={translate(
+              'auto.components.right.sidebar.FileExplorerRangeSwitch.43b9416a9a',
+              'Explorer search range'
+            )}
+            className="flex h-5 shrink-0 items-center gap-0.5 rounded-sm px-1 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            {rangeLabel}
+            <ChevronDown className="size-2.5" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-28">
+          <DropdownMenuItem
+            disabled={scopeRangeUnavailable}
+            title={
+              scopeRangeUnavailable
+                ? translate(
+                    'auto.components.right.sidebar.FileExplorerRangeSwitch.67c5cb400e',
+                    'No Code scope members to search yet'
+                  )
+                : undefined
+            }
+            onClick={() => onSelectRange('scope')}
+          >
+            <span className={cn('flex-1', range === 'scope' && 'font-medium')}>
+              {translate('auto.components.right.sidebar.CodeScopesSection.title', 'Workspace')}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onSelectRange('worktree')}>
+            <span className={cn('flex-1', range === 'worktree' && 'font-medium')}>
+              {translate('auto.components.right.sidebar.WorktreeSection.title', 'Files')}
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <div className="h-4 w-px shrink-0 bg-border" aria-hidden />
       <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
       <input
         ref={inputRef}

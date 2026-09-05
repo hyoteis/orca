@@ -2159,10 +2159,6 @@ describe('fetchWorktrees', () => {
       rightSidebarTabByWorktree: {
         [removed.id]: 'search' as never,
         [surviving.id]: 'checks'
-      },
-      rightSidebarExplorerViewByWorktree: {
-        [removed.id]: 'search',
-        [surviving.id]: 'files'
       }
     } as Partial<AppState>)
 
@@ -2170,9 +2166,6 @@ describe('fetchWorktrees', () => {
 
     expect(store.getState().worktreesByRepo.repo1).toEqual([surviving])
     expect(store.getState().rightSidebarTabByWorktree).toEqual({ [surviving.id]: 'checks' })
-    expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({
-      [surviving.id]: 'files'
-    })
     expect(store.getState().sortEpoch).toBe(8)
   })
 
@@ -2261,10 +2254,6 @@ describe('fetchWorktrees', () => {
         [visible.id]: 'checks',
         [hidden.id]: 'search' as never
       },
-      rightSidebarExplorerViewByWorktree: {
-        [visible.id]: 'files',
-        [hidden.id]: 'search'
-      },
       tabsByWorktree: {
         [hidden.id]: [{ id: 'tab-hidden', worktreeId: hidden.id }]
       }
@@ -2279,7 +2268,6 @@ describe('fetchWorktrees', () => {
 
     expect(store.getState().worktreesByRepo.repo1).toEqual([visible])
     expect(store.getState().rightSidebarTabByWorktree).toEqual({ [visible.id]: 'checks' })
-    expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({ [visible.id]: 'files' })
     expect(store.getState().tabsByWorktree[hidden.id]).toBeUndefined()
     expect(store.getState().sortEpoch).toBe(7)
     expect(hasDismissedHugeRepoWarning(beginHugeRepoWarningProbe(hidden))).toBe(false)
@@ -9766,7 +9754,6 @@ describe('migrateWorktreeIdentity', () => {
       activeWorkspaceKey: worktreeWorkspaceKey(OLD),
       renamingWorktreeId: { worktreeId: OLD, rowKey: 'all:old' },
       tabsByWorktree: { [OLD]: [{ id: 'tab1', worktreeId: OLD }] },
-      rightSidebarExplorerViewByWorktree: { [OLD]: 'search' },
       fileSearchStateByWorktree: {
         [OLD]: { resultOwner: { worktreeId: OLD, runtimeEnvironmentId: 'runtime-a' } }
       },
@@ -9838,8 +9825,6 @@ describe('migrateWorktreeIdentity', () => {
       mergeBase: 'base-old'
     })
     expect(s.gitBranchCompareRequestStatusHeadByWorktree[NEW]).toBe('head-old')
-    expect(s.rightSidebarExplorerViewByWorktree[OLD]).toBeUndefined()
-    expect(s.rightSidebarExplorerViewByWorktree[NEW]).toBe('search')
     expect(s.fileSearchStateByWorktree[OLD]).toBeUndefined()
     expect(s.fileSearchStateByWorktree[NEW]?.resultOwner).toEqual({
       worktreeId: NEW,

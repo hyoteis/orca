@@ -1,8 +1,10 @@
 import React from 'react'
+import { Loader2, X } from 'lucide-react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { SearchFileResult, SearchMatch, SearchResult } from '../../../../shared/types'
 import type { SearchRow } from './search-rows'
 import { FileResultRow, MatchResultRow } from './SearchResultItems'
+import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 
 const SEARCH_VIRTUAL_OVERSCAN = 12
@@ -18,6 +20,8 @@ type SearchResultsPaneProps = {
   onMatchClick: (fileResult: SearchFileResult, match: SearchMatch) => void
   /** Worktree-range ◆ marker predicate; absent while searching ◆ Scope. */
   isFileInCodeScopeRange?: (relativePath: string) => boolean
+  /** Header × clears the query and folds the pane away. */
+  onClearSearch: () => void
 }
 
 export function SearchResultsPane({
@@ -29,7 +33,8 @@ export function SearchResultsPane({
   scrollRef,
   onToggleCollapsedFile,
   onMatchClick,
-  isFileInCodeScopeRange
+  isFileInCodeScopeRange,
+  onClearSearch
 }: SearchResultsPaneProps): React.JSX.Element {
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -67,17 +72,35 @@ export function SearchResultsPane({
     <>
       {/* Why: the summary is rendered outside the virtualizer so it stays
          pinned at the top while the user scrolls through results. */}
-      {results && rows.length > 0 && (
-        <div className="px-2 py-1 text-[10px] text-muted-foreground border-b border-border">
-          {results.totalMatches}{' '}
-          {translate('auto.components.right.sidebar.Search.6aeda362ed', 'result')}
-          {results.totalMatches !== 1 ? 's' : ''}{' '}
-          {translate('auto.components.right.sidebar.Search.4107975b3a', 'in')}{' '}
-          {results.files.length}{' '}
-          {translate('auto.components.right.sidebar.Search.0b8104eaf2', 'file')}
-          {results.files.length !== 1 ? 's' : ''}
-          {results.truncated &&
-            translate('auto.components.right.sidebar.Search.dcc294f28d', '(results truncated)')}
+      {(results || loading) && (
+        <div className="flex items-center gap-1 border-b border-border px-1 py-0.5 text-[10px] text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate px-1">
+            {results && rows.length > 0
+              ? `${results.totalMatches} ${translate(
+                  'auto.components.right.sidebar.Search.6aeda362ed',
+                  'results'
+                )} ${translate('auto.components.right.sidebar.Search.4107975b3a', 'in')} ${
+                  results.files.length
+                } ${translate('auto.components.right.sidebar.Search.0b8104eaf2', 'files')}${
+                  results.truncated
+                    ? ` ${translate('auto.components.right.sidebar.Search.dcc294f28d', '(results truncated)')}`
+                    : ''
+                }`
+              : null}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="h-auto w-auto shrink-0 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+            aria-label={translate(
+              'auto.components.right.sidebar.SearchQueryRow.clearLabel',
+              'Clear search'
+            )}
+            onClick={onClearSearch}
+          >
+            <X className="size-3" />
+          </Button>
         </div>
       )}
 
@@ -120,6 +143,16 @@ export function SearchResultsPane({
         {!hasCommittedResults && query && !loading && (
           <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">
             {translate('auto.components.right.sidebar.Search.d56d140747', 'Press Enter to search')}
+          </div>
+        )}
+
+        {loading && !hasCommittedResults && query && (
+          <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">
+            <Loader2 className="mr-2 size-3.5 animate-spin" aria-hidden />
+            {translate(
+              'auto.components.right.sidebar.SearchResultsPane.searching',
+              'Searching…'
+            )}
           </div>
         )}
 

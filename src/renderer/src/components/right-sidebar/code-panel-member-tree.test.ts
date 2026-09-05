@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   buildCodePanelMemberRows,
-  getCodePanelKeptEmptyLanguages,
   removeCodePanelMemberRow,
   resolveCodePanelMemberDirectory
 } from './code-panel-member-tree'
@@ -176,24 +175,6 @@ describe('resolveCodePanelMemberDirectory', () => {
 
   it('keeps host-absolute members verbatim', () => {
     expect(resolveCodePanelMemberDirectory('/ws/repo-1', '/opt/sysroot')).toBe('/opt/sysroot')
-  })
-})
-
-describe('getCodePanelKeptEmptyLanguages', () => {
-  it('lists languages of scopes that exist but hold no members', () => {
-    const languages = getCodePanelKeptEmptyLanguages([
-      scope({ language: 'cpp', members: [] }),
-      scope({ id: 'local:worktree:repo-1:python', language: 'python', members: [] })
-    ])
-    expect(languages).toEqual(['cpp', 'python'])
-  })
-
-  it('omits languages whose scopes still have members', () => {
-    const languages = getCodePanelKeptEmptyLanguages([
-      scope({ language: 'cpp', members: [{ path: 'src', visibleResults: true }] }),
-      scope({ id: 'local:worktree:repo-1:python', language: 'python', members: [] })
-    ])
-    expect(languages).toEqual(['python'])
   })
 })
 

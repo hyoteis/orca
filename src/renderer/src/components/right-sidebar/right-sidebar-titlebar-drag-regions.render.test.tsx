@@ -319,7 +319,8 @@ describe('rendered right sidebar titlebar drag regions', () => {
 
     expect(markup).toContain('aria-label="Explorer')
     expect(markup).toContain('aria-label="Agents')
-    expect(markup).not.toContain('aria-label="Search')
+    // Search is a standalone workspace-agnostic tab — visible for folders too.
+    expect(markup).toContain('aria-label="Search')
     expect(markup).toContain('aria-label="Attached worktrees')
     expect(markup).toContain('aria-label="PR Checks')
     expect(markup).not.toContain('aria-label="Source Control')

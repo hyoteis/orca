@@ -13,7 +13,6 @@ import {
   removeCodeIntelligenceMembers,
   writeCodeIntelligenceScopeEdit
 } from '@/lib/language-server/code-intelligence-scope-member-edit'
-import { useRuntimeFileListForWorktree } from '@/components/quick-open-file-list'
 import { folderRelativePathToIncludeGlob } from './file-search-include-pattern'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
@@ -22,20 +21,9 @@ import {
   shouldResetFileExplorerForVisibleWorktree
 } from './file-explorer-reset'
 import { FileExplorerBackgroundMenu } from './FileExplorerBackgroundMenu'
-import { FileExplorerNameFilter } from './FileExplorerNameFilter'
-import { FileExplorerQueryStrip } from './FileExplorerQueryStrip'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
-import { SearchFilters } from './SearchFilters'
-import { SearchQueryRow } from './SearchQueryRow'
-import { SearchResultsPane } from './SearchResultsPane'
-import { useFileSearchPanel } from './useFileSearchPanel'
 import { FileExplorerTreeStatus } from './FileExplorerTreeStatus'
 import { FileExplorerVirtualRows } from './FileExplorerVirtualRows'
-import {
-  getNameFilterCollapsedPathsAfterExpand,
-  getNextNameFilterCollapsedPaths,
-  isFileExplorerNameFilterQueryTooLarge
-} from './file-explorer-name-filter-projection'
 import { splitPathSegments } from './path-tree'
 import { buildFolderStatusMap, buildStatusMap } from './status-display'
 import { useFileDeletion } from './useFileDeletion'
@@ -61,58 +49,36 @@ import type { TreeNode } from './file-explorer-types'
 import { OpenEditorsSection } from './OpenEditorsSection'
 import { CodeScopesSection } from './CodeScopesSection'
 import { useCodeScopesSection } from './use-code-scopes-section'
-import { FileExplorerRangeSwitch } from './FileExplorerRangeSwitch'
-import { useSymbolSearch, openSymbolSearchResult } from './use-symbol-search'
 import { findSessionLinkedFolderRepo } from '../status-bar/code-intelligence-status-scopes'
-import { SymbolSearchResults } from './SymbolSearchResults'
-import {
-  filterRelativePathsByFileSearchScopeRange,
-  isRelativePathInFileSearchScopeRange
-} from './file-search-range'
 import { useFileExplorerSelection } from './useFileExplorerSelection'
 import { useFileExplorerVisibleRowProjection } from './useFileExplorerVisibleRowProjection'
 import { translate } from '@/i18n/i18n'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/components/tab-bar/SortableTab'
-import type { RightSidebarExplorerView } from '../../../../shared/types'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { createNewTerminalTab } from '@/components/terminal/terminal-tab-create'
 import { useWorkspaceFileBrowserActionPredicate } from '@/lib/file-preview'
 import { WorktreeSection } from './WorktreeSection'
 
 function FileExplorerFiles(): React.JSX.Element {
-  const explorerView = useAppStore((s) => s.rightSidebarExplorerView)
-  const showRightSidebarFiles = useAppStore((s) => s.showRightSidebarFiles)
   const showRightSidebarSearch = useAppStore((s) => s.showRightSidebarSearch)
-  const [nameFilterQuery, setNameFilterQuery] = useState('')
   // Owns the accordion: a collapsed Worktree frees panel height for the sections above.
   const [worktreeSectionCollapsed, setWorktreeSectionCollapsed] = useState(false)
   const toggleWorktreeSection = useCallback(() => {
     setWorktreeSectionCollapsed((value) => !value)
   }, [])
-  const [nameFilterCollapsedPaths, setNameFilterCollapsedPaths] = useState<Set<string>>(
-    () => new Set()
-  )
-  // One scope set drives the range switch, Names filtering, and ◆ markers.
+  // ponytail: collapse state is session-local; thread it through persisted
+  // per-worktree UI settings if it must survive restarts.
+  const [openEditorsCollapsed, setOpenEditorsCollapsed] = useState(false)
+  const toggleOpenEditorsSection = useCallback(() => {
+    setOpenEditorsCollapsed((value) => !value)
+  }, [])
+  const [codeScopesCollapsed, setCodeScopesCollapsed] = useState(false)
+  const toggleCodeScopesSection = useCallback(() => {
+    setCodeScopesCollapsed((value) => !value)
+  }, [])
+  // Code scopes drive the C++ member-tree decoration and find-in-folder seeding.
   const { scopes: codeScopes } = useCodeScopesSection()
-  const searchPanel = useFileSearchPanel(explorerView, codeScopes)
-  // #32 Command center: same query box, workspace-symbol fan-out when toggled.
-  const symbolSearch = useSymbolSearch({
-    query: searchPanel.queryRowProps.query,
-    symbolMode: searchPanel.queryRowProps.symbolMode,
-    scopes: codeScopes
-  })
 
-  const handleSelectExplorerView = useCallback(
-    (view: RightSidebarExplorerView) => {
-      if (view === 'files') {
-        showRightSidebarFiles()
-        return
-      }
-      const trimmedQuery = nameFilterQuery.trim()
-      showRightSidebarSearch(trimmedQuery ? { query: trimmedQuery } : undefined)
-    },
-    [nameFilterQuery, showRightSidebarFiles, showRightSidebarSearch]
-  )
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const canOpenWorkspaceFileBrowserForPath =
     useWorkspaceFileBrowserActionPredicate(activeWorktreeId)
@@ -160,9 +126,7 @@ function FileExplorerFiles(): React.JSX.Element {
         : null,
     [activeRepo?.connectionId, activeRuntimeEnvironmentId, activeWorktreeId, worktreePath]
   )
-  const isFilesViewActive = explorerView === 'files'
   const visibleFilesWorktreePath = getVisibleFileExplorerWorktreePath({
-    explorerView,
     rightSidebarOpen,
     worktreePath
   })
@@ -188,97 +152,39 @@ function FileExplorerFiles(): React.JSX.Element {
     isDirStale,
     resetAndLoad
   } = useFileExplorerTree(worktreePath, expanded, activeWorktreeId)
-  const hasNameFilterQuery = nameFilterQuery.trim().length > 0
-  const nameFilterQueryTooLarge = useMemo(
-    () => isFileExplorerNameFilterQueryTooLarge(nameFilterQuery),
-    [nameFilterQuery]
-  )
-  const hasNameFilter = isFilesViewActive && hasNameFilterQuery
-  useEffect(() => {
-    if (!hasNameFilter) {
-      setNameFilterCollapsedPaths((current) => (current.size > 0 ? new Set() : current))
-    }
-  }, [hasNameFilter])
-  const nameFilterFiles = useRuntimeFileListForWorktree({
-    enabled: hasNameFilter && !nameFilterQueryTooLarge,
-    worktreeId: activeWorktreeId
-  })
-  // Why: the panel already resolves the stored range against scope
-  // availability; reuse its effective value so Names never strands on 'scope'.
-  const effectiveSearchRange = searchPanel.rangeProps.range
-  const scopeRangeMembersAvailable = !searchPanel.rangeProps.scopeRangeUnavailable
-  const nameFilterCodeScopeRangeContains = useCallback(
-    (relativePath: string) => isRelativePathInFileSearchScopeRange(codeScopes, relativePath),
-    [codeScopes]
-  )
-  const nameFilterSource = useMemo(
-    () =>
-      hasNameFilter
-        ? {
-            query: nameFilterQuery,
-            operationOwner: nameFilterFiles.operationOwner,
-            relativePaths: nameFilterQueryTooLarge
-              ? []
-              : nameFilterFiles.loading && nameFilterFiles.files.length === 0
-                ? null
-                : effectiveSearchRange === 'scope'
-                  ? filterRelativePathsByFileSearchScopeRange(nameFilterFiles.files, codeScopes)
-                  : nameFilterFiles.files
-          }
-        : null,
-    [
-      codeScopes,
-      effectiveSearchRange,
-      hasNameFilter,
-      nameFilterFiles.files,
-      nameFilterFiles.loading,
-      nameFilterFiles.operationOwner,
-      nameFilterQuery,
-      nameFilterQueryTooLarge
-    ]
-  )
+  // Freed height goes to the LAST expanded section only, so earlier sections stack
+  // at their content height and the next section starts where the previous one ends
+  // instead of at a fixed panel position.
+  const codeScopesFills = worktreeSectionCollapsed && !codeScopesCollapsed
+  const openEditorsFills =
+    worktreeSectionCollapsed && codeScopesCollapsed && !openEditorsCollapsed
   const {
     rowProjection,
     ignoredByRelativePath,
     showGitIgnoredFiles,
-    nameFilterExpandedPaths,
     toggleGitIgnoredFiles
   } = useFileExplorerVisibleRowProjection(
     activeWorktreeId,
     visibleFilesWorktreePath,
     dirCache,
     expanded,
-    activeRepoSupportsGit && isFilesViewActive,
-    showDotfiles,
-    nameFilterSource,
-    hasNameFilter ? nameFilterCollapsedPaths : null
-  )
-  const rowExpandedPaths = useMemo(
-    () =>
-      hasNameFilter
-        ? nameFilterExpandedPaths
-        : nameFilterExpandedPaths.size > 0
-          ? new Set([...expanded, ...nameFilterExpandedPaths])
-          : expanded,
-    [expanded, hasNameFilter, nameFilterExpandedPaths]
+    activeRepoSupportsGit,
+    showDotfiles
   )
   const visibleRowCount = rowProjection.getVisibleCount()
   const manualRefresh = useFileExplorerManualRefresh(refreshTree)
-  const canCollapseAll = isFilesViewActive && !hasNameFilter && expanded.size > 0
+  const canCollapseAll = expanded.size > 0
   const handleCollapseAll = useCallback(() => {
-    if (!activeWorktreeId || !isFilesViewActive || hasNameFilter) {
+    if (!activeWorktreeId) {
       return
     }
     collapseAllDirs(activeWorktreeId)
-  }, [activeWorktreeId, collapseAllDirs, hasNameFilter, isFilesViewActive])
+  }, [activeWorktreeId, collapseAllDirs])
   const handleToggleDotfiles = useCallback(() => {
     if (activeWorktreeId) {
       toggleShowDotfilesForWorktree(activeWorktreeId)
     }
   }, [activeWorktreeId, toggleShowDotfilesForWorktree])
-  const handleClearNameFilter = useCallback(() => {
-    setNameFilterQuery('')
-  }, [setNameFilterQuery])
   const handleExplorerBackgroundContextMenuCapture = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement
@@ -372,7 +278,6 @@ function FileExplorerFiles(): React.JSX.Element {
     }
     lastResetWorktreePathRef.current = visibleFilesWorktreePath
     resetSelection()
-    setNameFilterQuery('')
     resetAndLoad()
     clearFileExplorerUndoHistory()
   }, [visibleFilesWorktreePath, resetSelection]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -530,26 +435,13 @@ function FileExplorerFiles(): React.JSX.Element {
     () => rowProjection.getRowsByPaths(selectedPaths),
     [rowProjection, selectedPaths]
   )
-  const handleToggleNameFilterDir = useCallback(
-    (_worktreeId: string, dirPath: string) => {
-      setNameFilterCollapsedPaths((current) =>
-        getNextNameFilterCollapsedPaths(current, dirPath, rowExpandedPaths.has(dirPath))
-      )
-    },
-    [rowExpandedPaths]
-  )
-  const handleExpandNameFilterDir = useCallback((dirPath: string) => {
-    setNameFilterCollapsedPaths((current) =>
-      getNameFilterCollapsedPathsAfterExpand(current, dirPath)
-    )
-  }, [])
   const { handleClick, handleDoubleClick, handleWheelCapture, cancelPendingDirToggle } =
     useFileExplorerHandlers({
       activeWorktreeId,
       runtimeEnvironmentId: activeRuntimeEnvironmentId,
       openFile,
       makePreviewFilePermanent,
-      toggleDir: hasNameFilter ? handleToggleNameFilterDir : toggleDir,
+      toggleDir,
       loadDir,
       statPath,
       authorizeExternalPath: window.api.fs.authorizeExternalPath,
@@ -586,14 +478,14 @@ function FileExplorerFiles(): React.JSX.Element {
   useFileExplorerKeys({
     containerRef: explorerShellRef,
     rowProjection,
-    expandedPaths: rowExpandedPaths,
+    expandedPaths: expanded,
     canToggleDirectories: true,
     inlineInput,
     selectedPaths,
     selectedNode,
     activateNode,
     moveSelection,
-    toggleDir: hasNameFilter ? handleToggleNameFilterDir : toggleDir,
+    toggleDir,
     startRename: handleStartRename,
     requestDelete,
     requestDeleteAll,
@@ -718,15 +610,10 @@ function FileExplorerFiles(): React.JSX.Element {
   if (!worktreePath) {
     return (
       <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground px-4 text-center">
-        {explorerView === 'search'
-          ? translate(
-              'auto.components.right.sidebar.Search.98c8435e36',
-              'Select a workspace to search'
-            )
-          : translate(
-              'auto.components.right.sidebar.FileExplorer.79b1537dd3',
-              'Select a workspace to browse files'
-            )}
+        {translate(
+          'auto.components.right.sidebar.FileExplorer.79b1537dd3',
+          'Select a workspace to browse files'
+        )}
       </div>
     )
   }
@@ -736,19 +623,10 @@ function FileExplorerFiles(): React.JSX.Element {
   // present. Without this, external file drops would have no target surface
   // when the tree is empty, still loading, or showing a read error.
   const isEmptyState = visibleRowCount === 0 && !inlineInput
-  const isNameFilterLoading = nameFilterSource?.relativePaths === null
-  const isLoading =
-    isEmptyState && (hasNameFilter ? isNameFilterLoading : (rootCache?.loading ?? true))
-  const treeError = hasNameFilter ? nameFilterFiles.loadError : rootError
+  const isLoading = isEmptyState && (rootCache?.loading ?? true)
+  const treeError = rootError
   const hasError = isEmptyState && !isLoading && !!treeError
   const showTree = !isEmptyState
-  const emptyMessage =
-    hasNameFilter && !nameFilterFiles.loadError
-      ? translate(
-          'auto.components.right.sidebar.FileExplorer.2f4483d6c4',
-          'No files match this filter'
-        )
-      : undefined
 
   return (
     <>
@@ -765,7 +643,7 @@ function FileExplorerFiles(): React.JSX.Element {
           worktreePath={worktreePath}
           connectionId={activeRepo?.connectionId ?? null}
           refresh={manualRefresh}
-          canRefresh={isFilesViewActive}
+          canRefresh
           canCollapseAll={canCollapseAll}
           onCollapseAll={handleCollapseAll}
           showGitIgnoredFilesToggle={activeRepoSupportsGit}
@@ -774,90 +652,34 @@ function FileExplorerFiles(): React.JSX.Element {
           showDotfiles={showDotfiles}
           onToggleDotfiles={handleToggleDotfiles}
         />
-        <FileExplorerQueryStrip
-          view={explorerView}
-          onSelectView={handleSelectExplorerView}
-          rangeSwitch={<FileExplorerRangeSwitch {...searchPanel.rangeProps} />}
-        >
-          {/* Why: keep both query rows mounted and cross-fade so the Names/Contents
-             switch does not remount or shift when changing modes. */}
-          <div className="relative min-h-7">
-            <div
-              className={cn(
-                explorerView !== 'files' && 'pointer-events-none invisible absolute inset-x-0 top-0'
-              )}
-            >
-              <FileExplorerNameFilter
-                query={nameFilterQuery}
-                loading={nameFilterFiles.loading}
-                onQueryChange={setNameFilterQuery}
-                onClear={handleClearNameFilter}
-              />
-            </div>
-            <div
-              className={cn(
-                explorerView !== 'search' &&
-                  'pointer-events-none invisible absolute inset-x-0 top-0'
-              )}
-            >
-              <SearchQueryRow
-                {...searchPanel.queryRowProps}
-                loading={
-                  searchPanel.queryRowProps.symbolMode
-                    ? symbolSearch.loading
-                    : searchPanel.queryRowProps.loading
-                }
-                onKeyDown={(e) => {
-                  // Symbols mode: Enter opens the top result instead of rerunning text search.
-                  if (
-                    e.key === 'Enter' &&
-                    searchPanel.queryRowProps.symbolMode &&
-                    symbolSearch.rows[0]?.range &&
-                    activeWorktreeId
-                  ) {
-                    openSymbolSearchResult(symbolSearch.rows[0], activeWorktreeId, codeScopes)
-                    return
-                  }
-                  searchPanel.queryRowProps.onKeyDown(e)
-                }}
-              />
-            </div>
-          </div>
-        </FileExplorerQueryStrip>
-        <div
-          className={cn(
-            'border-b border-border px-2 pb-1.5',
-            (explorerView !== 'search' || searchPanel.queryRowProps.symbolMode) &&
-              'pointer-events-none invisible h-0 overflow-hidden border-b-0 p-0'
-          )}
-        >
-          <SearchFilters {...searchPanel.filtersProps} />
-        </div>
-        <OpenEditorsSection fillRemaining={worktreeSectionCollapsed} />
-        <CodeScopesSection fillRemaining={worktreeSectionCollapsed} />
+        <OpenEditorsSection
+          collapsed={openEditorsCollapsed}
+          onToggleCollapsed={toggleOpenEditorsSection}
+          fillRemaining={openEditorsFills}
+        />
+        <CodeScopesSection
+          collapsed={codeScopesCollapsed}
+          onToggleCollapsed={toggleCodeScopesSection}
+          fillRemaining={codeScopesFills}
+        />
         <WorktreeSection
           collapsed={worktreeSectionCollapsed}
           onToggleCollapsed={toggleWorktreeSection}
         >
-          {/* Why: the Files and Contents views share one body slot; layering them
-             avoids remounting heavy virtualized panes while preserving full height. */}
-          <div className="relative min-h-0 flex-1 overflow-hidden">
           <ScrollArea
             className={cn(
               // Why: Radix ScrollArea.Root hard-sets inline `position: relative`,
               // defeating `absolute`; size by height so the viewport can overflow.
               'h-full min-h-0',
-              explorerView !== 'files' && 'pointer-events-none invisible',
               isRootDragOver &&
-                explorerView === 'files' &&
                 !(dragSourcePath && dirname(dragSourcePath) === worktreePath) &&
                 'bg-border',
-              isNativeDragOver && explorerView === 'files' && !nativeDropTargetDir && 'bg-border'
+              isNativeDragOver && !nativeDropTargetDir && 'bg-border'
             )}
             viewportRef={scrollRef}
             viewportTabIndex={-1}
             viewportClassName="h-full min-h-0 py-2"
-            data-native-file-drop-target={isFilesViewActive ? 'file-explorer' : undefined}
+            data-native-file-drop-target="file-explorer"
             data-native-file-drop-dir={visibleFilesWorktreePath ?? undefined}
             onWheelCapture={handleWheelCapture}
             onDragOver={rootDragHandlers.onDragOver}
@@ -878,7 +700,6 @@ function FileExplorerFiles(): React.JSX.Element {
                 isLoading={isLoading}
                 error={hasError ? treeError : null}
                 isEmpty={isEmptyState && !isLoading && !hasError}
-                emptyMessage={emptyMessage}
               />
             )}
             {showTree && (
@@ -892,8 +713,8 @@ function FileExplorerFiles(): React.JSX.Element {
                 folderStatusByRelativePath={folderStatusByRelativePath}
                 statusByRelativePath={statusByRelativePath}
                 ignoredByRelativePath={ignoredByRelativePath}
-                expanded={rowExpandedPaths}
-                canCollapseFolderSubtree={!hasNameFilter}
+                expanded={expanded}
+                canCollapseFolderSubtree
                 dirCache={dirCache}
                 selectedPaths={selectedPaths}
                 activeFileId={activeFileId}
@@ -914,11 +735,6 @@ function FileExplorerFiles(): React.JSX.Element {
                 onAddFolderAsProject={handleAddFolderAsProject}
                 canAddFolderAsProject={(node) => canShowAddAsProjectAction(node, activeRepo)}
                 codeIntelligenceScope={cppCodeIntelligenceScope}
-                isPathInCodeScopeRange={
-                  hasNameFilter && effectiveSearchRange === 'worktree' && scopeRangeMembersAvailable
-                    ? nameFilterCodeScopeRangeContains
-                    : undefined
-                }
                 onToggleCodeIntelligenceMembers={handleToggleCodeIntelligenceMembers}
                 onOpenInTerminal={handleOpenInTerminal}
                 onRequestDelete={handleContextMenuDelete}
@@ -927,45 +743,15 @@ function FileExplorerFiles(): React.JSX.Element {
                 onMoveDrop={handleMoveDrop}
                 onDragTargetChange={setDropTargetDir}
                 onDragSourceChange={setDragSourcePath}
-                onDragExpandDir={hasNameFilter ? handleExpandNameFilterDir : handleDragExpandDir}
+                onDragExpandDir={handleDragExpandDir}
                 onNativeDragTargetChange={setNativeDropTargetDir}
-                onNativeDragExpandDir={
-                  hasNameFilter ? handleExpandNameFilterDir : handleNativeDragExpandDir
-                }
+                onNativeDragExpandDir={handleNativeDragExpandDir}
                 dropTargetDir={dropTargetDir}
                 dragSourcePath={dragSourcePath}
                 nativeDropTargetDir={nativeDropTargetDir}
               />
             )}
           </ScrollArea>
-          <div
-            className={cn(
-              'absolute inset-0 flex min-h-0 flex-col',
-              explorerView !== 'search' && 'pointer-events-none invisible'
-            )}
-          >
-            {searchPanel.queryRowProps.symbolMode ? (
-              searchPanel.activeWorktreeId ? (
-                <SymbolSearchResults
-                  query={searchPanel.queryRowProps.query}
-                  rows={symbolSearch.rows}
-                  loading={symbolSearch.loading}
-                  partial={symbolSearch.partial}
-                  onOpen={(row) =>
-                    openSymbolSearchResult(row, searchPanel.activeWorktreeId!, codeScopes)
-                  }
-                  onFallbackToText={searchPanel.fallbackToTextSearch}
-                />
-              ) : (
-                noWorkspaceSelected()
-              )
-            ) : searchPanel.activeWorktreeId ? (
-              <SearchResultsPane {...searchPanel.resultsProps} />
-            ) : (
-              noWorkspaceSelected()
-            )}
-          </div>
-          </div>
         </WorktreeSection>
       </div>
 
@@ -980,13 +766,6 @@ function FileExplorerFiles(): React.JSX.Element {
   )
 }
 
-function noWorkspaceSelected(): React.JSX.Element {
-  return (
-    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-      {translate('auto.components.right.sidebar.Search.98c8435e36', 'Select a workspace to search')}
-    </div>
-  )
-}
 
 const FileExplorerFilesMemo = React.memo(FileExplorerFiles)
 

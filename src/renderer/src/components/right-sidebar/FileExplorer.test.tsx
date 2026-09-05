@@ -5,12 +5,6 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu'
 import { WorktreeOpenInMenuItems } from '@/components/sidebar/WorktreeOpenInMenu'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
-import { FileExplorerNameFilter } from './FileExplorerNameFilter'
-import { FileExplorerViewSwitch } from './FileExplorerViewSwitch'
-import {
-  getNameFilterCollapsedPathsAfterExpand,
-  getNextNameFilterCollapsedPaths
-} from './file-explorer-name-filter-projection'
 import {
   copyFileToOsClipboard,
   downloadRemoteFile,
@@ -77,48 +71,6 @@ function findRefreshButton(node: unknown): ReactElementLike {
   })
   if (!found) {
     throw new Error('refresh button not found')
-  }
-  return found
-}
-
-function findInputByAriaLabel(node: unknown, ariaLabel: string): ReactElementLike {
-  let found: ReactElementLike | null = null
-  visit(node, (entry) => {
-    if (entry.type === 'input' && entry.props['aria-label'] === ariaLabel) {
-      found = entry
-    }
-  })
-  if (!found) {
-    throw new Error(`${ariaLabel} input not found`)
-  }
-  return found
-}
-
-function findElementByAriaLabel(node: unknown, ariaLabel: string): ReactElementLike {
-  let found: ReactElementLike | null = null
-  visit(node, (entry) => {
-    if (entry.props['aria-label'] === ariaLabel) {
-      found = entry
-    }
-  })
-  if (!found) {
-    throw new Error(`${ariaLabel} element not found`)
-  }
-  return found
-}
-
-function findButtonByAriaLabel(node: unknown, ariaLabel: string): ReactElementLike {
-  let found: ReactElementLike | null = null
-  visit(node, (entry) => {
-    if (
-      entry.props['aria-label'] === ariaLabel &&
-      (entry.type === Button || entry.type === 'button')
-    ) {
-      found = entry
-    }
-  })
-  if (!found) {
-    throw new Error(`${ariaLabel} button not found`)
   }
   return found
 }
@@ -307,25 +259,6 @@ beforeEach(() => {
   delete (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__
 })
 
-describe('getNextNameFilterCollapsedPaths', () => {
-  it('collapses expanded filtered folders and expands collapsed filtered folders', () => {
-    const collapsed = getNextNameFilterCollapsedPaths(new Set(), '/repo/src', true)
-    expect([...collapsed]).toEqual(['/repo/src'])
-
-    const expanded = getNextNameFilterCollapsedPaths(collapsed, '/repo/src', false)
-    expect([...expanded]).toEqual([])
-  })
-
-  it('expands filtered folders without toggling unrelated collapsed paths', () => {
-    const expanded = getNameFilterCollapsedPathsAfterExpand(
-      new Set(['/repo/docs', '/repo/src']),
-      '/repo/src'
-    )
-
-    expect([...expanded]).toEqual(['/repo/docs'])
-  })
-})
-
 describe('FileExplorerToolbar', () => {
   it('fires the refresh action from the icon button', () => {
     const onRefresh = vi.fn()
@@ -471,71 +404,6 @@ describe('FileExplorerToolbar', () => {
     expect(queryMoreActionsButton(element)).not.toBeNull()
     expect(queryGitIgnoredMenuItem(element)).toBeNull()
     expect(findOpenInMenuItems(element).props.labelPrefix).toBe('Open in ')
-  })
-})
-
-describe('FileExplorerViewSwitch', () => {
-  it('switches between files and search views', () => {
-    const onSelectView = vi.fn()
-    const element = FileExplorerViewSwitch({
-      view: 'files',
-      onSelectView
-    })
-
-    const switchRoot = findElementByAriaLabel(element, 'Explorer search mode')
-    ;(switchRoot.props.onValueChange as (value: string) => void)('search')
-
-    expect(onSelectView).toHaveBeenCalledWith('search')
-  })
-
-  it('renders names and contents labels', () => {
-    const element = FileExplorerViewSwitch({
-      view: 'search',
-      onSelectView: vi.fn()
-    })
-
-    const contentsTab = findElementByAriaLabel(element, 'Search file contents')
-    const namesTab = findElementByAriaLabel(element, 'Filter files by name')
-    const switchRoot = findElementByAriaLabel(element, 'Explorer search mode')
-
-    expect(switchRoot.props.value).toBe('search')
-    expect(contentsTab.props.value).toBe('search')
-    expect(namesTab.props.value).toBe('files')
-    expect(JSON.stringify(contentsTab.props.children)).toContain('Contents')
-    expect(JSON.stringify(namesTab.props.children)).toContain('Names')
-  })
-})
-
-describe('FileExplorerNameFilter', () => {
-  it('reports text changes and shows the compact file filter input', () => {
-    const onQueryChange = vi.fn()
-    const element = FileExplorerNameFilter({
-      query: '',
-      onQueryChange,
-      onClear: vi.fn()
-    })
-
-    const input = findInputByAriaLabel(element, 'Find files')
-    ;(input.props.onChange as (event: { currentTarget: { value: string } }) => void)({
-      currentTarget: { value: 'FileExplorer' }
-    })
-
-    expect(input.props.placeholder).toBe('Find files')
-    expect(onQueryChange).toHaveBeenCalledWith('FileExplorer')
-  })
-
-  it('clears the current file filter from the clear button', () => {
-    const onClear = vi.fn()
-    const element = FileExplorerNameFilter({
-      query: 'FileExplorer',
-      onQueryChange: vi.fn(),
-      onClear
-    })
-
-    const button = findButtonByAriaLabel(element, 'Clear file filter')
-    ;(button.props.onClick as () => void)()
-
-    expect(onClear).toHaveBeenCalledTimes(1)
   })
 })
 

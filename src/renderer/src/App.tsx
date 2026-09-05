@@ -713,7 +713,6 @@ function App(): React.JSX.Element {
   const combinedDiffFileTreeWidth = useAppStore((s) => s.combinedDiffFileTreeWidth)
   const rightSidebarOpen = useAppStore((s) => s.rightSidebarOpen)
   const rightSidebarTab = useAppStore((s) => s.rightSidebarTab)
-  const rightSidebarExplorerView = useAppStore((s) => s.rightSidebarExplorerView)
   const isFullScreen = useAppStore((s) => s.isFullScreen)
   const settings = useAppStore((s) => s.settings)
   const systemPrefersDark = useSystemPrefersDark()
@@ -1405,7 +1404,6 @@ function App(): React.JSX.Element {
         sidebarWidth,
         rightSidebarOpen,
         rightSidebarTab,
-        rightSidebarExplorerView,
         rightSidebarWidth,
         markdownTocPanelWidth,
         combinedDiffFileTreeWidth,
@@ -1442,7 +1440,6 @@ function App(): React.JSX.Element {
     sidebarWidth,
     rightSidebarOpen,
     rightSidebarTab,
-    rightSidebarExplorerView,
     rightSidebarWidth,
     markdownTocPanelWidth,
     combinedDiffFileTreeWidth,
@@ -2448,11 +2445,7 @@ function App(): React.JSX.Element {
                   <RecoverableRenderErrorBoundary
                     boundaryId="right-sidebar"
                     surface="right-sidebar"
-                    resetKey={
-                      rightSidebarTab === 'explorer'
-                        ? `${rightSidebarTab}:${rightSidebarExplorerView}`
-                        : rightSidebarTab
-                    }
+                    resetKey={rightSidebarTab}
                     title={translate('auto.App.ed6b168d00', 'The right sidebar hit an error.')}
                     description={translate(
                       'auto.App.8d1e160ed1',

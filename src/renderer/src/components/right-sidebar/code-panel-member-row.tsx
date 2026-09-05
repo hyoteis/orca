@@ -50,20 +50,21 @@ export function CodePanelMemberTreeRow({
   if (inline && inline.type === 'rename' && inline.existingPath === dirPath) {
     return (
       <InlineInputRow
-        depth={1}
+        depth={0}
         inlineInput={inline}
         onSubmit={actions.submitInlineInput}
         onCancel={actions.dismissInlineInput}
       />
     )
   }
-  // Indent level 1 under the section header; children continue from level 2.
+  // Flush with the section edge (8px base, same as the Files tree top level);
+  // children continue one level deeper via CodePanelDirChildren (14px/level).
   const node = {
     name: row.displayName,
     path: dirPath,
     relativePath: row.path,
     isDirectory: true,
-    depth: 1,
+    depth: 0,
     operationOwner: getFileExplorerOperationOwner(actions.activeWorktreeId)
   }
   return (
@@ -72,7 +73,7 @@ export function CodePanelMemberTreeRow({
         <button
           type="button"
           className="flex h-[26px] w-full items-center gap-1.5 pr-2 text-left text-[13px] text-foreground hover:bg-accent"
-          style={{ paddingLeft: '22px' }}
+          style={{ paddingLeft: '8px' }}
           title={
             row.browseBlocked
               ? translate(
@@ -155,7 +156,7 @@ export function CodePanelMemberTreeRow({
       </ContextMenuContent>
       <CodePanelDirChildren
         dirPath={dirPath}
-        depth={2}
+        depth={1}
         listing={listing}
         onOpenFile={onOpenFile}
         tree={tree}

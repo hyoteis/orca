@@ -38,7 +38,6 @@ export function getStartupErrorFallbackUI(uiHydrated: boolean): PersistedUIState
     sidebarWidth: 280,
     rightSidebarOpen: true,
     rightSidebarTab: 'explorer',
-    rightSidebarExplorerView: 'files',
     rightSidebarWidth: 350,
     markdownTocPanelWidth: 240,
     combinedDiffFileTreeWidth: 256,

@@ -103,6 +103,10 @@
   --color-status-success-border: var(--status-success-border);
   --color-tab-group-split-divider: var(--tab-group-split-divider);
   --color-tab-group-split-divider-strong: var(--tab-group-split-divider-strong);
+  /* Explorer section seams: --border (7% white) is invisible on the explorer
+     surface — same faintness problem tab-group splits solved with a dedicated
+     divider. Aliased so both faint-divider roles stay in sync. */
+  --color-explorer-section-divider: var(--tab-group-split-divider);
   --color-git-graph-ref: var(--git-graph-ref);
   --color-git-graph-remote-ref: var(--git-graph-remote-ref);
   --color-git-graph-base-ref: var(--git-graph-base-ref);

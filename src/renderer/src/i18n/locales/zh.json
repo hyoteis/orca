@@ -10405,8 +10405,8 @@
             "430f1a62d4": "无法在主机上解决选中的讨论串。"
           },
           "CodeScopesSection": {
-            "title": "代码范围",
-            "toggleSection": "切换代码范围段",
+            "title": "工作区",
+            "toggleSection": "切换工作区区块",
             "configureCode": "配置代码"
           },
           "CreatePullRequestDialog": {
@@ -11217,7 +11217,8 @@
             "fc3095d2ed": "资源管理器",
             "aiVaultSessionHistory": "智能体",
             "folderWorkspaces": "已附加的工作树",
-            "parentPrChecks": "PR 检查"
+            "parentPrChecks": "PR 检查",
+            "searchTab": "搜索"
           },
           "right": {
             "panel": {
@@ -11692,8 +11693,18 @@
             "unlimited": "无限制"
           },
           "WorktreeSection": {
-            "title": "工作树",
-            "toggleSection": "切换工作树段"
+            "title": "文件",
+            "toggleSection": "切换文件区块"
+          },
+          "OpenEditorsSection": {
+            "title": "打开的编辑器",
+            "toggleSection": "切换打开的编辑器区块",
+            "close": "关闭",
+            "closeEditor": "关闭编辑器",
+            "diff": "（diff）"
+          },
+          "SearchResultsPane": {
+            "searching": "正在搜索…"
           }
         }
       },
@@ -14295,6 +14306,9 @@
           "actionsUnavailable": "此客户端不支持插件操作。",
           "messageTooLarge": "消息超过大小限制。",
           "tooManyRequests": "请求过多。"
+        },
+        "CodePanel": {
+          "loading": "加载中…"
         }
       },
       "link": {

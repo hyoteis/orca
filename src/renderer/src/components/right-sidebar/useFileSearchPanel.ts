@@ -10,6 +10,7 @@ import { useSymbolSearchModeActions } from './symbol-search-mode-actions'
 import { useFileSearchRunner } from './useFileSearchRunner'
 import {
   createWorktreeRangeMarkerPredicate,
+  filterSearchResultsByFileSearchScopeRange,
   hasFileSearchScopeRangeMembers
 } from './file-search-range'
 import type { FileSearchPanelModel } from './file-search-panel-model'
@@ -17,7 +18,6 @@ import type { FileSearchPanelModel } from './file-search-panel-model'
 const EMPTY_COLLAPSED_FILES = new Set<string>()
 
 export function useFileSearchPanel(
-  explorerView: 'files' | 'search',
   codeScopes: readonly CodeIntelligenceScope[] = []
 ): FileSearchPanelModel {
   const activeWorktree = useActiveWorktree()
@@ -92,8 +92,7 @@ export function useFileSearchPanel(
   const { executeSearch, cancelPendingSearch } = useFileSearchRunner({
     activeWorktreeId,
     worktreePath,
-    updateActiveSearchState,
-    codeScopes
+    updateActiveSearchState
   })
 
   const cancelSeededInputSelectionFrame = useCallback(() => {
@@ -136,13 +135,22 @@ export function useFileSearchPanel(
     [fileSearchResultOwner, fileSearchResults]
   )
   const deferredSearchResults = useDeferredValue(committedSearchResults)
+  // #77 range restriction at DISPLAY time over the raw worktree scan: switching
+  // ranges re-filters instantly with no rescan and no stale out-of-range window.
+  const displaySearchResults = useMemo(
+    () =>
+      effectiveSearchRange === 'scope' && deferredSearchResults.results && codeScopes.length
+        ? filterSearchResultsByFileSearchScopeRange(deferredSearchResults.results, codeScopes)
+        : deferredSearchResults.results,
+    [codeScopes, deferredSearchResults.results, effectiveSearchRange]
+  )
   const searchRows = useMemo(
     () =>
       buildSearchRows(
-        fileSearchQuery.trim() && worktreePath ? deferredSearchResults.results : null,
+        fileSearchQuery.trim() && worktreePath ? displaySearchResults : null,
         fileSearchCollapsedFiles
       ),
-    [deferredSearchResults.results, fileSearchCollapsedFiles, fileSearchQuery, worktreePath]
+    [displaySearchResults, fileSearchCollapsedFiles, fileSearchQuery, worktreePath]
   )
 
   // Symbols mode owns the query (#32) — gate every text-search entry point here
@@ -181,14 +189,6 @@ export function useFileSearchPanel(
     }
     inputRef.current?.focus()
   }, [activeWorktreeId, fileSearchFocusRequestId])
-
-  const previousExplorerViewRef = useRef(explorerView)
-  useEffect(() => {
-    if (previousExplorerViewRef.current !== 'search' && explorerView === 'search') {
-      focusQueryInput()
-    }
-    previousExplorerViewRef.current = explorerView
-  }, [explorerView, focusQueryInput])
 
   const handleClearSearch = useCallback(() => {
     cancelPendingSearch()
@@ -257,10 +257,11 @@ export function useFileSearchPanel(
       if (!activeWorktreeId) {
         return
       }
+      // No rerun: the stored scan is worktree-wide and the range restriction is
+      // applied at display time, so the switch is instant and lossless.
       updateFileSearchState(activeWorktreeId, { searchRange: range })
-      rerunSearch()
     },
-    [activeWorktreeId, rerunSearch, updateFileSearchState]
+    [activeWorktreeId, updateFileSearchState]
   )
 
   const { onToggleSymbolMode, fallbackToTextSearch } = useSymbolSearchModeActions({
@@ -271,11 +272,6 @@ export function useFileSearchPanel(
 
   return {
     activeWorktreeId,
-    rangeProps: {
-      range: effectiveSearchRange,
-      scopeRangeUnavailable,
-      onSelectRange: handleSelectRange
-    },
     queryRowProps: {
       inputRef,
       query: fileSearchQuery,
@@ -283,6 +279,9 @@ export function useFileSearchPanel(
       caseSensitive: fileSearchCaseSensitive,
       wholeWord: fileSearchWholeWord,
       useRegex: fileSearchUseRegex,
+      range: effectiveSearchRange,
+      scopeRangeUnavailable,
+      onSelectRange: handleSelectRange,
       onQueryChange: handleQueryChange,
       onKeyDown: handleKeyDown,
       onClearSearch: handleClearSearch,
@@ -317,7 +316,7 @@ export function useFileSearchPanel(
       }
     },
     resultsProps: {
-      results: deferredSearchResults.results,
+      results: displaySearchResults,
       hasCommittedResults: fileSearchResults !== null,
       query: fileSearchQuery,
       loading: fileSearchLoading,

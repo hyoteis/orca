@@ -10407,7 +10407,8 @@
           },
           "SearchQueryRow": {
             "queryLabel": "Buscar archivos",
-            "clearLabel": "Borrar búsqueda"
+            "clearLabel": "Borrar búsqueda",
+            "symbolMode": "Alternar búsqueda de símbolos del espacio de trabajo"
           },
           "SearchResultItems": {
             "cc06595a3b": "Copiar ruta de línea",
@@ -10989,7 +10990,8 @@
             "fc3095d2ed": "explorador",
             "aiVaultSessionHistory": "Agentes",
             "folderWorkspaces": "Worktrees adjuntos",
-            "parentPrChecks": "Checks de PR"
+            "parentPrChecks": "Checks de PR",
+            "searchTab": "Buscar"
           },
           "right": {
             "panel": {
@@ -11456,6 +11458,29 @@
             "mayBeSlower": "Puede ser más lento",
             "slowest": "Más lento",
             "unlimited": "Sin límite"
+          },
+          "CodeScopesSection": {
+            "title": "Espacio de trabajo",
+            "toggleSection": "Alternar sección del espacio de trabajo",
+            "configureCode": "Configurar Code"
+          },
+          "WorktreeSection": {
+            "title": "Archivos",
+            "toggleSection": "Alternar sección de archivos"
+          },
+          "OpenEditorsSection": {
+            "title": "Editores abiertos",
+            "toggleSection": "Alternar sección de editores abiertos",
+            "close": "Cerrar",
+            "closeEditor": "Cerrar editor",
+            "diff": " (diff)"
+          },
+          "SearchResultsPane": {
+            "searching": "Buscando…"
+          },
+          "FileExplorerRangeSwitch": {
+            "43b9416a9a": "Alcance de búsqueda del explorador",
+            "67c5cb400e": "Aún no hay miembros de Code scope para buscar"
           }
         }
       },
@@ -14057,6 +14082,9 @@
           "actionsUnavailable": "Las acciones de plugins no están disponibles en este cliente.",
           "messageTooLarge": "El mensaje supera el límite de tamaño.",
           "tooManyRequests": "Demasiadas solicitudes."
+        },
+        "CodePanel": {
+          "loading": "Cargando…"
         }
       },
       "link": {

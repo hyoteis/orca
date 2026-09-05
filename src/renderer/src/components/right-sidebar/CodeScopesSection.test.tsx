@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { useState, type ComponentProps } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DirEntry, GlobalSettings, Repo, Worktree } from '../../../../shared/types'
@@ -76,6 +77,18 @@ vi.mock('@/i18n/i18n', () => ({
 
 import { CodeScopesSection } from './CodeScopesSection'
 
+// Controlled-state harness: mirrors how FileExplorer drives the accordion.
+function CodeScopesHarness(props: Omit<ComponentProps<typeof CodeScopesSection>, 'collapsed' | 'onToggleCollapsed'>) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <CodeScopesSection
+      {...props}
+      collapsed={collapsed}
+      onToggleCollapsed={() => setCollapsed((value) => !value)}
+    />
+  )
+}
+
 afterEach(cleanup)
 
 const CONSENT = {
@@ -146,22 +159,22 @@ beforeEach(() => {
 })
 
 describe('CodeScopesSection shell', () => {
-  it('renders the section titled exactly "Code scopes" above its member rows', () => {
+  it('renders the section titled exactly "Workspace" above its member rows', () => {
     setupState()
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
-    expect(screen.getByText('Code scopes')).toBeTruthy()
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.getByText('Workspace')).toBeTruthy()
     expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
   })
 
   it('hides the section when the workspace has no scopes (OpenEditorsSection precedent)', () => {
     setupState({ scopes: [] })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
-    expect(screen.queryByText('Code scopes')).toBeNull()
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.queryByText('Workspace')).toBeNull()
   })
 
   it('fills the freed panel height when the worktree section is collapsed', () => {
     setupState()
-    const { container } = render(<CodeScopesSection listDirectory={vi.fn()} fillRemaining />)
+    const { container } = render(<CodeScopesHarness listDirectory={vi.fn()} fillRemaining />)
     expect((container.firstElementChild as HTMLElement).className).toContain('flex-1')
     const scrollArea = container.querySelector('[data-slot="scroll-area"]') as HTMLElement
     expect(scrollArea.className).not.toContain('max-h-64')
@@ -170,11 +183,11 @@ describe('CodeScopesSection shell', () => {
 
   it('collapses and re-expands the section body from the header', () => {
     setupState()
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle Code scopes section' }))
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle workspace section' }))
     expect(screen.queryByRole('button', { name: /src/ })).toBeNull()
-    expect(screen.getByText('Code scopes')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle Code scopes section' }))
+    expect(screen.getByText('Workspace')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle workspace section' }))
     expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
   })
 
@@ -183,7 +196,7 @@ describe('CodeScopesSection shell', () => {
       scopes: [scope({ executionHostId: 'ssh:my-host' })],
       worktreeHostId: 'ssh:my-host'
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Configure Code' }))
     expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
       repoId: 'repo-1'
@@ -200,7 +213,7 @@ describe('CodeScopesSection shell', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
     expect(gear.disabled).toBe(true)
   })
@@ -223,53 +236,11 @@ describe('CodeScopesSection member rows', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     const rows = screen.getAllByRole('button', { name: /src\/core/ })
     expect(rows).toHaveLength(1)
     expect(rows[0]?.textContent).toContain('C++')
     expect(rows[0]?.textContent).toContain('Py')
-  })
-
-  it('shows kept-empty hints per language for empty scopes', () => {
-    setupState({
-      scopes: [
-        scope({ language: 'cpp', members: [], consent: CONSENT }),
-        scope({
-          id: 'local:worktree:repo-1:python',
-          language: 'python',
-          members: [],
-          consent: {
-            configurationFingerprint: 'fp',
-            grantedAt: 1,
-            authorizedMembers: []
-          }
-        })
-      ]
-    })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
-    expect(screen.getByText(/C\+\+ scope is empty — kept/)).toBeTruthy()
-    expect(screen.getByText(/Python scope is empty — kept/)).toBeTruthy()
-  })
-
-  it('shows a kept-empty hint alongside rows of a non-empty sibling scope', () => {
-    setupState({
-      scopes: [
-        scope({ language: 'cpp', members: [{ path: 'src', visibleResults: true }] }),
-        scope({
-          id: 'local:worktree:repo-1:python',
-          language: 'python',
-          members: [],
-          consent: {
-            configurationFingerprint: 'fp',
-            grantedAt: 1,
-            authorizedMembers: []
-          }
-        })
-      ]
-    })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
-    expect(screen.getByText(/Python scope is empty — kept/)).toBeTruthy()
   })
 
   it('blocks browsing for members of unconsented scopes', () => {
@@ -277,7 +248,7 @@ describe('CodeScopesSection member rows', () => {
     setupState({
       scopes: [scope({ members: [{ path: 'src', visibleResults: true }], consent: undefined })]
     })
-    render(<CodeScopesSection listDirectory={listDirectory} />)
+    render(<CodeScopesHarness listDirectory={listDirectory} />)
     const row = screen.getByRole('button', { name: /src/ })
     fireEvent.click(row)
     expect(listDirectory).not.toHaveBeenCalled()
@@ -289,7 +260,7 @@ describe('CodeScopesSection browsing', () => {
   it('expands a member root and lists entries through the injected lister', async () => {
     const listDirectory = vi.fn().mockResolvedValue([dir('include'), file('main.cpp')])
     setupState()
-    render(<CodeScopesSection listDirectory={listDirectory} />)
+    render(<CodeScopesHarness listDirectory={listDirectory} />)
     fireEvent.click(screen.getByRole('button', { name: /src/ }))
     await waitFor(() => expect(listDirectory).toHaveBeenCalledWith('/ws/repo-1/src'))
     expect(await screen.findByText('include')).toBeTruthy()
@@ -299,7 +270,7 @@ describe('CodeScopesSection browsing', () => {
   it('opens a file row through the editor open path', async () => {
     const listDirectory = vi.fn().mockResolvedValue([dir('include'), file('main.cpp')])
     setupState()
-    render(<CodeScopesSection listDirectory={listDirectory} />)
+    render(<CodeScopesHarness listDirectory={listDirectory} />)
     fireEvent.click(screen.getByRole('button', { name: /src/ }))
     const fileRow = await screen.findByRole('button', { name: 'main.cpp' })
     fireEvent.click(fileRow)
@@ -319,7 +290,7 @@ describe('CodeScopesSection browsing', () => {
       .mockResolvedValueOnce([dir('include')])
       .mockResolvedValueOnce([file('app.h')])
     setupState()
-    render(<CodeScopesSection listDirectory={listDirectory} />)
+    render(<CodeScopesHarness listDirectory={listDirectory} />)
     fireEvent.click(screen.getByRole('button', { name: /src/ }))
     fireEvent.click(await screen.findByText('include'))
     await waitFor(() => expect(listDirectory).toHaveBeenLastCalledWith('/ws/repo-1/src/include'))
@@ -340,7 +311,7 @@ describe('CodeScopesSection browsing', () => {
         })
       ]
     })
-    const { container } = render(<CodeScopesSection listDirectory={listDirectory} />)
+    const { container } = render(<CodeScopesHarness listDirectory={listDirectory} />)
     // '.' member: no folder-name row; the root auto-expands inside a scroll area.
     await waitFor(() => expect(listDirectory).toHaveBeenCalledWith('/ws/repo-1'))
     expect(await screen.findByRole('button', { name: 'src' })).toBeTruthy()
@@ -352,7 +323,7 @@ describe('CodeScopesSection browsing', () => {
   it('offers the worktree context menu on child folder rows', async () => {
     const listDirectory = vi.fn().mockResolvedValue([dir('include')])
     setupState()
-    render(<CodeScopesSection listDirectory={listDirectory} />)
+    render(<CodeScopesHarness listDirectory={listDirectory} />)
     fireEvent.click(screen.getByRole('button', { name: /src/ }))
     const childRow = await screen.findByRole('button', { name: 'include' })
     fireEvent.contextMenu(childRow)
@@ -406,7 +377,7 @@ describe('CodeScopesSection folder workspace bridging', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
     expect(screen.getByText(/DiligentEngine/)).toBeTruthy()
     expect(screen.getByText(/linked project/)).toBeTruthy()
@@ -419,8 +390,8 @@ describe('CodeScopesSection folder workspace bridging', () => {
       repos: [],
       scopes: []
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
-    expect(screen.getByText('Code scopes')).toBeTruthy()
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.getByText('Workspace')).toBeTruthy()
     expect(screen.getByText('This folder is not a project yet')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Add Folder as Project/ }))
     expect(mockState.openModal).toHaveBeenCalledWith('confirm-add-project-from-folder', {
@@ -441,7 +412,7 @@ describe('CodeScopesSection folder workspace bridging', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
     expect(gear.disabled).toBe(false)
     fireEvent.click(gear)
@@ -472,7 +443,7 @@ describe('CodeScopesSection folder workspace bridging', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     fireEvent.contextMenu(screen.getByRole('button', { name: /src/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
     expect(windowApi.shell.openPath).not.toHaveBeenCalled()
@@ -487,7 +458,7 @@ describe('CodeScopesSection member context menu', () => {
 
   it('offers all four actions on a member row', () => {
     setupState()
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     expect(screen.getByRole('menuitem', { name: 'Open as Workspace' })).toBeTruthy()
     expect(screen.getByRole('menuitem', { name: 'Reveal in File Manager' })).toBeTruthy()
@@ -505,7 +476,7 @@ describe('CodeScopesSection member context menu', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     expect(screen.queryByRole('menuitem', { name: 'Configure Code…' })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
@@ -513,7 +484,7 @@ describe('CodeScopesSection member context menu', () => {
 
   it('removes the member through the single writer and keeps the emptied scope', async () => {
     setupState({ scopes: [scope({ members: [{ path: 'src', visibleResults: true }] })] })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
     await waitFor(() => expect(windowApi.codeIntelligence.upsertScope).toHaveBeenCalledTimes(1))
@@ -538,7 +509,7 @@ describe('CodeScopesSection member context menu', () => {
         })
       ]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
     await waitFor(() => expect(windowApi.codeIntelligence.upsertScope).toHaveBeenCalledTimes(2))
@@ -553,7 +524,7 @@ describe('CodeScopesSection member context menu', () => {
 
   it('opens the C++ setup dialog scoped to the workspace repo', () => {
     setupState()
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Configure Code…' }))
     expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
@@ -563,7 +534,7 @@ describe('CodeScopesSection member context menu', () => {
 
   it('opens the member directory through the add-project flow', () => {
     setupState()
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Open as Workspace' }))
     expect(mockState.openModal).toHaveBeenCalledWith('confirm-add-project-from-folder', {
@@ -574,7 +545,7 @@ describe('CodeScopesSection member context menu', () => {
 
   it('reveals local member directories in the OS file manager', () => {
     setupState()
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
     expect(windowApi.shell.openPath).toHaveBeenCalledWith('/ws/repo-1/src')
@@ -589,7 +560,7 @@ describe('CodeScopesSection member context menu', () => {
       ],
       repos: [{ id: 'repo-1', connectionId: 'my-host' } as unknown as Repo]
     })
-    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
     openMemberMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
     expect(windowApi.shell.openPath).not.toHaveBeenCalled()

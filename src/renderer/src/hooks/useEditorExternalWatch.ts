@@ -147,7 +147,6 @@ export type EditorExternalWatchTargetState = Pick<
   | 'settings'
   | 'rightSidebarOpen'
   | 'rightSidebarTab'
-  | 'rightSidebarExplorerView'
   | 'gitStatusHugeByWorktree'
   | 'sshConnectionStates'
   | 'folderWorkspaces'
@@ -161,7 +160,6 @@ let cachedActiveWorktreeId: string | null = null
 let cachedRuntimeEnvironmentId: string | undefined
 let cachedRightSidebarOpen: boolean | null = null
 let cachedRightSidebarTab: AppState['rightSidebarTab'] | null = null
-let cachedRightSidebarExplorerView: AppState['rightSidebarExplorerView'] | null = null
 let cachedGitStatusHugeByWorktree: AppState['gitStatusHugeByWorktree'] | null = null
 let cachedSshConnectionStates: AppState['sshConnectionStates'] | null = null
 let cachedFolderWorkspaces: AppState['folderWorkspaces'] | null = null
@@ -189,7 +187,6 @@ export function getEditorExternalWatchTargets(
     cachedRuntimeEnvironmentId === runtimeEnvironmentId &&
     cachedRightSidebarOpen === state.rightSidebarOpen &&
     cachedRightSidebarTab === state.rightSidebarTab &&
-    cachedRightSidebarExplorerView === state.rightSidebarExplorerView &&
     cachedGitStatusHugeByWorktree === state.gitStatusHugeByWorktree &&
     cachedSshConnectionStates === state.sshConnectionStates &&
     cachedFolderWorkspaces === state.folderWorkspaces &&
@@ -231,7 +228,7 @@ export function getEditorExternalWatchTargets(
   const activeWorktreeNeedsSidebarWatch =
     activeWorktreeId !== null &&
     state.rightSidebarOpen &&
-    ((state.rightSidebarTab === 'explorer' && state.rightSidebarExplorerView === 'files') ||
+    (state.rightSidebarTab === 'explorer' ||
       (state.rightSidebarTab === 'source-control' && sourceControlCanConsumeWatch))
   if (activeWorktreeNeedsSidebarWatch) {
     // Why: this app-level watcher owns Explorer/Source-Control subscriptions so downstream consumers don't fight over watch/unwatch IPC.
@@ -315,7 +312,6 @@ export function getEditorExternalWatchTargets(
   cachedRuntimeEnvironmentId = runtimeEnvironmentId
   cachedRightSidebarOpen = state.rightSidebarOpen
   cachedRightSidebarTab = state.rightSidebarTab
-  cachedRightSidebarExplorerView = state.rightSidebarExplorerView
   cachedGitStatusHugeByWorktree = state.gitStatusHugeByWorktree
   cachedSshConnectionStates = state.sshConnectionStates
   cachedFolderWorkspaces = state.folderWorkspaces

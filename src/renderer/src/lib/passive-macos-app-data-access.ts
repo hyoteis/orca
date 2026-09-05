@@ -1,8 +1,4 @@
-import type {
-  ActiveRightSidebarTab,
-  OpenFile,
-  RightSidebarExplorerView
-} from '@/store/slices/editor'
+import type { ActiveRightSidebarTab, OpenFile } from '@/store/slices/editor'
 
 const MAC_APP_DATA_SEGMENT_RE = /(^|\/)Library\/(Containers|Group Containers)\//
 
@@ -25,7 +21,6 @@ export type ActiveGitStatusPollingArgs = {
   worktreePath: string | null
   rightSidebarOpen: boolean
   rightSidebarTab: ActiveRightSidebarTab
-  rightSidebarExplorerView?: RightSidebarExplorerView
   openFiles?: OpenFile[]
   userAgent?: string
 }
@@ -37,7 +32,8 @@ export function hasInteractiveActiveGitStatusConsumer(args: ActiveGitStatusPolli
   return (
     (args.rightSidebarOpen &&
       (args.rightSidebarTab === 'source-control' ||
-        (args.rightSidebarTab === 'explorer' && args.rightSidebarExplorerView !== 'search') ||
+        args.rightSidebarTab === 'explorer' ||
+        args.rightSidebarTab === 'search' ||
         args.rightSidebarTab === 'checks')) ||
     (args.openFiles ?? []).some((file) => file.worktreeId === args.activeWorktreeId)
   )

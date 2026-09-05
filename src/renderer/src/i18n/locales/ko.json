@@ -10407,7 +10407,8 @@
           },
           "SearchQueryRow": {
             "queryLabel": "파일 검색",
-            "clearLabel": "검색 지우기"
+            "clearLabel": "검색 지우기",
+            "symbolMode": "워크스페이스 심볼 검색 전환"
           },
           "SearchResultItems": {
             "cc06595a3b": "라인 경로 복사",
@@ -10989,7 +10990,8 @@
             "fc3095d2ed": "탐색기",
             "aiVaultSessionHistory": "에이전트",
             "folderWorkspaces": "연결된 워크트리",
-            "parentPrChecks": "PR 검사"
+            "parentPrChecks": "PR 검사",
+            "searchTab": "검색"
           },
           "right": {
             "panel": {
@@ -11456,6 +11458,29 @@
             "mayBeSlower": "느려질 수 있음",
             "slowest": "가장 느림",
             "unlimited": "무제한"
+          },
+          "CodeScopesSection": {
+            "title": "워크스페이스",
+            "toggleSection": "워크스페이스 섹션 전환",
+            "configureCode": "Code 구성"
+          },
+          "WorktreeSection": {
+            "title": "파일",
+            "toggleSection": "파일 섹션 전환"
+          },
+          "OpenEditorsSection": {
+            "title": "열린 편집기",
+            "toggleSection": "열린 편집기 섹션 전환",
+            "close": "닫기",
+            "closeEditor": "편집기 닫기",
+            "diff": " (diff)"
+          },
+          "SearchResultsPane": {
+            "searching": "검색 중…"
+          },
+          "FileExplorerRangeSwitch": {
+            "43b9416a9a": "탐색기 검색 범위",
+            "67c5cb400e": "검색 가능한 Code 범위 멤버가 아직 없습니다"
           }
         }
       },
@@ -14068,6 +14093,9 @@
           "actionsUnavailable": "이 클라이언트에서는 플러그인 작업을 사용할 수 없습니다.",
           "messageTooLarge": "메시지가 크기 제한을 초과합니다.",
           "tooManyRequests": "요청이 너무 많습니다."
+        },
+        "CodePanel": {
+          "loading": "로드 중…"
         }
       },
       "link": {

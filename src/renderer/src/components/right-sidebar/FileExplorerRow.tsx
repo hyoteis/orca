@@ -12,7 +12,6 @@ import {
 } from '@/lib/workspace-file-drag'
 import type { GitFileStatus } from '../../../../shared/types'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
-import { getCodeIntelligenceMembershipAction } from '@/lib/language-server/code-intelligence-scope-membership'
 import { STATUS_LABELS } from './status-display'
 import { RENAME_HOTSPOT_ATTR } from './file-explorer-dir-toggle-timing'
 import type { TreeNode } from './file-explorer-types'
@@ -242,8 +241,6 @@ type FileExplorerRowProps = {
   onAddFolderAsProject: () => void
   canAddAsProject: boolean
   codeIntelligenceScope?: CodeIntelligenceScope | null
-  /** Worktree-range ◆ marker hit (#82); independent of the membership menu. */
-  inCodeScopeRange?: boolean
   onToggleCodeIntelligenceMembers?: (paths: readonly string[], action: 'add' | 'remove') => void
   onOpenInTerminal: () => void
   onRequestDelete: () => void
@@ -286,7 +283,6 @@ export function FileExplorerRow({
   onAddFolderAsProject,
   canAddAsProject,
   codeIntelligenceScope = null,
-  inCodeScopeRange,
   onToggleCodeIntelligenceMembers,
   onOpenInTerminal,
   onRequestDelete,
@@ -301,14 +297,6 @@ export function FileExplorerRow({
 }: FileExplorerRowProps): React.JSX.Element {
   const FileIcon = getFileTypeIcon(node.relativePath || node.name)
   const rowDropDir = node.isDirectory ? node.path : targetDir
-  const codeIntelligenceAction =
-    codeIntelligenceScope && onToggleCodeIntelligenceMembers && node.isDirectory
-      ? getCodeIntelligenceMembershipAction(codeIntelligenceScope, node.relativePath)
-      : null
-  const codeIntelligenceInScope =
-    codeIntelligenceAction === 'remove' ||
-    codeIntelligenceAction === 'disabled' ||
-    Boolean(inCodeScopeRange)
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useFileExplorerRowDrag({
       rowDropDir,
@@ -467,17 +455,6 @@ export function FileExplorerRow({
           >
             {node.name}
           </span>
-          {codeIntelligenceInScope ? (
-            /* Why: row-level scope indicator (#73) — membership visible without right-clicking. */
-            <span
-              title={translate(
-                'auto.components.right.sidebar.FileExplorerRow.codeIntelligenceInScope',
-                'In Code Intelligence'
-              )}
-              aria-hidden="true"
-              className="ml-1 size-1.5 shrink-0 rotate-45 rounded-[1px] bg-status-success"
-            />
-          ) : null}
           {nodeStatus ? (
             <span
               className="ml-auto shrink-0 text-[10px] font-semibold tracking-wide mr-2"

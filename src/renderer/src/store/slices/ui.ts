@@ -2456,10 +2456,7 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
           })
           .catch(console.error)
       }
-      const rightSidebarRoute = normalizeRightSidebarRoute(
-        ui.rightSidebarTab,
-        ui.rightSidebarExplorerView
-      )
+      const rightSidebarRoute = normalizeRightSidebarRoute(ui.rightSidebarTab)
       const hydrated = {
         // Why: persisted widths may be stale/corrupt/hand-edited; clamp during hydration so invalid values can't break layout.
         sidebarWidth: sanitizePersistedSidebarWidth(
@@ -2484,7 +2481,6 @@ export const createUISlice: StateCreator<AppState, [], [], UISlice> = (set, get)
         ),
         rightSidebarOpen: typeof ui.rightSidebarOpen === 'boolean' ? ui.rightSidebarOpen : true,
         rightSidebarTab: rightSidebarRoute.rightSidebarTab,
-        rightSidebarExplorerView: rightSidebarRoute.rightSidebarExplorerView,
         groupBy: (ui.groupBy as UISlice['groupBy'] | 'parent') === 'parent' ? 'repo' : ui.groupBy,
         sortBy,
         // Why: main-process getUI() already normalized this (defaulting to 'manual'); read it through without migrating.

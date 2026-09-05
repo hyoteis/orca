@@ -3410,7 +3410,9 @@ export type RightSidebarTab =
   // Plugin-contributed panels are keyed `plugin:<pluginId>/<panelId>` so the
   // static union stays closed while plugin tabs remain type-representable.
   | `plugin:${string}`
-export type ActiveRightSidebarTab = Exclude<RightSidebarTab, 'search'>
+/** Search is a standalone panel again (VS Code-style); the wire keeps the
+ * legacy explorer-view field for mixed-version clients. */
+export type ActiveRightSidebarTab = RightSidebarTab
 export type RightSidebarExplorerView = 'files' | 'search'
 /** Find-strip range (#77): worktree tree vs union of Code scope member dirs. */
 export type FileSearchRange = 'worktree' | 'scope'
@@ -3444,7 +3446,9 @@ export type PersistedUIState = {
   sidebarWidth: number
   rightSidebarOpen: boolean
   rightSidebarTab: RightSidebarTab
-  rightSidebarExplorerView: RightSidebarExplorerView
+  /** Legacy field: kept on the wire/persistence for mixed-version clients; the
+ *  renderer no longer reads it (Search is a standalone tab again). */
+  rightSidebarExplorerView?: RightSidebarExplorerView
   rightSidebarWidth: number
   markdownTocPanelWidth?: number
   combinedDiffFileTreeWidth?: number

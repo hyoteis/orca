@@ -7,23 +7,9 @@ import {
   type FileExplorerRowProjection
 } from './file-explorer-row-projection'
 import { buildIgnoredSet, isPathIgnored } from './status-display'
-import {
-  createNameFilteredFileExplorerProjection,
-  getFileExplorerNameFilterExpandedPaths,
-  getFileExplorerNameFilterIgnoredQueryRelativePaths,
-  type FileExplorerNameFilterProjectionSource
-} from './file-explorer-name-filter-projection'
 import { useFileExplorerIgnoredPaths } from './use-file-explorer-ignored-paths'
 
 const EMPTY_RELATIVE_PATHS: string[] = []
-
-type VisibleFileExplorerRowProjectionOptions = {
-  ignoredSet: Set<string>
-  nameFilter?: FileExplorerNameFilterProjectionSource | null
-  nameFilterCollapsedPaths?: ReadonlySet<string> | null
-  showDotfiles: boolean
-  showGitIgnoredFiles: boolean
-}
 
 type VisibleFileExplorerRowProjectionInput = {
   dirCache: Record<string, DirCache>
@@ -62,23 +48,17 @@ export function getFileExplorerIgnoredQueryRelativePaths(
 
 export function createVisibleFileExplorerRowProjection(
   input: VisibleFileExplorerRowProjectionInput,
-  options: VisibleFileExplorerRowProjectionOptions
+  options: {
+    ignoredSet: Set<string>
+    showDotfiles: boolean
+    showGitIgnoredFiles: boolean
+  }
 ): FileExplorerRowProjection {
   const { dirCache, expanded, worktreePath } = input
   const visibleFlatRows: TreeNode[] = []
   const rowsByPath = new Map<string, TreeNode>()
   if (!worktreePath) {
     return createFileExplorerRowProjectionFromParts(visibleFlatRows, rowsByPath)
-  }
-  if (options.nameFilter) {
-    return createNameFilteredFileExplorerProjection({
-      collapsedPaths: options.nameFilterCollapsedPaths ?? undefined,
-      ignoredSet: options.ignoredSet,
-      nameFilter: options.nameFilter,
-      showDotfiles: options.showDotfiles,
-      showGitIgnoredFiles: options.showGitIgnoredFiles,
-      worktreePath
-    })
   }
 
   const shouldHideRow = (row: TreeNode): boolean => {
@@ -117,18 +97,14 @@ export function createVisibleFileExplorerRowProjection(
  * check-ignore over the whole visible tree — the remote round trips the wave cap
  * exists to bound.
  */
-function useContentStableRelativePaths(relativePaths: string[], enabled: boolean): string[] {
-  // Why: filters need fresh identities per keystroke and must not evict the tree signature.
+function useContentStableRelativePaths(relativePaths: string[]): string[] {
   // Why: NUL cannot occur in paths, so the signature can reconstruct the list losslessly.
-  const signature = useMemo(
-    () => (enabled ? relativePaths.join('\u0000') : null),
-    [enabled, relativePaths]
-  )
+  const signature = useMemo(() => relativePaths.join('\u0000'), [relativePaths])
   const stableTreePaths = useMemo(
     () => (signature ? signature.split('\u0000') : EMPTY_RELATIVE_PATHS),
     [signature]
   )
-  return enabled ? stableTreePaths : relativePaths
+  return stableTreePaths
 }
 
 export function useFileExplorerVisibleRowProjection(
@@ -137,14 +113,11 @@ export function useFileExplorerVisibleRowProjection(
   dirCache: Record<string, DirCache>,
   expanded: Set<string>,
   activeRepoSupportsGit: boolean,
-  showDotfiles: boolean,
-  nameFilter: FileExplorerNameFilterProjectionSource | null,
-  nameFilterCollapsedPaths: ReadonlySet<string> | null = null
+  showDotfiles: boolean
 ): {
   rowProjection: FileExplorerRowProjection
   ignoredByRelativePath: Set<string>
   showGitIgnoredFiles: boolean
-  nameFilterExpandedPaths: Set<string>
   toggleGitIgnoredFiles: () => void
 } {
   const settings = useAppStore((s) => s.settings)
@@ -153,29 +126,23 @@ export function useFileExplorerVisibleRowProjection(
   const rebuiltRelativePaths = useMemo(
     () =>
       activeRepoSupportsGit
-        ? nameFilter
-          ? getFileExplorerNameFilterIgnoredQueryRelativePaths(nameFilter, showDotfiles)
-          : getFileExplorerIgnoredQueryRelativePaths(
-              { dirCache, expanded, worktreePath },
-              showDotfiles
-            )
+        ? getFileExplorerIgnoredQueryRelativePaths(
+            { dirCache, expanded, worktreePath },
+            showDotfiles
+          )
         : EMPTY_RELATIVE_PATHS,
-    [activeRepoSupportsGit, dirCache, expanded, nameFilter, showDotfiles, worktreePath]
+    [activeRepoSupportsGit, dirCache, expanded, showDotfiles, worktreePath]
   )
-  // Why: the name-filter list is debounced per keystroke, so it must keep a fresh
-  // identity; only the dirCache-derived list needs stability across wave commits.
-  const relativePaths = useContentStableRelativePaths(rebuiltRelativePaths, !nameFilter)
+  const relativePaths = useContentStableRelativePaths(rebuiltRelativePaths)
   const canLoadIgnoredPaths =
     activeRepoSupportsGit &&
     Boolean(activeWorktreeId) &&
     Boolean(worktreePath) &&
     relativePaths.length > 0
-  const shouldDebounceIgnoredQuery = nameFilter !== null
   const effectiveIgnoredPaths = useFileExplorerIgnoredPaths({
     activeWorktreeId,
     canLoadIgnoredPaths,
     relativePaths,
-    shouldDebounceIgnoredQuery,
     worktreePath
   })
   const ignoredSet = useMemo(() => buildIgnoredSet(effectiveIgnoredPaths), [effectiveIgnoredPaths])
@@ -185,26 +152,11 @@ export function useFileExplorerVisibleRowProjection(
         { dirCache, expanded, worktreePath },
         {
           ignoredSet,
-          nameFilter,
-          nameFilterCollapsedPaths,
           showDotfiles,
           showGitIgnoredFiles
         }
       ),
-    [
-      dirCache,
-      expanded,
-      ignoredSet,
-      nameFilter,
-      nameFilterCollapsedPaths,
-      showDotfiles,
-      showGitIgnoredFiles,
-      worktreePath
-    ]
-  )
-  const nameFilterExpandedPaths = useMemo(
-    () => getFileExplorerNameFilterExpandedPaths(rowProjection, nameFilter?.query ?? ''),
-    [nameFilter?.query, rowProjection]
+    [dirCache, expanded, ignoredSet, showDotfiles, showGitIgnoredFiles, worktreePath]
   )
   const ignoredByRelativePath = useMemo(
     () => (showGitIgnoredFiles ? ignoredSet : new Set<string>()),
@@ -218,7 +170,6 @@ export function useFileExplorerVisibleRowProjection(
     rowProjection,
     ignoredByRelativePath,
     showGitIgnoredFiles,
-    nameFilterExpandedPaths,
     toggleGitIgnoredFiles
   }
 }

@@ -166,7 +166,6 @@ describe('removeWorktree cascade', () => {
       activeTabType: 'editor',
       activeFileIdByWorktree: { [worktreeId]: '/path/wt1/file.ts' },
       activeTabTypeByWorktree: { [worktreeId]: 'editor' },
-      rightSidebarExplorerViewByWorktree: { [worktreeId]: 'search' }
     })
     saveSessionCommitDrafts({
       [worktreeId]: 'feat: stale draft',
@@ -192,7 +191,6 @@ describe('removeWorktree cascade', () => {
     expect(s.activeTabType).toBe('terminal')
     expect(s.activeFileIdByWorktree[worktreeId]).toBeUndefined()
     expect(s.activeTabTypeByWorktree[worktreeId]).toBeUndefined()
-    expect(s.rightSidebarExplorerViewByWorktree[worktreeId]).toBeUndefined()
     expect(loadSessionCommitDrafts()).toEqual({ 'repo1::/path/wt2': 'fix: keep draft' })
   })
 
@@ -915,41 +913,6 @@ describe('setActiveWorktree', () => {
 
     store.getState().setActiveWorktree(wt1)
     expect(store.getState().rightSidebarTab).toBe('checks')
-  })
-
-  it('restores the Explorer files/search subview per worktree when switching', () => {
-    const store = createTestStore()
-    const wt1 = 'repo1::/path/wt1'
-    const wt2 = 'repo1::/path/wt2'
-    const wt3 = 'repo1::/path/wt3'
-
-    seedStore(store, {
-      worktreesByRepo: {
-        repo1: [
-          makeWorktree({ id: wt1, repoId: 'repo1', path: '/path/wt1' }),
-          makeWorktree({ id: wt2, repoId: 'repo1', path: '/path/wt2' }),
-          makeWorktree({ id: wt3, repoId: 'repo1', path: '/path/wt3' })
-        ]
-      },
-      rightSidebarTab: 'explorer',
-      rightSidebarExplorerView: 'search',
-      rightSidebarExplorerViewByWorktree: {
-        [wt1]: 'search',
-        [wt2]: 'files'
-      }
-    })
-
-    store.getState().setActiveWorktree(wt1)
-    expect(store.getState().rightSidebarExplorerView).toBe('search')
-
-    store.getState().setActiveWorktree(wt2)
-    expect(store.getState().rightSidebarExplorerView).toBe('files')
-
-    store.getState().setActiveWorktree(wt3)
-    expect(store.getState().rightSidebarExplorerView).toBe('files')
-
-    store.getState().setActiveWorktree(wt1)
-    expect(store.getState().rightSidebarExplorerView).toBe('search')
   })
 
   it('does not reset the right sidebar tab for worktrees without remembered sidebar state', () => {

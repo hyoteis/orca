@@ -53,7 +53,11 @@ export function CodePanelDirChildren({
   }
   const { actions, worktreePath } = tree
   const operationOwner = getFileExplorerOperationOwner(actions.activeWorktreeId)
-  const rows: React.JSX.Element[] = entries.map((entry) => {
+  // Directories first so folder groups lead each level; alphabetical within each group.
+  const sorted = [...entries].sort(
+    (a, b) => Number(b.isDirectory) - Number(a.isDirectory) || a.name.localeCompare(b.name)
+  )
+  const rows: React.JSX.Element[] = sorted.map((entry) => {
     const childPath = joinPath(dirPath, entry.name)
     const node: TreeNode = {
       name: entry.name,

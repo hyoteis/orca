@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- Why: the right sidebar owns activity-bar visibility, routing, and resize behavior as one interaction surface; splitting the tab table away would make hidden-tab fallbacks harder to audit. */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Plug, Files, GitBranch, ListChecks, PanelRight, Workflow } from 'lucide-react'
+import { Plug, Files, GitBranch, ListChecks, PanelRight, Search, Workflow } from 'lucide-react'
 import { useAppStore } from '@/store'
 import type { ActiveRightSidebarTab, ActivityBarPosition } from '@/store/slices/editor'
 import { useRepoById } from '@/store/selectors'
@@ -64,6 +64,7 @@ function RightSidebarInner(): React.JSX.Element {
   })
   const rightSidebarShortcut = useShortcutLabel('sidebar.right.toggle')
   const explorerShortcut = useShortcutLabel('sidebar.explorer.toggle')
+  const searchShortcut = useShortcutLabel('sidebar.search.toggle')
   const sourceControlShortcut = useShortcutLabel('sidebar.sourceControl.toggle')
   const checksShortcut = useShortcutLabel('sidebar.checks.toggle')
   const portsShortcut = useShortcutLabel('sidebar.ports.toggle')
@@ -73,7 +74,6 @@ function RightSidebarInner(): React.JSX.Element {
   const rightSidebarTab = useAppStore((s) => s.rightSidebarTab)
   const rightSidebarRouteRequestId = useAppStore((s) => s.rightSidebarRouteRequestId)
   const setRightSidebarTab = useAppStore((s) => s.setRightSidebarTab)
-  const showRightSidebarFiles = useAppStore((s) => s.showRightSidebarFiles)
   const toggleRightSidebar = useAppStore((s) => s.toggleRightSidebar)
   const checksStatus = useAppStore((s) => (s.rightSidebarOpen ? getActiveChecksStatus(s) : null))
   const activityBarPosition = useAppStore((s) => s.activityBarPosition)
@@ -113,6 +113,13 @@ function RightSidebarInner(): React.JSX.Element {
         icon: Files,
         title: translate('auto.components.right.sidebar.index.8bc2bbc3a0', 'Explorer'),
         shortcut: explorerShortcut === 'Unassigned' ? '' : explorerShortcut
+      },
+      {
+        // Standalone content-search panel (VS Code-style), second position.
+        id: 'search',
+        icon: Search,
+        title: translate('auto.components.right.sidebar.index.searchTab', 'Search'),
+        shortcut: searchShortcut === 'Unassigned' ? '' : searchShortcut
       },
       {
         id: 'vault',
@@ -168,6 +175,7 @@ function RightSidebarInner(): React.JSX.Element {
       pluginPanelErrors,
       visiblePluginPanels,
       portsShortcut,
+      searchShortcut,
       sourceControlShortcut
     ]
   )
@@ -192,7 +200,7 @@ function RightSidebarInner(): React.JSX.Element {
   // row can open a child Checks tab without erasing the parent's overview tab.
   // Why: pass the installed-panel set so a persisted tab for an UNINSTALLED
   // plugin drops to Explorer instead of surviving as a dead route.
-  const normalizedActiveTab = normalizeRightSidebarRoute(rightSidebarTab, undefined, {
+  const normalizedActiveTab = normalizeRightSidebarRoute(rightSidebarTab, {
     installedPluginTabKeys:
       pluginSystemEnabled && pluginFetchStatus === 'ready' ? installedPluginTabKeys : undefined
   }).rightSidebarTab
@@ -232,10 +240,6 @@ function RightSidebarInner(): React.JSX.Element {
   const selectActivityTab = (tab: ActiveRightSidebarTab): void => {
     if (activeFolderWorkspaceKey) {
       rememberedFolderTabByWorkspaceKeyRef.current[activeFolderWorkspaceKey] = tab
-    }
-    if (tab === 'explorer') {
-      showRightSidebarFiles()
-      return
     }
     setRightSidebarTab(tab)
   }

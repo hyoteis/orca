@@ -4,7 +4,6 @@ import { getRuntimeGitIgnoredPaths } from '@/runtime/runtime-git-client'
 import { getRightSidebarWorktreeRuntimeSettings } from './file-explorer-runtime-owner'
 
 const EMPTY_IGNORED_PATHS: readonly string[] = []
-export const FILE_EXPLORER_IGNORED_QUERY_DEBOUNCE_MS = 300
 
 export type IgnoredPathResult = {
   activeWorktreeId: string
@@ -41,13 +40,11 @@ export function useFileExplorerIgnoredPaths({
   activeWorktreeId,
   canLoadIgnoredPaths,
   relativePaths,
-  shouldDebounceIgnoredQuery,
   worktreePath
 }: {
   activeWorktreeId: string | null
   canLoadIgnoredPaths: boolean
   relativePaths: readonly string[]
-  shouldDebounceIgnoredQuery: boolean
   worktreePath: string | null
 }): readonly string[] {
   const [ignoredPathResult, setIgnoredPathResult] = useState<IgnoredPathResult | null>(null)
@@ -80,30 +77,12 @@ export function useFileExplorerIgnoredPaths({
           }
         })
     }
-
-    // Why: every filter keystroke changes relativePaths. Waiting for a short
-    // quiet window prevents obsolete queries from launching uncancellable Git
-    // subprocess chains while the visible name projection stays immediate.
-    const timer = shouldDebounceIgnoredQuery
-      ? window.setTimeout(refresh, FILE_EXPLORER_IGNORED_QUERY_DEBOUNCE_MS)
-      : null
-    if (timer === null) {
-      refresh()
-    }
+    refresh()
 
     return () => {
       canceled = true
-      if (timer !== null) {
-        window.clearTimeout(timer)
-      }
     }
-  }, [
-    activeWorktreeId,
-    canLoadIgnoredPaths,
-    relativePaths,
-    shouldDebounceIgnoredQuery,
-    worktreePath
-  ])
+  }, [activeWorktreeId, canLoadIgnoredPaths, relativePaths, worktreePath])
 
   return getEffectiveFileExplorerIgnoredPaths({
     activeWorktreeId,

@@ -49,7 +49,6 @@ function installWorkspaceState(): void {
     projectGroups: [],
     rightSidebarOpen: false,
     rightSidebarTab: 'explorer',
-    rightSidebarExplorerView: 'files',
     gitStatusHugeByWorktree: {}
   } as unknown as Partial<AppState>)
 }
@@ -201,8 +200,6 @@ describe('restored editor owner reparent', () => {
       activeTabId: 'source-terminal',
       activeBrowserTabId: 'source-browser',
       activePendingCreationId: 'source-creation',
-      rightSidebarExplorerView: 'files',
-      rightSidebarExplorerViewByWorktree: { [TARGET]: 'search' },
       tabsByWorktree: {
         [SOURCE]: [
           {
@@ -302,7 +299,6 @@ describe('restored editor owner reparent', () => {
       activeTabId: 'target-terminal',
       activeBrowserTabId: 'target-browser',
       activePendingCreationId: null,
-      rightSidebarExplorerView: 'search',
       activeTabType: 'editor'
     })
     expect(activated.activeFileId).toBe(result.ok ? result.fileId : null)

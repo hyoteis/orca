@@ -10,7 +10,6 @@ import {
 import type {
   ActiveRightSidebarTab,
   FsChangedPayload,
-  RightSidebarExplorerView
 } from '../../../../shared/types'
 import type { OpenFile } from '@/store/slices/editor'
 import {
@@ -29,7 +28,6 @@ type UseGitStatusFileWatchRefreshParams = {
   gitStatusHugeByWorktree: Record<string, unknown> | undefined
   isConnectionReady: (connectionId: string | null | undefined) => boolean
   openFiles: OpenFile[]
-  rightSidebarExplorerView?: RightSidebarExplorerView
   rightSidebarOpen: boolean
   rightSidebarTab: ActiveRightSidebarTab
   worktreePath: string | null
@@ -66,7 +64,6 @@ export function useGitStatusFileWatchRefresh({
   gitStatusHugeByWorktree,
   isConnectionReady,
   openFiles,
-  rightSidebarExplorerView,
   rightSidebarOpen,
   rightSidebarTab,
   worktreePath
@@ -86,7 +83,6 @@ export function useGitStatusFileWatchRefresh({
       worktreePath,
       rightSidebarOpen,
       rightSidebarTab,
-      rightSidebarExplorerView,
       openFiles
     }) &&
     isConnectionReady(activeConnectionId) &&

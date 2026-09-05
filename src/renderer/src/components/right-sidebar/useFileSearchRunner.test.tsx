@@ -2,7 +2,6 @@
 
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import type { SearchResult } from '../../../../shared/types'
 import { useFileSearchRunner } from './useFileSearchRunner'
 
@@ -168,20 +167,6 @@ describe('useFileSearchRunner result ownership', () => {
 
 describe('useFileSearchRunner scope range', () => {
   const worktreeId = 'repo-a::/repo'
-  const codeScopes: CodeIntelligenceScope[] = [
-    {
-      id: 'local:worktree:repo-a:python',
-      name: 'Python',
-      executionHostId: 'local',
-      workspaceKey: 'worktree:repo-a',
-      workspaceRoot: '/repo',
-      language: 'python',
-      members: [{ path: 'engine/py', visibleResults: true }],
-      serverSource: { type: 'automatic' },
-      enabled: true,
-      revision: 1
-    }
-  ]
   const mixedResults: SearchResult = {
     files: [
       {
@@ -225,30 +210,14 @@ describe('useFileSearchRunner scope range', () => {
       useFileSearchRunner({
         activeWorktreeId: worktreeId,
         worktreePath: '/repo',
-        updateActiveSearchState: (update) => updates.push(update),
-        codeScopes
+        updateActiveSearchState: (update) => updates.push(update)
       })
     )
     return { hook, updates }
   }
 
-  it('filters contents results to member dirs and recomputes totals in scope range', async () => {
+  it('stores the raw worktree scan in scope range — restriction is display-time', async () => {
     const { hook, updates } = renderScopeRangeRunner('scope')
-
-    await finishSearch(hook.result.current.executeSearch)
-
-    expect(updates).toContainEqual({
-      results: {
-        files: [mixedResults.files[0]],
-        totalMatches: 2,
-        truncated: false
-      },
-      resultOwner: { worktreeId, runtimeEnvironmentId: null }
-    })
-  })
-
-  it('keeps the whole searched tree in worktree range', async () => {
-    const { hook, updates } = renderScopeRangeRunner('worktree')
 
     await finishSearch(hook.result.current.executeSearch)
 

@@ -5,24 +5,15 @@ import {
 } from './file-explorer-reset'
 
 describe('getVisibleFileExplorerWorktreePath', () => {
-  it('exposes the worktree path only while the Files view is visible', () => {
+  it('exposes the worktree path only while the sidebar is open', () => {
     expect(
       getVisibleFileExplorerWorktreePath({
-        explorerView: 'files',
         rightSidebarOpen: true,
         worktreePath: '/repo'
       })
     ).toBe('/repo')
     expect(
       getVisibleFileExplorerWorktreePath({
-        explorerView: 'search',
-        rightSidebarOpen: true,
-        worktreePath: '/repo'
-      })
-    ).toBeNull()
-    expect(
-      getVisibleFileExplorerWorktreePath({
-        explorerView: 'files',
         rightSidebarOpen: false,
         worktreePath: '/repo'
       })

@@ -10407,7 +10407,8 @@
           },
           "SearchQueryRow": {
             "queryLabel": "ファイルを検索",
-            "clearLabel": "検索をクリア"
+            "clearLabel": "検索をクリア",
+            "symbolMode": "ワークスペースシンボル検索の切り替え"
           },
           "SearchResultItems": {
             "cc06595a3b": "ラインパスのコピー",
@@ -10989,7 +10990,8 @@
             "fc3095d2ed": "エクスプローラ",
             "aiVaultSessionHistory": "Agent",
             "folderWorkspaces": "添付ワークツリー",
-            "parentPrChecks": "PR チェック"
+            "parentPrChecks": "PR チェック",
+            "searchTab": "検索"
           },
           "right": {
             "panel": {
@@ -11456,6 +11458,29 @@
             "mayBeSlower": "遅くなる可能性あり",
             "slowest": "最も低速",
             "unlimited": "無制限"
+          },
+          "CodeScopesSection": {
+            "title": "ワークスペース",
+            "toggleSection": "ワークスペースセクションの切り替え",
+            "configureCode": "Code を構成"
+          },
+          "WorktreeSection": {
+            "title": "ファイル",
+            "toggleSection": "ファイルセクションの切り替え"
+          },
+          "OpenEditorsSection": {
+            "title": "開いているエディター",
+            "toggleSection": "開いているエディターセクションの切り替え",
+            "close": "閉じる",
+            "closeEditor": "エディターを閉じる",
+            "diff": " (diff)"
+          },
+          "SearchResultsPane": {
+            "searching": "検索中…"
+          },
+          "FileExplorerRangeSwitch": {
+            "43b9416a9a": "エクスプローラー検索範囲",
+            "67c5cb400e": "検索可能な Code スコープメンバーがまだありません"
           }
         }
       },
@@ -14057,6 +14082,9 @@
           "actionsUnavailable": "このクライアントではプラグイン操作を利用できません。",
           "messageTooLarge": "メッセージがサイズ制限を超えています。",
           "tooManyRequests": "リクエストが多すぎます。"
+        },
+        "CodePanel": {
+          "loading": "読み込み中…"
         }
       },
       "link": {

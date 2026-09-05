@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import { ChevronDown, ChevronRight, Loader2, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
-import { LANGUAGE_DISPLAY, LanguageBadge } from './code-panel-language-badge'
 import { FolderBridgeInfoLine, FolderNotProjectEmptyState } from './code-panel-folder-bridge-state'
 import { CodePanelMemberTreeRow } from './code-panel-member-row'
 import { CodePanelDirChildren } from './code-panel-dir-children'
@@ -14,9 +13,13 @@ import { useCodeScopesSection, type CodePanelDirectoryLister } from './use-code-
 /** Explorer's "Code scopes" section — the migrated Code panel member tree (#81). */
 export function CodeScopesSection({
   listDirectory,
+  collapsed,
+  onToggleCollapsed,
   fillRemaining = false
 }: {
   listDirectory?: CodePanelDirectoryLister
+  collapsed: boolean
+  onToggleCollapsed: () => void
   /** Take the panel space freed by a collapsed Worktree section instead of capping. */
   fillRemaining?: boolean
 }): React.JSX.Element | null {
@@ -24,19 +27,16 @@ export function CodeScopesSection({
   const {
     scopes,
     rows,
-    keptEmptyLanguages,
     configureRepoId,
     folderWorkspace,
     linkedFolderRepo,
     bridged,
-    hostLabel,
     listing,
     tree,
     openFile
   } = section
   const { pendingDirs, expandedDirs, toggleDir } = listing
   const openModal = useAppStore((s) => s.openModal)
-  const [collapsed, setCollapsed] = useState(false)
 
   // Hidden when nothing can render — OpenEditorsSection's precedent for empty sections.
   const folderGap = folderWorkspace !== null && linkedFolderRepo === null
@@ -61,21 +61,16 @@ export function CodeScopesSection({
   }
 
   return (
-    <div
-      className={cn(
-        'border-b border-border py-1',
-        !collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col'
-      )}
-    >
-      <div className="flex items-center gap-0.5 px-1 pb-1">
+    <div className={cn(!collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col')}>
+      <div className="flex items-center gap-0.5 border-y border-explorer-section-divider px-1 py-1">
         <button
           type="button"
           aria-expanded={!collapsed}
           aria-label={translate(
             'auto.components.right.sidebar.CodeScopesSection.toggleSection',
-            'Toggle Code scopes section'
+            'Toggle workspace section'
           )}
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={onToggleCollapsed}
           className="flex w-full items-center gap-1 rounded px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
         >
           {collapsed ? (
@@ -83,15 +78,7 @@ export function CodeScopesSection({
           ) : (
             <ChevronDown className="size-3 shrink-0" aria-hidden />
           )}
-          {translate('auto.components.right.sidebar.CodeScopesSection.title', 'Code scopes')}
-          {hostLabel ? (
-            <span
-              className="max-w-[8rem] truncate rounded-full border border-border px-1.5 py-0.5 font-mono text-[10px] normal-case tracking-normal text-muted-foreground"
-              title={hostLabel}
-            >
-              {hostLabel}
-            </span>
-          ) : null}
+          {translate('auto.components.right.sidebar.CodeScopesSection.title', 'Workspace')}
           <span className="ml-auto tabular-nums">{rows.length}</span>
         </button>
         {/* #76: configure is the section's single affordance — the setup dialog
@@ -111,7 +98,6 @@ export function CodeScopesSection({
           <Settings2 className="size-3" />
         </Button>
       </div>
-      {/* ponytail: collapse state is session-local, matching OpenEditorsSection. */}
       {!collapsed && (
         /* Why: the tree shares the worktree tree's scroll contract — wheel-scrollable,
            capped while the worktree section below is open; fillRemaining drops the cap so
@@ -127,7 +113,7 @@ export function CodeScopesSection({
               <CodePanelDirChildren
                 key={row.directory}
                 dirPath={row.directory}
-                depth={1}
+                depth={0}
                 listing={listing}
                 onOpenFile={openFile}
                 tree={tree}
@@ -149,21 +135,6 @@ export function CodeScopesSection({
           {rows.length === 0 && folderGap ? (
             <FolderNotProjectEmptyState onAddAsProject={section.addWorkspaceFolderAsProject} />
           ) : null}
-          {keptEmptyLanguages.map((language) => (
-            <div
-              key={language}
-              className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted-foreground"
-            >
-              <LanguageBadge language={language} />
-              <span className="min-w-0 flex-1 truncate">
-                {translate(
-                  'auto.components.rightSidebar.CodePanel.scopeEmptyKept',
-                  '{{value0}} scope is empty — kept',
-                  { value0: LANGUAGE_DISPLAY[language] }
-                )}
-              </span>
-            </div>
-          ))}
           {pendingDirs.size > 0 ? (
             <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground">
               <Loader2 className="size-3 animate-spin" />
@@ -171,7 +142,7 @@ export function CodeScopesSection({
             </div>
           ) : null}
         </ScrollArea>
-      )}
+        )}
     </div>
   )
 }

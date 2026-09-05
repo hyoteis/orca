@@ -249,14 +249,11 @@ describe('createEditorSlice right sidebar state', () => {
     store.getState().setRightSidebarTab('checks')
     expect(store.getState().rightSidebarRouteRequestId).toBe(1)
 
-    store.getState().setRightSidebarExplorerView('files')
+    store.getState().showRightSidebarFiles()
     expect(store.getState().rightSidebarRouteRequestId).toBe(2)
 
-    store.getState().showRightSidebarFiles()
-    expect(store.getState().rightSidebarRouteRequestId).toBe(3)
-
     store.getState().showRightSidebarSearch()
-    expect(store.getState().rightSidebarRouteRequestId).toBe(4)
+    expect(store.getState().rightSidebarRouteRequestId).toBe(3)
   })
 
   it('setRightSidebarTab with no active worktree does not mutate the worktree map', () => {
@@ -270,7 +267,7 @@ describe('createEditorSlice right sidebar state', () => {
     expect(store.getState().rightSidebarTabByWorktree).toBe(remembered)
   })
 
-  it('showRightSidebarFiles opens Explorer files', () => {
+  it('showRightSidebarFiles opens the Explorer tab', () => {
     const store = createEditorStore()
     store.setState({ rightSidebarOpen: false, rightSidebarTab: 'checks' })
 
@@ -278,11 +275,9 @@ describe('createEditorSlice right sidebar state', () => {
 
     expect(store.getState().rightSidebarOpen).toBe(true)
     expect(store.getState().rightSidebarTab).toBe('explorer')
-    expect(store.getState().rightSidebarExplorerView).toBe('files')
-    expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({ 'wt-1': 'files' })
   })
 
-  it('showRightSidebarSearch opens Explorer search and requests focus without payload', () => {
+  it('showRightSidebarSearch opens the Search tab and requests focus without payload', () => {
     const store = createEditorStore()
     store.getState().updateFileSearchState('wt-1', {
       query: 'needle',
@@ -292,9 +287,7 @@ describe('createEditorSlice right sidebar state', () => {
     store.getState().showRightSidebarSearch()
 
     expect(store.getState().rightSidebarOpen).toBe(true)
-    expect(store.getState().rightSidebarTab).toBe('explorer')
-    expect(store.getState().rightSidebarExplorerView).toBe('search')
-    expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({ 'wt-1': 'search' })
+    expect(store.getState().rightSidebarTab).toBe('search')
     expect(store.getState().fileSearchStateByWorktree['wt-1']).toMatchObject({
       query: 'needle',
       results: { files: [], totalMatches: 1, truncated: false },
@@ -362,11 +355,10 @@ describe('createEditorSlice right sidebar state', () => {
 
   it('revealInExplorer selects explorer globally without writing a worktree entry', () => {
     const store = createEditorStore()
-    const remembered = { 'wt-1': 'explorer' as const, 'wt-2': 'checks' as const }
+    const remembered = { 'wt-1': 'search' as const, 'wt-2': 'checks' as const }
     store.setState({
       activeWorktreeId: 'wt-1',
-      rightSidebarTab: 'explorer',
-      rightSidebarExplorerView: 'search',
+      rightSidebarTab: 'search',
       rightSidebarTabByWorktree: remembered
     })
 
@@ -374,9 +366,7 @@ describe('createEditorSlice right sidebar state', () => {
 
     expect(store.getState().rightSidebarOpen).toBe(true)
     expect(store.getState().rightSidebarTab).toBe('explorer')
-    expect(store.getState().rightSidebarExplorerView).toBe('files')
     expect(store.getState().rightSidebarRouteRequestId).toBe(1)
-    expect(store.getState().rightSidebarExplorerViewByWorktree).toEqual({ 'wt-2': 'files' })
     expect(store.getState().rightSidebarTabByWorktree).toBe(remembered)
     expect(store.getState().pendingExplorerReveal).toMatchObject({
       worktreeId: 'wt-2',

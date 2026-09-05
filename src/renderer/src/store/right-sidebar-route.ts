@@ -1,13 +1,8 @@
-import type { ActiveRightSidebarTab, RightSidebarExplorerView } from '../../../shared/types'
+import type { ActiveRightSidebarTab } from '../../../shared/types'
 import { isPluginPanelTabKey } from '../../../shared/plugins/plugin-manifest'
 
 export type RightSidebarRoute = {
   rightSidebarTab: ActiveRightSidebarTab
-  rightSidebarExplorerView: RightSidebarExplorerView
-}
-
-function normalizeRightSidebarExplorerView(view: unknown): RightSidebarExplorerView {
-  return view === 'search' ? 'search' : 'files'
 }
 
 export type NormalizeRightSidebarRouteOptions = {
@@ -21,27 +16,23 @@ export type NormalizeRightSidebarRouteOptions = {
 
 export function normalizeRightSidebarRoute(
   tab: unknown,
-  explorerView?: unknown,
   options?: NormalizeRightSidebarRouteOptions
 ): RightSidebarRoute {
-  // Why: older builds persisted Search as a standalone activity tab.
-  if (tab === 'search') {
-    return { rightSidebarTab: 'explorer', rightSidebarExplorerView: 'search' }
-  }
   // Why: builds before #83 persisted the Code tab; Explorer absorbed it.
   if (tab === 'code') {
-    return { rightSidebarTab: 'explorer', rightSidebarExplorerView: 'files' }
+    return { rightSidebarTab: 'explorer' }
   }
   // Why: plugin tabs are open-ended keys; validate their shape so a persisted
   // plugin tab isn't reset to Explorer on restart.
   if (typeof tab === 'string' && isPluginPanelTabKey(tab)) {
     if (options?.installedPluginTabKeys && !options.installedPluginTabKeys.has(tab)) {
-      return { rightSidebarTab: 'explorer', rightSidebarExplorerView: 'files' }
+      return { rightSidebarTab: 'explorer' }
     }
-    return { rightSidebarTab: tab, rightSidebarExplorerView: 'files' }
+    return { rightSidebarTab: tab as ActiveRightSidebarTab }
   }
   if (
     tab === 'explorer' ||
+    tab === 'search' ||
     tab === 'vault' ||
     tab === 'workspaces' ||
     tab === 'pr-checks' ||
@@ -49,11 +40,7 @@ export function normalizeRightSidebarRoute(
     tab === 'checks' ||
     tab === 'ports'
   ) {
-    return {
-      rightSidebarTab: tab,
-      rightSidebarExplorerView:
-        tab === 'explorer' ? normalizeRightSidebarExplorerView(explorerView) : 'files'
-    }
+    return { rightSidebarTab: tab }
   }
-  return { rightSidebarTab: 'explorer', rightSidebarExplorerView: 'files' }
+  return { rightSidebarTab: 'explorer' }
 }

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import '@testing-library/jest-dom/vitest'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, fireEvent } from '@testing-library/react'
 import { useAppStore } from '@/store'
@@ -8,10 +9,22 @@ import { OpenEditorsSection, reorderOpenEditorsOnDragEnd } from './OpenEditorsSe
 import type { DragEndEvent } from '@dnd-kit/core'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
+// Controlled-state harness: mirrors how FileExplorer drives the accordion.
+function RenderedSection({ fillRemaining }: { fillRemaining?: boolean }) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <OpenEditorsSection
+      collapsed={collapsed}
+      onToggleCollapsed={() => setCollapsed((value) => !value)}
+      fillRemaining={fillRemaining}
+    />
+  )
+}
+
 function renderSection(props: { fillRemaining?: boolean } = {}): ReturnType<typeof render> {
   return render(
     <TooltipProvider>
-      <OpenEditorsSection {...props} />
+      <RenderedSection {...props} />
     </TooltipProvider>
   )
 }

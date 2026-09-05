@@ -60,7 +60,6 @@ describe('getEditorExternalWatchTargets', () => {
     runtimeEnvironmentId?: string | null
     rightSidebarOpen?: boolean
     rightSidebarTab?: EditorExternalWatchTargetState['rightSidebarTab']
-    rightSidebarExplorerView?: EditorExternalWatchTargetState['rightSidebarExplorerView']
     gitStatusHugeByWorktree?: EditorExternalWatchTargetState['gitStatusHugeByWorktree']
     sshConnectionStates?: EditorExternalWatchTargetState['sshConnectionStates']
   }): EditorExternalWatchTargetState => ({
@@ -70,7 +69,6 @@ describe('getEditorExternalWatchTargets', () => {
     activeWorktreeId: args.activeWorktreeId ?? null,
     rightSidebarOpen: args.rightSidebarOpen ?? false,
     rightSidebarTab: args.rightSidebarTab ?? 'explorer',
-    rightSidebarExplorerView: args.rightSidebarExplorerView ?? 'files',
     gitStatusHugeByWorktree: args.gitStatusHugeByWorktree ?? {},
     sshConnectionStates: args.sshConnectionStates ?? new Map(),
     folderWorkspaces: [],
@@ -294,7 +292,7 @@ describe('getEditorExternalWatchTargets', () => {
     ])
   })
 
-  it('does not watch the active worktree while Explorer search is visible', () => {
+  it('watches the active worktree while the Explorer tab is open regardless of search state', () => {
     const repo = makeRepo('repo-active-search')
     const worktree = makeWorktree(repo.id, 'wt-active-search')
 
@@ -305,11 +303,10 @@ describe('getEditorExternalWatchTargets', () => {
           worktree,
           activeWorktreeId: worktree.id,
           rightSidebarOpen: true,
-          rightSidebarTab: 'explorer',
-          rightSidebarExplorerView: 'search'
+          rightSidebarTab: 'explorer'
         })
-      ).targets
-    ).toEqual([])
+      ).targets.length
+    ).toBeGreaterThan(0)
   })
 
   it('keeps watching the active worktree when Source Control is visible', () => {

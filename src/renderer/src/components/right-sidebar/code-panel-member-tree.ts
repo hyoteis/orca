@@ -54,12 +54,6 @@ export function resolveCodePanelMemberDirectory(
   return memberPath === '.' ? workspaceRoot : joinPath(workspaceRoot, memberPath)
 }
 
-export function getCodePanelKeptEmptyLanguages(
-  scopes: readonly CodeIntelligenceScope[]
-): CodeIntelligenceLanguage[] {
-  return scopes.filter((scope) => scope.members.length === 0).map((scope) => scope.language)
-}
-
 /** Per-scope edits for removing one merged row; emptied scopes are kept (#63 decision 6). */
 export function removeCodePanelMemberRow(
   scopes: readonly CodeIntelligenceScope[],

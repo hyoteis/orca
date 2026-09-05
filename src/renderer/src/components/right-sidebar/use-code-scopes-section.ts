@@ -6,7 +6,6 @@ import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/loc
 import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import type { DirEntry, Worktree } from '../../../../shared/types'
 import {
-  getExecutionHostLabel,
   getWorktreeExecutionHostId,
   parseExecutionHostId
 } from '../../../../shared/execution-host'
@@ -20,7 +19,6 @@ import {
 import { buildAddProjectFromFolderModalData } from './file-explorer-add-project-action'
 import {
   buildCodePanelMemberRows,
-  getCodePanelKeptEmptyLanguages,
   removeCodePanelMemberRow,
   type CodePanelMemberRow
 } from './code-panel-member-tree'
@@ -91,7 +89,6 @@ export function useCodeScopesSection({
     [settings, activeWorktreeId, executionHostId, folderWorkspaces, repos]
   )
   const rows = useMemo(() => buildCodePanelMemberRows(scopes), [scopes])
-  const keptEmptyLanguages = useMemo(() => getCodePanelKeptEmptyLanguages(scopes), [scopes])
   // Configure routes to the existing C++ setup dialog, which pre-checks the
   // scope's current members itself (single source of truth, #63 decision 4).
   const configureRepoId = useMemo(() => {
@@ -212,12 +209,10 @@ export function useCodeScopesSection({
   return {
     scopes,
     rows,
-    keptEmptyLanguages,
     configureRepoId,
     folderWorkspace,
     linkedFolderRepo,
     bridged,
-    hostLabel: executionHostId ? getExecutionHostLabel(executionHostId) : null,
     listing,
     tree,
     openAsWorkspace,

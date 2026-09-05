@@ -43,9 +43,11 @@ export function filterRelativePathsByFileSearchScopeRange(
 
 /**
  * Contents-mode range restriction (#75: pre-search selector, not a post-filter
- * UX). ponytail: applies after the runtime scan, so `truncated` can over-report
- * when the pre-range result set hit the cap; push member globs into the runtime
- * include pattern if scan cost ever matters.
+ * UX). Applied at DISPLAY time over the raw worktree scan (useFileSearchPanel),
+ * so switching ranges re-filters instantly without a rescan. ponytail: the
+ * runtime scan stays worktree-wide, so `truncated` can over-report when the
+ * pre-range result set hit the cap; push member globs into the runtime include
+ * pattern if scan cost ever matters.
  */
 export function filterSearchResultsByFileSearchScopeRange(
   results: SearchResult,

@@ -45,7 +45,6 @@ import type {
   TabGroup,
   GitUpstreamStatus,
   ActiveRightSidebarTab,
-  RightSidebarExplorerView,
   FileSearchRange,
   SearchResult,
   WorkspaceSessionState,
@@ -115,7 +114,6 @@ import { isLocalWindowsDesktopClient } from '@/lib/desktop-window-chrome'
 
 export type {
   ActiveRightSidebarTab,
-  RightSidebarExplorerView,
   RightSidebarTab
 } from '../../../../shared/types'
 
@@ -452,16 +450,13 @@ export type EditorSlice = {
   rightSidebarOpen: boolean
   rightSidebarWidth: number
   rightSidebarTab: ActiveRightSidebarTab
-  rightSidebarExplorerView: RightSidebarExplorerView
   rightSidebarRouteRequestId: number
   rightSidebarTabByWorktree: Record<string, ActiveRightSidebarTab>
-  rightSidebarExplorerViewByWorktree: Record<string, RightSidebarExplorerView>
   activityBarPosition: ActivityBarPosition
   toggleRightSidebar: () => void
   setRightSidebarOpen: (open: boolean) => void
   setRightSidebarWidth: (width: number) => void
   setRightSidebarTab: (tab: ActiveRightSidebarTab) => void
-  setRightSidebarExplorerView: (view: RightSidebarExplorerView) => void
   showRightSidebarFiles: () => void
   showRightSidebarSearch: (payload?: {
     query?: string | null
@@ -1565,10 +1560,8 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
   rightSidebarOpen: false,
   rightSidebarWidth: 280,
   rightSidebarTab: 'explorer',
-  rightSidebarExplorerView: 'files',
   rightSidebarRouteRequestId: 0,
   rightSidebarTabByWorktree: {},
-  rightSidebarExplorerViewByWorktree: {},
   activityBarPosition: 'top',
   toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
   setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
@@ -1576,52 +1569,20 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
   setRightSidebarTab: (tab) =>
     set((s) => ({
       rightSidebarTab: tab,
-      rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1,
-      ...(tab === 'explorer' ? { rightSidebarExplorerView: 'files' as const } : {})
-    })),
-  setRightSidebarExplorerView: (view) =>
-    set((s) => ({
-      rightSidebarExplorerView: view,
-      rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1,
-      ...(s.activeWorktreeId
-        ? {
-            rightSidebarExplorerViewByWorktree: {
-              ...s.rightSidebarExplorerViewByWorktree,
-              [s.activeWorktreeId]: view
-            }
-          }
-        : {})
+      rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1
     })),
   showRightSidebarFiles: () =>
     set((s) => ({
       rightSidebarOpen: true,
       rightSidebarTab: 'explorer',
-      rightSidebarExplorerView: 'files',
-      rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1,
-      ...(s.activeWorktreeId
-        ? {
-            rightSidebarExplorerViewByWorktree: {
-              ...s.rightSidebarExplorerViewByWorktree,
-              [s.activeWorktreeId]: 'files'
-            }
-          }
-        : {})
+      rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1
     })),
   showRightSidebarSearch: (payload) =>
     set((s) => {
       const next = {
         rightSidebarOpen: true,
-        rightSidebarTab: 'explorer' as const,
-        rightSidebarExplorerView: 'search' as const,
-        rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1,
-        ...(s.activeWorktreeId
-          ? {
-              rightSidebarExplorerViewByWorktree: {
-                ...s.rightSidebarExplorerViewByWorktree,
-                [s.activeWorktreeId]: 'search' as const
-              }
-            }
-          : {})
+        rightSidebarTab: 'search' as const,
+        rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1
       }
       if (!s.activeWorktreeId) {
         return next
@@ -1703,12 +1664,7 @@ export const createEditorSlice: StateCreator<AppState, [], [], EditorSlice> = (s
     set((s) => ({
       rightSidebarOpen: true,
       rightSidebarTab: 'explorer',
-      rightSidebarExplorerView: 'files',
       rightSidebarRouteRequestId: s.rightSidebarRouteRequestId + 1,
-      rightSidebarExplorerViewByWorktree: {
-        ...s.rightSidebarExplorerViewByWorktree,
-        [worktreeId]: 'files'
-      },
       pendingExplorerReveal: { worktreeId, filePath, requestId: Date.now() }
     })),
   clearPendingExplorerReveal: () => set({ pendingExplorerReveal: null }),

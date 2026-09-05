@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable } from '@dnd-kit/sortable'
 import { useAppStore } from '@/store'
@@ -155,8 +155,12 @@ function SortableOpenEditorRow({
 }
 
 export function OpenEditorsSection({
+  collapsed,
+  onToggleCollapsed,
   fillRemaining = false
 }: {
+  collapsed: boolean
+  onToggleCollapsed: () => void
   /** Take the panel space freed by a collapsed Worktree section instead of capping. */
   fillRemaining?: boolean
 }): React.JSX.Element | null {
@@ -174,9 +178,6 @@ export function OpenEditorsSection({
   const unifiedTabs = useAppStore((s) =>
     activeWorktreeId ? s.unifiedTabsByWorktree[activeWorktreeId] : undefined
   )
-  // ponytail: collapse state is session-local; thread it through persisted
-  // per-worktree UI settings if it must survive restarts.
-  const [collapsed, setCollapsed] = useState(false)
   // Why: hook must run before the early return.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
@@ -236,11 +237,9 @@ export function OpenEditorsSection({
 
   return (
     <div
-      className={cn(
-        'border-b border-border px-1 py-1',
-        !collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col'
-      )}
+      className={cn(!collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col')}
     >
+      <div className="border-y border-explorer-section-divider px-1 py-1">
       <button
         type="button"
         aria-expanded={!collapsed}
@@ -248,8 +247,8 @@ export function OpenEditorsSection({
           'auto.components.right.sidebar.OpenEditorsSection.toggleSection',
           'Toggle Open Editors section'
         )}
-        onClick={() => setCollapsed((value) => !value)}
-        className="flex w-full items-center gap-1 rounded px-1 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
+        onClick={onToggleCollapsed}
+        className="flex w-full items-center gap-1 rounded px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground"
       >
         {collapsed ? (
           <ChevronRight className="size-3 shrink-0" aria-hidden />
@@ -259,6 +258,7 @@ export function OpenEditorsSection({
         {translate('auto.components.right.sidebar.OpenEditorsSection.title', 'Open Editors')}
         <span className="ml-auto tabular-nums">{ids.length}</span>
       </button>
+      </div>
       {/* Cap + scroll so a long open list cannot crowd out the worktree section below;
           fillRemaining drops the cap when the worktree section is collapsed. */}
       {!collapsed && (
