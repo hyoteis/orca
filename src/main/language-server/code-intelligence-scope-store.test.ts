@@ -69,6 +69,24 @@ describe('CodeIntelligenceScopeStore', () => {
       ).rejects.toThrow('consent')
   })
 
+  it('ignores payload key order when deciding whether configuration changed', () => {
+    // Same configuration, different construction order on nested objects —
+    // bare JSON.stringify would flag this as a change and burn a revision +
+    // consent; the canonical serializer must not.
+    const reordered = {
+      ...scope(),
+      members: [{ visibleResults: true, path: 'engine' }] as CodeIntelligenceScope['members'],
+      serverSource: {
+        args: ['--background-index'],
+        executable: '/usr/bin/clangd',
+        type: 'custom'
+      } as CodeIntelligenceScope['serverSource']
+    }
+    const result = new CodeIntelligenceScopeStore(createStore([scope()])).upsert(reordered)
+    expect(result.scope.revision).toBe(1)
+    expect(result.restartRequired).toBe(false)
+  })
+
   it('requires a session restart only for changes beyond members', async () => {
     const upsert = (next: CodeIntelligenceScope): boolean =>
       new CodeIntelligenceScopeStore(createStore([scope()])).upsert(next).restartRequired

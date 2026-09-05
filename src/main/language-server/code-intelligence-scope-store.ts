@@ -4,6 +4,8 @@ import type {
   CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
 import {
+  canonicalConfigurationJson,
+  codeIntelligenceConfigurationSnapshot,
   hasLegacyCodeIntelligenceMembers,
   normalizeCodeIntelligenceScope,
   scopeConfigurationPayload
@@ -39,27 +41,33 @@ export type CodeIntelligenceScopeMutation = {
   restartRequired: boolean
 }
 
+// Canonical serializers throughout — the same one the consent fingerprint
+// hashes, so revision bumps can never drift from consent staleness on
+// key-order-only payload differences.
 function sameConfiguration(left: CodeIntelligenceScope, right: CodeIntelligenceScope): boolean {
   return (
-    JSON.stringify(scopeConfigurationPayload(left)) ===
-    JSON.stringify(scopeConfigurationPayload(right))
+    codeIntelligenceConfigurationSnapshot(left) === codeIntelligenceConfigurationSnapshot(right)
   )
 }
 
 /** Config payload without members — member-only edits keep the clangd session
  * alive (spec §5: the atomic CDB rewrite is picked up lazily), while any other
  * change alters the launch and must restart it. */
+function launchConfigurationPayload(scope: CodeIntelligenceScope): Record<string, unknown> {
+  const { members: _members, ...payload } = scopeConfigurationPayload(
+    scope
+  ) as Record<string, unknown>
+  return payload
+}
+
 function sameLaunchConfiguration(
   left: CodeIntelligenceScope,
   right: CodeIntelligenceScope
 ): boolean {
-  const { members: _leftMembers, ...leftPayload } = scopeConfigurationPayload(
-    left
-  ) as Record<string, unknown>
-  const { members: _rightMembers, ...rightPayload } = scopeConfigurationPayload(
-    right
-  ) as Record<string, unknown>
-  return JSON.stringify(leftPayload) === JSON.stringify(rightPayload)
+  return (
+    canonicalConfigurationJson(launchConfigurationPayload(left)) ===
+    canonicalConfigurationJson(launchConfigurationPayload(right))
+  )
 }
 
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {

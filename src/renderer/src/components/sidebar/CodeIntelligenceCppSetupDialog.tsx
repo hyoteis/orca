@@ -9,6 +9,7 @@ import {
   clangdCompileCommandsDirArg,
   type CodeIntelligenceCppSetupResult
 } from '../../../../shared/code-intelligence-cpp-setup'
+import { getCppScopeIdForRepo } from '../../../../shared/code-intelligence-scope'
 import { listRuntimeFiles } from '../../runtime/runtime-file-client'
 import { getCachedCodeIntelligenceDirectories } from '../../lib/language-server/code-intelligence-directory-scan-cache'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
@@ -96,15 +97,9 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         if (cancelled) {
           return
         }
-        const workspaceKey = `${isFolderRepo(repo) ? 'folder' : 'worktree'}:${repo.id}`
         const existingMembers =
           settingsRef.current?.codeIntelligenceScopes
-            ?.find(
-              (scope) =>
-                scope.workspaceKey === workspaceKey &&
-                scope.executionHostId === getRepoExecutionHostId(repo) &&
-                scope.language === 'cpp'
-            )
+            ?.find((scope) => scope.id === getCppScopeIdForRepo(repo))
             ?.members.map((member) => member.path) ?? []
         setRoots(detected)
         // Why: tree rows map 1:1 to members — pre-check exactly what the scope holds.
@@ -178,12 +173,8 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         return
       }
       const executionHostId = getRepoExecutionHostId(repo)
-      const workspaceKey = `${isFolderRepo(repo) ? 'folder' : 'worktree'}:${repo.id}` as const
       const existing = settings?.codeIntelligenceScopes?.find(
-        (scope) =>
-          scope.workspaceKey === workspaceKey &&
-          scope.executionHostId === executionHostId &&
-          scope.language === 'cpp'
+        (scope) => scope.id === getCppScopeIdForRepo(repo)
       )
       const base =
         existing ??

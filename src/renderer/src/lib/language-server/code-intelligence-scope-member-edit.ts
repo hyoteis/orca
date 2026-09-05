@@ -6,6 +6,7 @@ import type {
 } from '../../../../shared/code-intelligence-scope'
 import {
   getCodeIntelligenceScopeId,
+  getCodeIntelligenceWorkspaceKey,
   normalizeScopeMemberPath
 } from '../../../../shared/code-intelligence-scope'
 import {
@@ -28,7 +29,7 @@ export function findCodeIntelligenceScopeForWorkspace(args: {
 }): CodeIntelligenceScope | null {
   const id = getCodeIntelligenceScopeId({
     executionHostId: args.executionHostId,
-    workspaceKey: args.isFolder ? `folder:${args.repoId}` : `worktree:${args.repoId}`,
+    workspaceKey: getCodeIntelligenceWorkspaceKey(args.repoId, args.isFolder),
     language: args.language
   })
   return (
