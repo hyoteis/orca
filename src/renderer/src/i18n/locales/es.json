@@ -3091,6 +3091,17 @@
           },
           "TerminalTabLeadingIcon": {
             "7ab2964bea": "Finalización de agente sin leer"
+          },
+          "OpenTabsOverviewButton": {
+            "3a8f01bd": "Agent",
+            "5c2e94fa": "Shell",
+            "9d4b76ce": "Archivos",
+            "e6f18022": "Navegador",
+            "2b7c53d9": "Emulador móvil",
+            "c41f2a90": "Pestañas abiertas",
+            "b1d3e552": "Buscar pestañas",
+            "7e9c31af": "Sin pestañas coincidentes",
+            "8a5c44e1": "Cerrar pestaña"
           }
         }
       },

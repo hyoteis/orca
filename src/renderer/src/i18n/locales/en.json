@@ -3434,6 +3434,17 @@
           "TabBarQuickCommandHostLoadStatus": {
             "82e294f3ca": "Host unavailable",
             "7c129b08ff": "Loading host…"
+          },
+          "OpenTabsOverviewButton": {
+            "3a8f01bd": "Agent",
+            "5c2e94fa": "Shell",
+            "9d4b76ce": "Files",
+            "e6f18022": "Browser",
+            "2b7c53d9": "Simulator",
+            "c41f2a90": "Open tabs",
+            "b1d3e552": "Search tabs",
+            "7e9c31af": "No matching tabs",
+            "8a5c44e1": "Close tab"
           }
         }
       },

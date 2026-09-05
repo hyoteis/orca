@@ -3091,6 +3091,17 @@
           },
           "TerminalTabLeadingIcon": {
             "7ab2964bea": "未読の Agent 完了"
+          },
+          "OpenTabsOverviewButton": {
+            "3a8f01bd": "Agent",
+            "5c2e94fa": "Shell",
+            "9d4b76ce": "ファイル",
+            "e6f18022": "ブラウザー",
+            "2b7c53d9": "スマホエミュレーター",
+            "c41f2a90": "開いているタブ",
+            "b1d3e552": "タブを検索",
+            "7e9c31af": "一致するタブがありません",
+            "8a5c44e1": "タブを閉じる"
           }
         }
       },

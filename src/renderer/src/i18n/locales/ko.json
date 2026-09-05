@@ -3091,6 +3091,17 @@
           },
           "TerminalTabLeadingIcon": {
             "7ab2964bea": "읽지 않은 에이전트 완료"
+          },
+          "OpenTabsOverviewButton": {
+            "3a8f01bd": "Agent",
+            "5c2e94fa": "Shell",
+            "9d4b76ce": "파일",
+            "e6f18022": "브라우저",
+            "2b7c53d9": "휴대폰 에뮬레이터",
+            "c41f2a90": "열린 탭",
+            "b1d3e552": "탭 검색",
+            "7e9c31af": "일치하는 탭 없음",
+            "8a5c44e1": "탭 닫기"
           }
         }
       },
