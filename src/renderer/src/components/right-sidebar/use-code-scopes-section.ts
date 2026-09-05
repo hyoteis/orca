@@ -2,10 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store'
 import { useWorktreeMap } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
-import {
-  isLocalPathOpenBlocked,
-  showLocalPathOpenBlockedToast
-} from '@/lib/local-path-open-guard'
+import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import type { DirEntry, Worktree } from '../../../../shared/types'
 import {
@@ -13,9 +10,7 @@ import {
   getWorktreeExecutionHostId,
   parseExecutionHostId
 } from '../../../../shared/execution-host'
-import {
-  getFolderWorkspaceExecutionHostId
-} from '../../../../shared/folder-workspace-repo-link'
+import { getFolderWorkspaceExecutionHostId } from '../../../../shared/folder-workspace-repo-link'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
@@ -32,6 +27,19 @@ import {
 import { readFileExplorerDirectory } from './file-explorer-directory-listing'
 import { openCodePanelFile } from './code-panel-open-file'
 import { useLazyDirectoryListing } from './use-lazy-directory-listing'
+import { useCodeScopeTreeActions, type CodeScopeTreeActions } from './use-code-scope-tree-actions'
+import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { useWorkspaceFileBrowserActionPredicate } from '@/lib/file-preview'
+import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
+
+export type CodeScopeTreeContext = {
+  actions: CodeScopeTreeActions
+  /** Session host root used for relative paths / find-in-folder. */
+  worktreePath: string | null
+  supportsFolderDownload: boolean
+  runtimeDownloadContext: RuntimeFileOperationArgs | null
+  canOpenInOrcaBrowser: (path: string) => boolean
+}
 
 export type CodePanelDirectoryLister = (dirPath: string) => Promise<DirEntry[]>
 
@@ -51,8 +59,9 @@ export function useCodeScopesSection({
   const folderWorkspace = useMemo(() => {
     const parsed = activeWorktreeId ? parseWorkspaceKey(activeWorktreeId) : null
     return parsed?.type === 'folder'
-      ? (folderWorkspaces.find((candidate) => folderWorkspaceKey(candidate.id) === activeWorktreeId) ??
-        null)
+      ? (folderWorkspaces.find(
+          (candidate) => folderWorkspaceKey(candidate.id) === activeWorktreeId
+        ) ?? null)
       : null
   }, [activeWorktreeId, folderWorkspaces])
   // #72 variant A: folder sessions read/write the same-path folder repo's scopes.
@@ -160,6 +169,46 @@ export function useCodeScopesSection({
   const list = listDirectory ?? defaultListDirectory
   const listing = useLazyDirectoryListing(list)
 
+  // Worktree-tree menu parity (#81): same ops/dialogs, routed at the session's host.
+  const supportsFolderDownload = useAppStore((s) => {
+    const repoConnectionId = activeRepo?.connectionId
+    return repoConnectionId
+      ? s.sshConnectionStates.get(repoConnectionId)?.supportsFolderDownload === true
+      : false
+  })
+  const activeRuntimeEnvironmentId = useAppStore((s) =>
+    getRuntimeEnvironmentIdForWorktree(s, activeWorktreeId)
+  )
+  const runtimeDownloadContext = useMemo(
+    () =>
+      activeRuntimeEnvironmentId && activeWorktreeId && effectiveWorktree
+        ? {
+            settings: { activeRuntimeEnvironmentId: activeRuntimeEnvironmentId },
+            worktreeId: activeWorktreeId,
+            worktreePath: effectiveWorktree.path,
+            connectionId: activeRepo?.connectionId ?? undefined
+          }
+        : null,
+    [activeRepo?.connectionId, activeRuntimeEnvironmentId, activeWorktreeId, effectiveWorktree]
+  )
+  const treeActions = useCodeScopeTreeActions({
+    activeWorktreeId,
+    worktreePath: effectiveWorktree?.path ?? null,
+    connectionId: seedSourceRepo?.connectionId ?? null,
+    activeRepo,
+    scopes,
+    listing,
+    openFile
+  })
+  const canOpenInOrcaBrowser = useWorkspaceFileBrowserActionPredicate(activeWorktreeId)
+  const tree: CodeScopeTreeContext = {
+    actions: treeActions,
+    worktreePath: effectiveWorktree?.path ?? null,
+    supportsFolderDownload,
+    runtimeDownloadContext,
+    canOpenInOrcaBrowser
+  }
+
   return {
     scopes,
     rows,
@@ -170,6 +219,7 @@ export function useCodeScopesSection({
     bridged,
     hostLabel: executionHostId ? getExecutionHostLabel(executionHostId) : null,
     listing,
+    tree,
     openAsWorkspace,
     addWorkspaceFolderAsProject,
     openFile,

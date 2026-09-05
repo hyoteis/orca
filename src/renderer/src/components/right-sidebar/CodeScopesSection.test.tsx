@@ -11,6 +11,15 @@ const mockState = vi.hoisted(() => ({
   repos: [] as Repo[],
   worktreesByRepo: {} as Record<string, Worktree[]>,
   folderWorkspaces: [] as unknown[],
+  // Slices read by the worktree-menu action wiring (operation owner, download gating).
+  detectedWorktreesByRepo: {} as Record<string, unknown>,
+  projectGroups: [] as unknown[],
+  restoredRuntimeHostIdByWorkspaceSessionKey: {} as Record<string, unknown>,
+  sshConnectionStates: new Map<string, { supportsFolderDownload?: boolean }>(),
+  sshStateByEnvironment: new Map<string, unknown>(),
+  openFiles: [] as unknown[],
+  closeFile: vi.fn(),
+  showRightSidebarSearch: vi.fn(),
   openModal: vi.fn(),
   openFile: vi.fn(),
   fetchSettings: vi.fn()
@@ -19,6 +28,16 @@ const mockState = vi.hoisted(() => ({
 const windowApi = vi.hoisted(() => ({
   codeIntelligence: { upsertScope: vi.fn() },
   shell: { openPath: vi.fn() }
+}))
+
+const createNewTerminalTabMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/components/terminal/terminal-tab-create', () => ({
+  createNewTerminalTab: createNewTerminalTabMock
+}))
+
+vi.mock('@/components/confirmation-dialog-context', () => ({
+  useConfirmationDialog: () => async () => true
 }))
 
 vi.mock('@/store', () => ({
@@ -45,6 +64,7 @@ vi.mock('@/store/selectors', () => ({
 }))
 
 vi.mock('@/i18n/i18n', () => ({
+  i18n: { language: 'en' },
   translate: (_key: string, fallback: string, values?: Record<string, unknown>) =>
     values
       ? Object.entries(values).reduce(
@@ -101,19 +121,18 @@ function setupState({
   mockState.repos = repos
   mockState.activeWorktreeId = activeWorktreeId ?? 'repo-1::/ws/repo-1'
   mockState.folderWorkspaces = folderWorkspaces
-  mockState.worktreesByRepo =
-    activeWorktreeId?.startsWith('folder:')
-      ? {}
-      : {
-          'repo-1': [
-            {
-              id: 'repo-1::/ws/repo-1',
-              repoId: 'repo-1',
-              hostId: worktreeHostId,
-              path: '/ws/repo-1'
-            } as unknown as Worktree
-          ]
-        }
+  mockState.worktreesByRepo = activeWorktreeId?.startsWith('folder:')
+    ? {}
+    : {
+        'repo-1': [
+          {
+            id: 'repo-1::/ws/repo-1',
+            repoId: 'repo-1',
+            hostId: worktreeHostId,
+            path: '/ws/repo-1'
+          } as unknown as Worktree
+        ]
+      }
 }
 
 beforeEach(() => {
@@ -140,6 +159,15 @@ describe('CodeScopesSection shell', () => {
     expect(screen.queryByText('Code scopes')).toBeNull()
   })
 
+  it('fills the freed panel height when the worktree section is collapsed', () => {
+    setupState()
+    const { container } = render(<CodeScopesSection listDirectory={vi.fn()} fillRemaining />)
+    expect((container.firstElementChild as HTMLElement).className).toContain('flex-1')
+    const scrollArea = container.querySelector('[data-slot="scroll-area"]') as HTMLElement
+    expect(scrollArea.className).not.toContain('max-h-64')
+    expect(scrollArea.className).toContain('flex-1')
+  })
+
   it('collapses and re-expands the section body from the header', () => {
     setupState()
     render(<CodeScopesSection listDirectory={vi.fn()} />)
@@ -151,7 +179,10 @@ describe('CodeScopesSection shell', () => {
   })
 
   it('opens the configure dialog from the in-section gear affordance', () => {
-    setupState({ scopes: [scope({ executionHostId: 'ssh:my-host' })], worktreeHostId: 'ssh:my-host' })
+    setupState({
+      scopes: [scope({ executionHostId: 'ssh:my-host' })],
+      worktreeHostId: 'ssh:my-host'
+    })
     render(<CodeScopesSection listDirectory={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Configure Code' }))
     expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
@@ -291,10 +322,58 @@ describe('CodeScopesSection browsing', () => {
     render(<CodeScopesSection listDirectory={listDirectory} />)
     fireEvent.click(screen.getByRole('button', { name: /src/ }))
     fireEvent.click(await screen.findByText('include'))
-    await waitFor(() =>
-      expect(listDirectory).toHaveBeenLastCalledWith('/ws/repo-1/src/include')
-    )
+    await waitFor(() => expect(listDirectory).toHaveBeenLastCalledWith('/ws/repo-1/src/include'))
     expect(await screen.findByText('app.h')).toBeTruthy()
+  })
+
+  it('hides the root member row for whole-folder scopes and lists children directly', async () => {
+    const listDirectory = vi.fn().mockResolvedValue([dir('src'), file('README.md')])
+    setupState({
+      scopes: [
+        scope({
+          members: [{ path: '.', visibleResults: true }],
+          consent: {
+            configurationFingerprint: 'fp',
+            grantedAt: 1,
+            authorizedMembers: [{ path: '.', visibleResults: true }]
+          }
+        })
+      ]
+    })
+    const { container } = render(<CodeScopesSection listDirectory={listDirectory} />)
+    // '.' member: no folder-name row; the root auto-expands inside a scroll area.
+    await waitFor(() => expect(listDirectory).toHaveBeenCalledWith('/ws/repo-1'))
+    expect(await screen.findByRole('button', { name: 'src' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'README.md' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^repo-1$/ })).toBeNull()
+    expect(container.querySelector('[data-slot="scroll-area"]')).toBeTruthy()
+  })
+
+  it('offers the worktree context menu on child folder rows', async () => {
+    const listDirectory = vi.fn().mockResolvedValue([dir('include')])
+    setupState()
+    render(<CodeScopesSection listDirectory={listDirectory} />)
+    fireEvent.click(screen.getByRole('button', { name: /src/ }))
+    const childRow = await screen.findByRole('button', { name: 'include' })
+    fireEvent.contextMenu(childRow)
+    // Shortcut chips append to the accessible name, so match by prefix.
+    for (const label of [
+      'New File',
+      'New Folder',
+      'Copy Path',
+      'Open in Terminal',
+      'Find in Folder',
+      'Rename',
+      'Delete'
+    ]) {
+      expect(screen.getByRole('menuitem', { name: new RegExp(`^${label}`) })).toBeTruthy()
+    }
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in Terminal' }))
+    await waitFor(() =>
+      expect(createNewTerminalTabMock).toHaveBeenCalledWith('repo-1::/ws/repo-1', undefined, {
+        startupCwd: '/ws/repo-1/src/include'
+      })
+    )
   })
 })
 
@@ -505,7 +584,9 @@ describe('CodeScopesSection member context menu', () => {
     const { toast } = await import('sonner')
     setupState({
       worktreeHostId: 'ssh:my-host',
-      scopes: [scope({ executionHostId: 'ssh:my-host', members: [{ path: 'src', visibleResults: true }] })],
+      scopes: [
+        scope({ executionHostId: 'ssh:my-host', members: [{ path: 'src', visibleResults: true }] })
+      ],
       repos: [{ id: 'repo-1', connectionId: 'my-host' } as unknown as Repo]
     })
     render(<CodeScopesSection listDirectory={vi.fn()} />)

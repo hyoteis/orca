@@ -1,24 +1,24 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight, Loader2, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/store'
+import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { LANGUAGE_DISPLAY, LanguageBadge } from './code-panel-language-badge'
-import {
-  FolderBridgeInfoLine,
-  FolderNotProjectEmptyState
-} from './code-panel-folder-bridge-state'
+import { FolderBridgeInfoLine, FolderNotProjectEmptyState } from './code-panel-folder-bridge-state'
 import { CodePanelMemberTreeRow } from './code-panel-member-row'
-import {
-  useCodeScopesSection,
-  type CodePanelDirectoryLister
-} from './use-code-scopes-section'
+import { CodePanelDirChildren } from './code-panel-dir-children'
+import { useCodeScopesSection, type CodePanelDirectoryLister } from './use-code-scopes-section'
 
 /** Explorer's "Code scopes" section — the migrated Code panel member tree (#81). */
 export function CodeScopesSection({
-  listDirectory
+  listDirectory,
+  fillRemaining = false
 }: {
   listDirectory?: CodePanelDirectoryLister
+  /** Take the panel space freed by a collapsed Worktree section instead of capping. */
+  fillRemaining?: boolean
 }): React.JSX.Element | null {
   const section = useCodeScopesSection({ listDirectory })
   const {
@@ -30,20 +30,43 @@ export function CodeScopesSection({
     linkedFolderRepo,
     bridged,
     hostLabel,
-    listing
+    listing,
+    tree,
+    openFile
   } = section
-  const { pendingDirs } = listing
+  const { pendingDirs, expandedDirs, toggleDir } = listing
   const openModal = useAppStore((s) => s.openModal)
   const [collapsed, setCollapsed] = useState(false)
 
   // Hidden when nothing can render — OpenEditorsSection's precedent for empty sections.
   const folderGap = folderWorkspace !== null && linkedFolderRepo === null
-  if (scopes.length === 0 && !bridged && !folderGap) {
+  const sectionHidden = scopes.length === 0 && !bridged && !folderGap
+
+  // Whole-folder scopes ('.') drop their root-name row: children render directly
+  // at indent level 1, so the root expands itself instead of showing its name.
+  const wholeFolderRows = rows.filter((row) => row.path === '.' && !row.browseBlocked)
+  useEffect(() => {
+    if (collapsed) {
+      return
+    }
+    for (const row of wholeFolderRows) {
+      if (!expandedDirs.has(row.directory)) {
+        toggleDir(row.directory)
+      }
+    }
+  }, [collapsed, expandedDirs, toggleDir, wholeFolderRows])
+
+  if (sectionHidden) {
     return null
   }
 
   return (
-    <div className="border-b border-border py-1">
+    <div
+      className={cn(
+        'border-b border-border py-1',
+        !collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col'
+      )}
+    >
       <div className="flex items-center gap-0.5 px-1 pb-1">
         <button
           type="button"
@@ -90,20 +113,39 @@ export function CodeScopesSection({
       </div>
       {/* ponytail: collapse state is session-local, matching OpenEditorsSection. */}
       {!collapsed && (
-        <>
+        /* Why: the tree shares the worktree tree's scroll contract — wheel-scrollable,
+           capped while the worktree section below is open; fillRemaining drops the cap so
+           a solo-expanded section owns the freed panel height. The cap must also reach the
+           viewport or Radix sees no overflow and renders no scrollbar. */
+        <ScrollArea
+          className={fillRemaining ? 'min-h-0 flex-1' : 'max-h-64'}
+          viewportClassName={fillRemaining ? 'h-full min-h-0' : 'max-h-64'}
+        >
           {bridged ? <FolderBridgeInfoLine repoName={linkedFolderRepo?.displayName ?? ''} /> : null}
-          {rows.map((row) => (
-            <CodePanelMemberTreeRow
-              key={row.path}
-              row={row}
-              listing={listing}
-              configureRepoId={configureRepoId}
-              onOpenAsWorkspace={section.openAsWorkspace}
-              onReveal={section.reveal}
-              onRemove={section.remove}
-              onOpenFile={section.openFile}
-            />
-          ))}
+          {rows.map((row) =>
+            row.path === '.' && !row.browseBlocked ? (
+              <CodePanelDirChildren
+                key={row.directory}
+                dirPath={row.directory}
+                depth={1}
+                listing={listing}
+                onOpenFile={openFile}
+                tree={tree}
+              />
+            ) : (
+              <CodePanelMemberTreeRow
+                key={row.path}
+                row={row}
+                listing={listing}
+                configureRepoId={configureRepoId}
+                tree={tree}
+                onOpenAsWorkspace={section.openAsWorkspace}
+                onReveal={section.reveal}
+                onRemove={section.remove}
+                onOpenFile={openFile}
+              />
+            )
+          )}
           {rows.length === 0 && folderGap ? (
             <FolderNotProjectEmptyState onAddAsProject={section.addWorkspaceFolderAsProject} />
           ) : null}
@@ -128,7 +170,7 @@ export function CodeScopesSection({
               {translate('auto.components.rightSidebar.CodePanel.loading', 'Loading…')}
             </div>
           ) : null}
-        </>
+        </ScrollArea>
       )}
     </div>
   )

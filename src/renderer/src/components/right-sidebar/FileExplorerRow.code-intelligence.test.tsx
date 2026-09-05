@@ -53,7 +53,6 @@ function renderRow(
       canOpenInOrcaBrowser={false}
       canCollapseFolderSubtree
       targetDir={node.path}
-      targetDepth={1}
       selectionSize={selectedPaths.size || 1}
       onClick={vi.fn()}
       onDoubleClick={vi.fn()}

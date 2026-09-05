@@ -6,6 +6,8 @@ import { ChevronDown, ChevronRight, Pin, PinOff, X } from 'lucide-react'
 import type { OpenFile } from '@/store/slices/editor'
 import type { Tab } from '../../../../shared/types'
 import { basename } from '@/lib/path'
+import { cn } from '@/lib/utils'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   ContextMenu,
@@ -152,7 +154,12 @@ function SortableOpenEditorRow({
   )
 }
 
-export function OpenEditorsSection(): React.JSX.Element | null {
+export function OpenEditorsSection({
+  fillRemaining = false
+}: {
+  /** Take the panel space freed by a collapsed Worktree section instead of capping. */
+  fillRemaining?: boolean
+}): React.JSX.Element | null {
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const openFiles = useAppStore((s) => s.openFiles)
   const gitStatusEntries = useAppStore((s) =>
@@ -167,6 +174,8 @@ export function OpenEditorsSection(): React.JSX.Element | null {
   const unifiedTabs = useAppStore((s) =>
     activeWorktreeId ? s.unifiedTabsByWorktree[activeWorktreeId] : undefined
   )
+  // ponytail: collapse state is session-local; thread it through persisted
+  // per-worktree UI settings if it must survive restarts.
   const [collapsed, setCollapsed] = useState(false)
   // Why: hook must run before the early return.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
@@ -226,7 +235,12 @@ export function OpenEditorsSection(): React.JSX.Element | null {
     reorderOpenEditorsOnDragEnd(event, { ids, reorder: reorderFiles })
 
   return (
-    <div className="border-b border-border px-1 py-1">
+    <div
+      className={cn(
+        'border-b border-border px-1 py-1',
+        !collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col'
+      )}
+    >
       <button
         type="button"
         aria-expanded={!collapsed}
@@ -245,37 +259,42 @@ export function OpenEditorsSection(): React.JSX.Element | null {
         {translate('auto.components.right.sidebar.OpenEditorsSection.title', 'Open Editors')}
         <span className="ml-auto tabular-nums">{ids.length}</span>
       </button>
-      {/* ponytail: collapse state is session-local; thread it through persisted
-          per-worktree UI settings if it must survive restarts. */}
+      {/* Cap + scroll so a long open list cannot crowd out the worktree section below;
+          fillRemaining drops the cap when the worktree section is collapsed. */}
       {!collapsed && (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <SortableContext items={ids}>
-            {orderedRows.map((f) => {
-              const tabId = tabByEntity.get(f.id)?.id ?? null
-              return (
-                <SortableOpenEditorRow
-                  key={f.id}
-                  file={f}
-                  pinned={isPinned(f)}
-                  active={f.id === activeId}
-                  uncommitted={isUncommitted(f)}
-                  onSelect={() => setActiveFile(f.id)}
-                  onClose={() => closeAllOfPath(f)}
-                  onTogglePin={(pinned) => {
-                    if (!tabId) {
-                      return
-                    }
-                    if (pinned) {
-                      unpinTab(tabId)
-                    } else {
-                      pinFile(f.id, tabId)
-                    }
-                  }}
-                />
-              )
-            })}
-          </SortableContext>
-        </DndContext>
+        <ScrollArea
+          className={fillRemaining ? 'min-h-0 flex-1' : 'max-h-64'}
+          viewportClassName={fillRemaining ? 'h-full min-h-0' : 'max-h-64'}
+        >
+          <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+            <SortableContext items={ids}>
+              {orderedRows.map((f) => {
+                const tabId = tabByEntity.get(f.id)?.id ?? null
+                return (
+                  <SortableOpenEditorRow
+                    key={f.id}
+                    file={f}
+                    pinned={isPinned(f)}
+                    active={f.id === activeId}
+                    uncommitted={isUncommitted(f)}
+                    onSelect={() => setActiveFile(f.id)}
+                    onClose={() => closeAllOfPath(f)}
+                    onTogglePin={(pinned) => {
+                      if (!tabId) {
+                        return
+                      }
+                      if (pinned) {
+                        unpinTab(tabId)
+                      } else {
+                        pinFile(f.id, tabId)
+                      }
+                    }}
+                  />
+                )
+              })}
+            </SortableContext>
+          </DndContext>
+        </ScrollArea>
       )}
     </div>
   )

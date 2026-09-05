@@ -13,22 +13,18 @@ import { cn } from '@/lib/utils'
 import type { CodePanelMemberRow } from './code-panel-member-tree'
 import { LanguageBadge } from './code-panel-language-badge'
 import { CodePanelDirChildren } from './code-panel-dir-children'
+import { FileRowMenuItems, stopRightButtonMenuSelection } from './file-explorer-row-menu'
+import { InlineInputRow } from './FileExplorerRow'
+import { getFileExplorerOperationOwner } from './file-explorer-operation-owner'
 import type { LazyDirectoryListing } from './use-lazy-directory-listing'
+import type { CodeScopeTreeContext } from './use-code-scopes-section'
 
-function stopRightButtonMenuSelection(event: React.PointerEvent): void {
-  if (event.button !== 2) {
-    return
-  }
-  // Why: Radix opens context menus under the pointer; on some macOS/Electron
-  // paths the right-button release lands on the first item and selects it.
-  event.preventDefault()
-}
-
-/** One scope member: browsable dir row + the four-action context menu (#70). */
+/** One scope member: browsable dir row + scope actions plus the worktree row menu (#70, #81). */
 export function CodePanelMemberTreeRow({
   row,
   listing,
   configureRepoId,
+  tree,
   onOpenAsWorkspace,
   onReveal,
   onRemove,
@@ -37,6 +33,7 @@ export function CodePanelMemberTreeRow({
   row: CodePanelMemberRow
   listing: LazyDirectoryListing
   configureRepoId: string | null
+  tree: CodeScopeTreeContext
   onOpenAsWorkspace: (row: CodePanelMemberRow) => void
   onReveal: (row: CodePanelMemberRow) => void
   onRemove: (row: CodePanelMemberRow) => void
@@ -46,12 +43,36 @@ export function CodePanelMemberTreeRow({
   const { expandedDirs, toggleDir } = listing
   const dirPath = row.directory
   const expanded = expandedDirs.has(dirPath)
+  const { actions } = tree
+  // Renaming a member replaces its row with the shared inline input; the
+  // input otherwise has no parent listing to render inside (the workspace root).
+  const inline = actions.inlineInput
+  if (inline && inline.type === 'rename' && inline.existingPath === dirPath) {
+    return (
+      <InlineInputRow
+        depth={1}
+        inlineInput={inline}
+        onSubmit={actions.submitInlineInput}
+        onCancel={actions.dismissInlineInput}
+      />
+    )
+  }
+  // Indent level 1 under the section header; children continue from level 2.
+  const node = {
+    name: row.displayName,
+    path: dirPath,
+    relativePath: row.path,
+    isDirectory: true,
+    depth: 1,
+    operationOwner: getFileExplorerOperationOwner(actions.activeWorktreeId)
+  }
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <button
           type="button"
-          className="flex h-[26px] w-full items-center gap-1.5 px-2 text-left text-[13px] text-foreground hover:bg-accent"
+          className="flex h-[26px] w-full items-center gap-1.5 pr-2 text-left text-[13px] text-foreground hover:bg-accent"
+          style={{ paddingLeft: '22px' }}
           title={
             row.browseBlocked
               ? translate(
@@ -103,13 +124,42 @@ export function CodePanelMemberTreeRow({
             {translate('auto.components.rightSidebar.CodePanel.configureCode', 'Configure Code…')}
           </ContextMenuItem>
         ) : null}
-        <ContextMenuSeparator />
         <ContextMenuItem variant="destructive" onSelect={() => onRemove(row)}>
           <Trash2 />
           {translate('auto.components.rightSidebar.CodePanel.remove', 'Remove')}
         </ContextMenuItem>
+        <ContextMenuSeparator />
+        <FileRowMenuItems
+          node={node}
+          connectionId={actions.connectionId}
+          isExpanded={expanded}
+          canCollapseFolderSubtree
+          showReveal={false}
+          deleteShortcutLabel={actions.deleteShortcutLabel}
+          canAddAsProject={actions.canAddFolderAsProject(node)}
+          onAddFolderAsProject={() => actions.addFolderAsProject(node)}
+          codeIntelligenceScope={actions.codeIntelligenceScope}
+          onToggleCodeIntelligenceMembers={actions.toggleCodeIntelligenceMembers}
+          supportsFolderDownload={tree.supportsFolderDownload}
+          runtimeDownloadContext={tree.runtimeDownloadContext}
+          onStartNew={actions.startNew}
+          onStartRename={actions.startRename}
+          onDuplicate={actions.duplicate}
+          onCopyPaths={(pathKind) => actions.copyPaths(node, pathKind)}
+          onOpenInTerminal={() => actions.openInTerminal(node)}
+          onViewFile={() => actions.viewFile(node)}
+          onCollapseFolderSubtree={() => actions.collapseFolder(node)}
+          onFindInFolder={() => actions.findInFolder(node)}
+          onRequestDelete={() => actions.requestDelete(node)}
+        />
       </ContextMenuContent>
-      <CodePanelDirChildren dirPath={dirPath} depth={1} listing={listing} onOpenFile={onOpenFile} />
+      <CodePanelDirChildren
+        dirPath={dirPath}
+        depth={2}
+        listing={listing}
+        onOpenFile={onOpenFile}
+        tree={tree}
+      />
     </ContextMenu>
   )
 }

@@ -84,6 +84,11 @@ function FileExplorerFiles(): React.JSX.Element {
   const showRightSidebarFiles = useAppStore((s) => s.showRightSidebarFiles)
   const showRightSidebarSearch = useAppStore((s) => s.showRightSidebarSearch)
   const [nameFilterQuery, setNameFilterQuery] = useState('')
+  // Owns the accordion: a collapsed Worktree frees panel height for the sections above.
+  const [worktreeSectionCollapsed, setWorktreeSectionCollapsed] = useState(false)
+  const toggleWorktreeSection = useCallback(() => {
+    setWorktreeSectionCollapsed((value) => !value)
+  }, [])
   const [nameFilterCollapsedPaths, setNameFilterCollapsedPaths] = useState<Set<string>>(
     () => new Set()
   )
@@ -828,9 +833,12 @@ function FileExplorerFiles(): React.JSX.Element {
         >
           <SearchFilters {...searchPanel.filtersProps} />
         </div>
-        <OpenEditorsSection />
-        <CodeScopesSection />
-        <WorktreeSection>
+        <OpenEditorsSection fillRemaining={worktreeSectionCollapsed} />
+        <CodeScopesSection fillRemaining={worktreeSectionCollapsed} />
+        <WorktreeSection
+          collapsed={worktreeSectionCollapsed}
+          onToggleCollapsed={toggleWorktreeSection}
+        >
           {/* Why: the Files and Contents views share one body slot; layering them
              avoids remounting heavy virtualized panes while preserving full height. */}
           <div className="relative min-h-0 flex-1 overflow-hidden">

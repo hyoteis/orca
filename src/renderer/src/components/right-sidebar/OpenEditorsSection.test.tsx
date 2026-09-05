@@ -8,10 +8,10 @@ import { OpenEditorsSection, reorderOpenEditorsOnDragEnd } from './OpenEditorsSe
 import type { DragEndEvent } from '@dnd-kit/core'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
-function renderSection(): ReturnType<typeof render> {
+function renderSection(props: { fillRemaining?: boolean } = {}): ReturnType<typeof render> {
   return render(
     <TooltipProvider>
-      <OpenEditorsSection />
+      <OpenEditorsSection {...props} />
     </TooltipProvider>
   )
 }
@@ -70,6 +70,14 @@ describe('OpenEditorsSection', () => {
   it('renders nothing when no open files for the active worktree', () => {
     const { container } = renderSection()
     expect(container.firstChild).toBeNull()
+  })
+
+  it('fills the freed panel height when the worktree section is collapsed', () => {
+    useAppStore.setState({
+      openFiles: [openFileFixture('a', '/w/a.ts')]
+    } as unknown as ReturnType<typeof useAppStore.getState>)
+    const { container } = renderSection({ fillRemaining: true })
+    expect((container.firstElementChild as HTMLElement).className).toContain('flex-1')
   })
 
   it('lists open files and closes on × click', () => {
