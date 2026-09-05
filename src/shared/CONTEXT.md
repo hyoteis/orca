@@ -60,6 +60,21 @@ version-and-signature-checked bases, per-file atomic commits, and an
 all-or-nothing journal — any failure rolls every completed file back. Its
 inverse lives only in the renderer session (global undo, never persisted).
 
+## Outline
+
+The right-sidebar view listing the symbol tree (functions, types, variables,
+…) of the currently active editor file. One Outline per active editor, not
+per workspace.
+_Avoid_: Struct panel, member tree (that is a Scope member directory tree), Symbols view (that is the Command-center workspace-symbol search mode)
+
+## Heuristic symbols
+
+Outline's degraded symbol tier: regex-extracted names and line ranges
+(C++/Python only) shown when no language server can run. Approximate by
+definition — distinct from the semantic symbols a scope's LSP session
+returns, and marked as approximate in the UI.
+_Avoid_: fallback symbols
+
 ## Preimage
 
 The on-disk content a journal step captured immediately before it ran. The
