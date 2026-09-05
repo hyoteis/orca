@@ -7506,6 +7506,10 @@
             "fastDescription": "按住修饰键滚动时的额外倍数。",
             "tui": "TUI",
             "tuiDescription": "面向全屏终端应用的离散滚轮报告。"
+          },
+          "logLevelColorizer": {
+            "title": "日志级别着色",
+            "description": "以颜色高亮纯文本终端输出中的错误、警告与信息行。全屏应用不受影响。"
           }
         },
         "TerminalSettingsPreview": {
@@ -9230,6 +9234,10 @@
               "title": "主题模式",
               "keyword_target": "目标",
               "keyword_editing": "编辑"
+            },
+            "logLevelColorizer": {
+              "title": "日志级别着色",
+              "description": "以颜色高亮纯文本终端输出中的错误、警告与信息行。全屏应用不受影响。"
             }
           },
           "windows": {

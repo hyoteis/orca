@@ -7901,6 +7901,10 @@
             "fastDescription": "Extra multiplier while scrolling with a modifier key.",
             "tui": "TUI",
             "tuiDescription": "Discrete wheel reports for full-screen terminal apps."
+          },
+          "logLevelColorizer": {
+            "title": "Colorize Log Levels",
+            "description": "Highlight error, warning, and info lines in plain terminal output. Full-screen apps are not affected."
           }
         },
         "TerminalSettingsPreview": {
@@ -9638,6 +9642,10 @@
               "title": "Theme Mode",
               "keyword_target": "target",
               "keyword_editing": "editing"
+            },
+            "logLevelColorizer": {
+              "title": "Colorize Log Levels",
+              "description": "Highlight error, warning, and info lines in plain terminal output. Full-screen apps are not affected."
             }
           },
           "windows": {

@@ -101,6 +101,23 @@ describe('getTerminalPaneSearchEntries', () => {
     ).toBe(true)
   })
 
+  it('includes the log-level colorizer setting on all platforms', () => {
+    const entriesWindows = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
+    const entriesMac = getTerminalPaneSearchEntries({ isWindows: false, isMac: true })
+    const entriesLinux = getTerminalPaneSearchEntries({ isWindows: false, isMac: false })
+    const hasEntry = (entries: typeof entriesWindows): boolean =>
+      entries.some(
+        (entry) =>
+          entry.title === 'Colorize Log Levels' &&
+          matchesSettingsSearch('log', [entry]) &&
+          matchesSettingsSearch('color', [entry])
+      )
+
+    expect(hasEntry(entriesWindows)).toBe(true)
+    expect(hasEntry(entriesMac)).toBe(true)
+    expect(hasEntry(entriesLinux)).toBe(true)
+  })
+
   it('includes the running-terminal close confirmation setting on all platforms', () => {
     const entriesWindows = getTerminalPaneSearchEntries({ isWindows: true, isMac: false })
     const entriesMac = getTerminalPaneSearchEntries({ isWindows: false, isMac: true })

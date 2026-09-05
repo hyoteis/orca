@@ -2,7 +2,8 @@ import type { GlobalSettings } from '../../../../shared/types'
 import {
   SettingsRow,
   SettingsSegmentedControl,
-  SettingsSubsectionHeader
+  SettingsSubsectionHeader,
+  SettingsSwitchRow
 } from './SettingsFormControls'
 import { SearchableSetting } from './SearchableSetting'
 import { translate } from '@/i18n/i18n'
@@ -88,6 +89,45 @@ export function TerminalRenderingSection({
                   }
                 ]}
               />
+            }
+          />
+        </SearchableSetting>
+
+        <SearchableSetting
+          title={translate(
+            'auto.components.settings.TerminalPane.logLevelColorizer.title',
+            'Colorize Log Levels'
+          )}
+          description={translate(
+            'auto.components.settings.TerminalPane.logLevelColorizer.description',
+            'Highlight error, warning, and info lines in plain terminal output. Full-screen apps are not affected.'
+          )}
+          keywords={[
+            'log',
+            'logs',
+            'level',
+            'color',
+            'colorize',
+            'highlight',
+            'error',
+            'warning',
+            'info'
+          ]}
+        >
+          <SettingsSwitchRow
+            label={translate(
+              'auto.components.settings.TerminalPane.logLevelColorizer.title',
+              'Colorize Log Levels'
+            )}
+            description={translate(
+              'auto.components.settings.TerminalPane.logLevelColorizer.description',
+              'Highlight error, warning, and info lines in plain terminal output. Full-screen apps are not affected.'
+            )}
+            checked={settings.terminalLogLevelColorizer === true}
+            onChange={() =>
+              updateSettings({
+                terminalLogLevelColorizer: !(settings.terminalLogLevelColorizer === true)
+              })
             }
           />
         </SearchableSetting>

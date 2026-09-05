@@ -128,6 +128,45 @@ export const getTerminalRenderingSearchEntries = createLocalizedCatalog(() => [
       ...translateSearchKeyword('auto.components.settings.terminal.search.7d924d870d', 'graphics'),
       ...translateSearchKeyword('auto.components.settings.terminal.search.1abcf4d7de', 'linux')
     ]
+  },
+  {
+    title: translate(
+      'auto.components.settings.terminal.search.logLevelColorizer.title',
+      'Colorize Log Levels'
+    ),
+    description: translate(
+      'auto.components.settings.terminal.search.logLevelColorizer.description',
+      'Highlight error, warning, and info lines in plain terminal output. Full-screen apps are not affected.'
+    ),
+    keywords: [
+      ...translateSearchKeyword('auto.components.settings.terminal.search.logLevelColorizer.log', 'log'),
+      ...translateSearchKeyword('auto.components.settings.terminal.search.logLevelColorizer.logs', 'logs'),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.logLevelColorizer.level',
+        'level'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.logLevelColorizer.color',
+        'color'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.logLevelColorizer.colorize',
+        'colorize'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.logLevelColorizer.highlight',
+        'highlight'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.logLevelColorizer.error',
+        'error'
+      ),
+      ...translateSearchKeyword(
+        'auto.components.settings.terminal.search.logLevelColorizer.warning',
+        'warning'
+      ),
+      ...translateSearchKeyword('auto.components.settings.terminal.search.logLevelColorizer.info', 'info')
+    ]
   }
 ])
 

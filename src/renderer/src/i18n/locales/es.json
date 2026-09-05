@@ -7320,6 +7320,10 @@
             "fastDescription": "Multiplicador adicional al desplazarse con una tecla modificadora.",
             "tui": "TUI",
             "tuiDescription": "Eventos discretos de rueda para apps de terminal de pantalla completa."
+          },
+          "logLevelColorizer": {
+            "title": "Colorear niveles de registro",
+            "description": "Resalta las líneas de error, advertencia e información en la salida de texto plano del terminal. Las apps de pantalla completa no se ven afectadas."
           }
         },
         "TerminalSettingsPreview": {
@@ -9044,6 +9048,10 @@
               "title": "Modo del tema",
               "keyword_target": "destino",
               "keyword_editing": "edición"
+            },
+            "logLevelColorizer": {
+              "title": "Colorear niveles de registro",
+              "description": "Resalta las líneas de error, advertencia e información en la salida de texto plano del terminal. Las apps de pantalla completa no se ven afectadas."
             }
           },
           "windows": {
