@@ -279,6 +279,26 @@ describe('default light terminal theme ANSI contrast', () => {
       expect(contrastRatio(color, theme.background)).toBeGreaterThanOrEqual(4.5)
     }
   })
+
+  // #95: WARN lines and any bright-yellow SGR output render from the 33/93 slots.
+  // Current values already clear the bar: #6d5a00 on #ffffff = 6.75:1, #8e7700 = 4.39:1.
+  it('keeps warn-yellow ANSI slots (33/93) at or above 3:1 on the background', () => {
+    const theme = getBuiltinTheme(DEFAULT_TERMINAL_THEME_LIGHT)
+
+    expect(theme, `${DEFAULT_TERMINAL_THEME_LIGHT} should exist`).not.toBeNull()
+    if (!theme?.background) {
+      throw new Error(`${DEFAULT_TERMINAL_THEME_LIGHT} is missing a background color`)
+    }
+
+    for (const key of ['yellow', 'brightYellow'] as const) {
+      const color = theme[key]
+      expect(color, `${DEFAULT_TERMINAL_THEME_LIGHT}.${key} should be defined`).toBeDefined()
+      if (!color) {
+        throw new Error(`${DEFAULT_TERMINAL_THEME_LIGHT}.${key} is missing`)
+      }
+      expect(contrastRatio(color, theme.background)).toBeGreaterThanOrEqual(3)
+    }
+  })
 })
 
 describe('isTerminalBackgroundLight', () => {
