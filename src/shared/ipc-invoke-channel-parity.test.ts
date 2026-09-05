@@ -1,5 +1,4 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -7,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 // handle; one-sided drift (typo/rename) fails silently at runtime. Types are
 // already locked by `satisfies PreloadApi` — strings are the only open seam.
 
-const srcRoot = fileURLToPath(new URL('..', import.meta.url))
+// tsconfig.node builds this glob as CommonJS, so import.meta is unavailable.
+const srcRoot = join(__dirname, '..')
 
 function listSourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(join(srcRoot, dir))) {
