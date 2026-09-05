@@ -37,6 +37,7 @@ import {
 } from '@/lib/pane-manager/terminal-delivery-credit'
 import { serializeWithAbsoluteCursor } from '../../../../shared/terminal-serialize-absolute-cursor'
 import { isTerminalQueryReply } from '../../../../shared/terminal-query-reply'
+import { createTerminalLogLevelColorizerWiring } from './terminal-log-level-colorizer-wiring'
 import type { PtyBufferSnapshot, PtyConnectResult, PtyReplayDataMeta } from './pty-transport'
 import type { IpcPtyTransportOptions, PtyTransportRecoveryState } from './pty-transport-types'
 import { createIpcPtyTransport } from './pty-transport'
@@ -1204,6 +1205,11 @@ export function connectPanePty(
     deps.paneKittyKeyboardModesRef.current.set(pane.id, created)
     return created
   })()
+  // #91/#96: one colorizer instance per pane binding shared by the live and
+  // replay write paths; hidden setting, default off (UI lands in #97).
+  const logLevelColorizer = createTerminalLogLevelColorizerWiring(
+    () => useAppStore.getState().settings?.terminalLogLevelColorizer === true
+  )
   const getSleepingRecordForPane = (
     state: ReturnType<typeof useAppStore.getState>
   ): { paneKey: string; record: SleepingAgentSessionRecord } | null => {
@@ -5505,7 +5511,7 @@ export function connectPanePty(
       // Why: drain any queued background bytes BEFORE the replay paint, so the
       // scheduler's deferred drain cannot land older bytes on top of the replay.
       flushTerminalOutput(pane.terminal)
-      replayIntoTerminal(pane, deps.replayingPanesRef, data, {
+      replayIntoTerminal(pane, deps.replayingPanesRef, logLevelColorizer.transformReplay(data), {
         breadcrumbIdentity: {
           tabId: deps.tabId,
           worktreeId: deps.worktreeId,
@@ -5520,15 +5526,20 @@ export function connectPanePty(
       // Why: WebGL must be rebuilt after xterm has parsed replay bytes, not
       // merely after the write was queued.
       flushTerminalOutput(pane.terminal)
-      return replayIntoTerminalAsync(pane, deps.replayingPanesRef, data, {
-        breadcrumbIdentity: {
-          tabId: deps.tabId,
-          worktreeId: deps.worktreeId,
-          ptyId: transport.getPtyId()
-        },
-        shouldRefreshViewportSynchronously: shouldRefreshForegroundSynchronously,
-        shouldReleaseRenderPause: () => deps.isVisibleRef.current
-      })
+      return replayIntoTerminalAsync(
+        pane,
+        deps.replayingPanesRef,
+        logLevelColorizer.transformReplay(data),
+        {
+          breadcrumbIdentity: {
+            tabId: deps.tabId,
+            worktreeId: deps.worktreeId,
+            ptyId: transport.getPtyId()
+          },
+          shouldRefreshViewportSynchronously: shouldRefreshForegroundSynchronously,
+          shouldReleaseRenderPause: () => deps.isVisibleRef.current
+        }
+      )
     }
 
     const reattachReplayResetSequence = (
@@ -5685,6 +5696,7 @@ export function connectPanePty(
         // semantics: relay reconnects redeliver the same window, so pushes
         // apply as sets to keep the mirrored stack from accumulating frames.
         applySnapshotKittyKeyboardModes(data, payload)
+        logLevelColorizer.resetForReplay()
         await writeReplayDataAsync(data)
         if (!isCurrentPayload()) {
           continue
@@ -6441,29 +6453,36 @@ export function connectPanePty(
         synchronizedForegroundOutput && synchronizedForegroundFrameInteractive
       synchronizedForegroundOutputActive = nextSynchronizedForegroundOutputActive
       synchronizedForegroundMarkerTail = synchronizedForegroundScan?.markerTail ?? ''
-      writeTerminalOutput(pane.terminal, data, {
-        foreground: foregroundOutput,
-        beforeWrite: beforeTerminalOutputWrite,
-        // Why: every scheduler write claims one child so a split delivery is credited only after all children parse or discard.
-        ackCredit: takeCurrentTerminalDeliveryCredit() ?? undefined,
-        onBackgroundBacklogDropped: markHiddenOutputRestoreNeeded,
-        latencySensitive:
-          !foreground || parseHiddenStartupOutput
-            ? true
-            : synchronizedFrameLatencySensitive || isLatencySensitiveForegroundOutput(data),
-        forceForegroundRefresh:
-          foregroundOutput &&
-          (synchronizedForegroundOutput ||
-            nativeWindowsCursorRestore ||
-            foregroundRenderRefreshNeeded),
-        followupForegroundRefresh:
-          nativeWindowsCursorRestore || nativeWindowsInPlaceRewriteFollowup,
-        // Why: xterm already queued a WebGL frame parsing this chunk; merge the repair into it instead of rendering the grid twice.
-        shouldRefreshForegroundSynchronously,
-        stripTransientCursorShows: shouldProtectNativeWindowsSynchronizedOutput && foreground,
-        coalesceForeground: synchronizedForegroundOutput && synchronizedOutputEnded,
-        holdForeground: synchronizedForegroundOutput && nextSynchronizedForegroundOutputActive
-      })
+      // Why colorized here and not earlier: risk/latency scans above judge the
+      // raw bytes; only the write itself carries the injected SGR (#91/#96).
+      writeTerminalOutput(
+        pane.terminal,
+        logLevelColorizer.transformLive(data, kittyKeyboardModes.isAlternateScreen),
+        {
+          foreground: foregroundOutput,
+          beforeWrite: beforeTerminalOutputWrite,
+          // Why: every scheduler write claims one child so a split delivery is credited only after all children parse or discard.
+          ackCredit: takeCurrentTerminalDeliveryCredit() ?? undefined,
+          onBackgroundBacklogDropped: markHiddenOutputRestoreNeeded,
+          latencySensitive:
+            !foreground || parseHiddenStartupOutput
+              ? true
+              : synchronizedFrameLatencySensitive || isLatencySensitiveForegroundOutput(data),
+          forceForegroundRefresh:
+            foregroundOutput &&
+            (synchronizedForegroundOutput ||
+              nativeWindowsCursorRestore ||
+              foregroundRenderRefreshNeeded),
+          followupForegroundRefresh:
+            nativeWindowsCursorRestore || nativeWindowsInPlaceRewriteFollowup,
+          // Why: xterm already queued a WebGL frame parsing this chunk; merge the repair into it instead of rendering the grid twice.
+          shouldRefreshForegroundSynchronously,
+          stripTransientCursorShows:
+            shouldProtectNativeWindowsSynchronizedOutput && foreground,
+          coalesceForeground: synchronizedForegroundOutput && synchronizedOutputEnded,
+          holdForeground: synchronizedForegroundOutput && nextSynchronizedForegroundOutputActive
+        }
+      )
     }
 
     queueAgentIdleTerminalModeReset = (): void => {
@@ -7298,6 +7317,7 @@ export function connectPanePty(
               kittyKeyboardFlags: snapshot.kittyKeyboardFlags,
               snapshotSeq: snapshot.seq
             })
+            logLevelColorizer.resetForReplay()
             // Why shared: the SSH reattach model paint inlines the same
             // choreography (coordinator nesting would deadlock there); one
             // builder keeps the alt-screen branches from drifting.
@@ -8028,6 +8048,7 @@ export function connectPanePty(
                 kittyKeyboardFlags: snapshot.kittyKeyboardFlags,
                 snapshotSeq: snapshot.seq
               })
+              logLevelColorizer.resetForReplay()
               // Why keep a too-wide frame: preconnect SSH has no live repaint owner or post-restore fit.
               for (const replayChunk of buildMainModelSnapshotReplayWrites(snapshot)) {
                 writeReplayData(replayChunk)
@@ -8252,6 +8273,7 @@ export function connectPanePty(
             kittyKeyboardFlags: connectResult.snapshotKittyKeyboardFlags,
             snapshotSeq: connectResult.snapshotSeq
           })
+          logLevelColorizer.resetForReplay()
           // A narrower fit clips the fixed-grid alt frame; drop it and let SIGWINCH repaint.
           // A dead-owner restore keeps history plus its restored-session treatment;
           // a frozen foreign-width frame would look live when no owner remains.
@@ -8322,6 +8344,7 @@ export function connectPanePty(
               kittyKeyboardFlags: modelSnapshot.kittyKeyboardFlags,
               snapshotSeq: modelSnapshot.seq
             })
+            logLevelColorizer.resetForReplay()
             // Why shared: park+reveal of an alt-screen TUI needs the same
             // ?1049l/?1049h rebuild as applyMainBufferSnapshot (main strips
             // the ?1049h marker when splitting scrollbackAnsi) — inlined here

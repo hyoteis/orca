@@ -255,6 +255,8 @@ export function getDefaultSettings(homedir: string): GlobalSettings {
     // applied by both the Electron store and the web client's localStorage store).
     terminalAllowOsc52Clipboard: true,
     terminalAllowOsc52ClipboardDefaultedOnForAllUsers: true,
+    // Hidden until #97 ships its settings UI; old profiles read undefined as off.
+    terminalLogLevelColorizer: false,
     claudeAgentTeamsMode: 'off',
     setupScriptLaunchMode: 'new-tab',
     terminalScrollbackRows: DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT,

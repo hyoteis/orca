@@ -2907,6 +2907,8 @@ export type GlobalSettings = {
   terminalAllowOsc52Clipboard: boolean
   /** One-shot stamp: profiles saved under the old off default get flipped on once, after which an explicit opt-out sticks. */
   terminalAllowOsc52ClipboardDefaultedOnForAllUsers?: boolean
+  /** Hidden toggle (#91/#96): inject SGR level colors into plain-text log output; default off, settings UI lands in #97. */
+  terminalLogLevelColorizer?: boolean
   /** Experimental Claude Agent Teams; native panes use a tmux-compatible shim so teammate output stays on the normal PTY path. */
   claudeAgentTeamsMode?: ClaudeAgentTeamsMode
   /** Where the repo setup script runs on workspace create; defaults to a background "Setup" tab to keep the main terminal usable. */

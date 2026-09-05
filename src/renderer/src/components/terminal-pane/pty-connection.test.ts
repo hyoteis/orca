@@ -1,6 +1,7 @@
 /* oxlint-disable max-lines */
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { LOG_LEVEL_SGR_START } from './terminal-log-level-colorizer'
 import { Terminal } from '@xterm/headless'
 import {
   POST_REPLAY_LIVE_AGENT_REATTACH_RESET,
@@ -197,6 +198,7 @@ type StoreState = {
     localWindowsRuntimeDefault?: { kind: 'windows-host' } | { kind: 'wsl'; distro: string | null }
     terminalMainSideEffectAuthority?: boolean
     terminalHiddenDeliveryGate?: boolean
+    terminalLogLevelColorizer?: boolean
     notifications?: {
       enabled?: boolean
       agentTaskComplete?: boolean
@@ -9528,6 +9530,118 @@ describe('connectPanePty', () => {
     // The dangling tail is re-armed after the snapshot/reset, so the next live chunk completes it instead of rendering literally.
     expect(tailIndex).toBeGreaterThan(snapshotIndex)
     expect(writes.slice(tailIndex + 1)).toEqual([])
+  })
+
+  // #91/#96: hidden log-level colorizer setting — live/replay wiring via the
+  // shared wiring instance; assertions use #94's SGR constants.
+  describe('terminal log level colorizer wiring', () => {
+    const errorSgr = LOG_LEVEL_SGR_START.error
+
+    function captureWrites(pane: ReturnType<typeof createPane>): string[] {
+      const writes: string[] = []
+      pane.terminal.write = vi.fn((data: string, callback?: () => void) => {
+        writes.push(data)
+        callback?.()
+      }) as typeof pane.terminal.write
+      return writes
+    }
+
+    function enableColorizerSetting(): void {
+      mockStoreState = {
+        ...mockStoreState,
+        settings: { ...mockStoreState.settings, terminalLogLevelColorizer: true }
+      }
+    }
+
+    function setupLivePane(): {
+      pane: ReturnType<typeof createPane>
+      onData: (data: string) => void
+      onReplayData: (data: string, meta?: { clearBeforeReplay?: boolean }) => void
+    } {
+      const pane = createPane(1)
+      const liveDataCallback: { current: ((data: string) => void) | null } = { current: null }
+      const replayCallback: {
+        current: ((data: string, meta?: { clearBeforeReplay?: boolean }) => void) | null
+      } = { current: null }
+      const transport = createMockTransport('remote:web-env-1@@pty-log-level')
+      transport.connect.mockImplementation(
+        async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
+          liveDataCallback.current = callbacks.onData ?? null
+          replayCallback.current = callbacks.onReplayData ?? null
+          return { id: 'remote:web-env-1@@pty-log-level', replay: '' }
+        }
+      )
+      transportFactoryQueue.push(transport)
+      return {
+        pane,
+        onData: (data) => liveDataCallback.current?.(data),
+        onReplayData: (data, meta) => replayCallback.current?.(data, meta)
+      }
+    }
+
+    it('colors plain-text level lines on the live path when the setting is enabled', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      enableColorizerSetting()
+      enableActiveRuntimeEnvironment()
+      const { pane, onData } = setupLivePane()
+      const writes = captureWrites(pane)
+
+      connectPanePty(pane as never, createManager(1, 1) as never, createDeps() as never)
+      await flushAsyncTicks(20)
+      onData('[ERROR] boom\r\n')
+
+      expect(writes).toContain(`${errorSgr}[ERROR] boom\x1b[0m\r\n`)
+    })
+
+    it('passes PTY output through uncolored while the setting is off (default)', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      enableActiveRuntimeEnvironment()
+      const { pane, onData } = setupLivePane()
+      const writes = captureWrites(pane)
+
+      connectPanePty(pane as never, createManager(1, 1) as never, createDeps() as never)
+      await flushAsyncTicks(20)
+      onData('[ERROR] boom\r\n')
+
+      expect(writes).toContain('[ERROR] boom\r\n')
+      expect(writes.some((write) => write.includes(errorSgr))).toBe(false)
+    })
+
+    it('passes alternate-screen TUI output through via the kitty mirror gate', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      enableColorizerSetting()
+      enableActiveRuntimeEnvironment()
+      const { pane, onData } = setupLivePane()
+      const writes = captureWrites(pane)
+
+      connectPanePty(pane as never, createManager(1, 1) as never, createDeps() as never)
+      await flushAsyncTicks(20)
+      // The ?1049h enter lands in the same chunk as the TUI frame; the mirror
+      // (scanned before the write) must gate the whole chunk off.
+      const tui = '\x1b[?1049h\x1b[2;1H[ERROR] full-screen frame\r\n'
+      onData(tui)
+
+      expect(writes).toContain(tui)
+    })
+
+    it('colors replay payloads and resets held state at the replay boundary', async () => {
+      const { connectPanePty } = await import('./pty-connection')
+      enableColorizerSetting()
+      enableActiveRuntimeEnvironment()
+      const { pane, onData, onReplayData } = setupLivePane()
+      const writes = captureWrites(pane)
+
+      connectPanePty(pane as never, createManager(1, 1) as never, createDeps() as never)
+      await flushAsyncTicks(20)
+      // Live chunk ends mid-escape; without the replay-boundary reset the
+      // replay's leading bytes would be swallowed into a garbage CSI.
+      onData('\x1b[91')
+      onReplayData('12:34:56 [ERROR] remote\r\n', { clearBeforeReplay: false })
+      await flushAsyncTicks(20)
+
+      expect(writes).toContain(`${errorSgr}12:34:56 [ERROR] remote\x1b[0m\r\n`)
+      expect(writes.some((write) => write.includes('\x1b[9112'))).toBe(false)
+    })
   })
 
   it('preserves live modes and injects focus-in after focused agent reattach', async () => {
