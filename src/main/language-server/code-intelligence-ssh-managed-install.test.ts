@@ -194,6 +194,30 @@ describe('installSshManagedLanguageServer', () => {
     expect(Object.keys(written)).toEqual([])
   })
 
+  it('surfaces the remote probe output when the smoke test fails', async () => {
+    const entry = makeEntry()
+    const { queue, written } = makeQueue([
+      [/^mktemp -d/, () => ({ code: 0, stdout: '/home/user/.orca/code-intelligence/managed/clangd/.staging.X5' })],
+      [/sha256sum/, () => ({ code: 0, stdout: archiveDigest })],
+      [/cat .*active\.json/, () => ({ code: 1 })],
+      // bin/clangd only matches the probe command, never the archive URL/name.
+      [/bin\/clangd/, () => ({ code: 127, stdout: '', stderr: 'libstdc++.so.6: version GLIBCXX_3.4.30 not found' })]
+    ])
+
+    const result = await installSshManagedLanguageServer({
+      ctx: makeContext(queue),
+      manifest: { manifestVersion: 1, entries: [entry] },
+      tool: 'clangd',
+      route: { type: 'host-download' }
+    })
+    expect(result).toMatchObject({ status: 'failed' })
+    if (result.status === 'failed') {
+      expect(result.error).toContain('smoke test failed on the SSH Host')
+      expect(result.error).toContain('GLIBCXX_3.4.30')
+    }
+    expect(Object.keys(written)).toEqual([])
+  })
+
   it('returns unsupported for Windows SSH targets', async () => {
     const entry = makeEntry({ platform: 'win32', id: 'clangd@1.0.0:win32-x64' })
     const { queue } = makeQueue([])

@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import {
   compareManagedLanguageServerVersions,
+  manifestEntryForLaunch,
+  manifestEntryForVersion,
   resolveManagedLanguageServerCommand,
   resolveManagedLanguageServerEntry
 } from '../../shared/managed-language-server'
@@ -31,7 +33,6 @@ import {
   listManagedVersions,
   managedToolRoot,
   managedVersionDirectory,
-  manifestEntryById,
   readManagedActivation,
   writeManagedActivation
 } from './managed-language-server-install-root'
@@ -175,11 +176,12 @@ export class ManagedLanguageServerInstaller {
     if (!record) {
       return null
     }
-    const entry =
-      version !== undefined && version !== record.active.version
-        ? this.entryForVersion(tool, version)
-        : (manifestEntryById(this.options.manifest, record.active.entryId) ??
-          this.entryForVersion(tool, record.active.version))
+    const entry = manifestEntryForLaunch(
+      this.options.manifest,
+      record,
+      { tool, version },
+      { platform: process.platform, arch: process.arch }
+    )
     if (!entry) {
       return null
     }
@@ -257,8 +259,13 @@ export class ManagedLanguageServerInstaller {
     return { status: 'installed', version: entry.version }
   }
 
-  private async probeVersion(tool: string, version: string): Promise<void> {
-    const entry = this.entryForVersion(tool, version)
+  private async probeVersion(tool: ManagedLanguageServerToolId, version: string): Promise<void> {
+    const entry = manifestEntryForVersion(
+      this.options.manifest,
+      tool,
+      version,
+      { platform: process.platform, arch: process.arch }
+    )
     if (!entry) {
       throw new Error(`No trusted manifest entry for ${tool} ${version}`)
     }
@@ -307,19 +314,6 @@ export class ManagedLanguageServerInstaller {
         await rm(join(toolRoot, version), { recursive: true, force: true })
       }
     }
-  }
-
-  /** Platform-aware version lookup — one version ships several per-Host
-   * entries, and picking another platform's would yield node.exe paths on
-   * macOS/Linux. */
-  private entryForVersion(tool: string, version: string): ManagedLanguageServerManifestEntry | undefined {
-    return this.options.manifest.entries.find(
-      (entry) =>
-        entry.tool === tool &&
-        entry.version === version &&
-        entry.platform === process.platform &&
-        entry.arch === process.arch
-    )
   }
 
   private resolveHostTarget(): Promise<{ platform: string; arch: string; glibcVersion?: string }> {

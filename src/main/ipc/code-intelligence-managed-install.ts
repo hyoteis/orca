@@ -17,10 +17,12 @@ import { languageServerKindForScope } from '../../shared/code-intelligence-scope
 import { ManagedLanguageServerInstaller } from '../language-server/managed-language-server-installer'
 import {
   installSshManagedLanguageServer,
-  readSshManagedActivation,
-  sshManagedRemoteArch,
-  type SshManagedInstallContext
+  sshManagedRemoteArch
 } from '../language-server/code-intelligence-ssh-managed-install'
+import {
+  readSshManagedActivation,
+  type SshManagedInstallContext
+} from '../language-server/code-intelligence-ssh-managed-install-root'
 import {
   gcSshManagedLanguageServerVersions,
   resolveSshManagedLanguageServerCommand,

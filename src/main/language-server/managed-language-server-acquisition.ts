@@ -20,7 +20,8 @@ import {
   removeManagedStaging
 } from './managed-language-server-install-root'
 
-const PROBE_LOG_LIMIT = 200
+/** Probe/extraction tail length in error messages (shared with the SSH mirror). */
+export const PROBE_LOG_LIMIT = 200
 
 /** Local Host target for entry matching; probes glibc once on linux. */
 export async function resolveLocalManagedHostTarget(

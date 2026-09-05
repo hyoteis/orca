@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { ManagedLanguageServerManifestEntry } from './managed-language-server'
-import { compareManagedLanguageServerVersions, resolveManagedLanguageServerEntry } from './managed-language-server'
+import type {
+  ManagedLanguageServerActivationRecord,
+  ManagedLanguageServerManifestEntry
+} from './managed-language-server'
+import {
+  compareManagedLanguageServerVersions,
+  manifestEntryForLaunch,
+  resolveManagedLanguageServerEntry
+} from './managed-language-server'
 
 const entry = (overrides: Partial<ManagedLanguageServerManifestEntry>): ManagedLanguageServerManifestEntry => ({
   id: 'e',
@@ -30,6 +37,52 @@ describe('compareManagedLanguageServerVersions', () => {
     expect(compareManagedLanguageServerVersions('22.1.6', '22.1')).toBeGreaterThan(0)
     expect(compareManagedLanguageServerVersions('9.0.0', '10.0.0')).toBeLessThan(0)
     expect(compareManagedLanguageServerVersions('1.2.3', '1.2.3')).toBe(0)
+  })
+})
+
+describe('manifestEntryForLaunch', () => {
+  const host = { platform: 'linux', arch: 'x64' }
+  const m = manifest([
+    entry({ id: 'clangd@22.1.6:linux-x64' }),
+    entry({ id: 'clangd@21.0.0:linux-x64', version: '21.0.0' }),
+    entry({ id: 'clangd@22.1.6:win32-x64', platform: 'win32' })
+  ])
+  const activation = (version: string, entryId: string): ManagedLanguageServerActivationRecord => ({
+    active: { version, entryId, activatedAt: 1 }
+  })
+
+  it('prefers an explicitly requested version over the record', () => {
+    expect(
+      manifestEntryForLaunch(
+        m,
+        activation('22.1.6', 'clangd@22.1.6:linux-x64'),
+        { tool: 'clangd', version: '21.0.0' },
+        host
+      )
+    ).toMatchObject({ version: '21.0.0' })
+  })
+
+  it('resolves the active record by entryId', () => {
+    expect(
+      manifestEntryForLaunch(
+        m,
+        activation('22.1.6', 'clangd@22.1.6:linux-x64'),
+        { tool: 'clangd' },
+        host
+      )
+    ).toMatchObject({ id: 'clangd@22.1.6:linux-x64' })
+  })
+
+  it('falls back to a platform match when manifest rotation retired the entryId', () => {
+    expect(
+      manifestEntryForLaunch(m, activation('22.1.6', 'clangd@22.1.6:retired'), { tool: 'clangd' }, host)
+    ).toMatchObject({ id: 'clangd@22.1.6:linux-x64' })
+  })
+
+  it('returns undefined when the version has no entry for this host', () => {
+    expect(
+      manifestEntryForLaunch(m, activation('20.0.0', 'clangd@20.0.0:linux-x64'), { tool: 'clangd' }, host)
+    ).toBeUndefined()
   })
 })
 

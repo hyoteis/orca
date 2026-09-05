@@ -1,23 +1,25 @@
 import { shellEscape } from '../ssh/ssh-connection-utils'
-import { compareManagedLanguageServerVersions } from '../../shared/managed-language-server'
+import { compareManagedLanguageServerVersions, manifestEntryForLaunch } from '../../shared/managed-language-server'
 import type {
   ManagedLanguageServerInstallState,
   ManagedLanguageServerManifest,
-  ManagedLanguageServerManifestEntry,
   ManagedLanguageServerRollbackResult
 } from '../../shared/managed-language-server'
 import type { LanguageServerKind } from '../../shared/language-server-session'
 import { manifestEntryById } from './managed-language-server-install-root'
 import {
   listSshManagedVersions,
-  probeSshManagedEntry,
   readSshManagedActivation,
   remoteManagedVersionDirectory,
-  resolveSshManagedEntry,
-  resolveSshTemplate,
   writeSshManagedActivation,
   type SshManagedInstallContext
-} from './code-intelligence-ssh-managed-install'
+} from './code-intelligence-ssh-managed-install-root'
+import {
+  probeSshManagedEntry,
+  probeTail,
+  resolveSshTemplate
+} from './code-intelligence-ssh-managed-acquisition'
+import { resolveSshManagedEntry } from './code-intelligence-ssh-managed-install'
 
 export async function rollbackSshManagedLanguageServer(args: {
   ctx: SshManagedInstallContext
@@ -30,18 +32,20 @@ export async function rollbackSshManagedLanguageServer(args: {
     return { status: 'no-rollback' }
   }
   const entry = manifestEntryById(args.manifest, record.rollback.entryId)
-  if (
-    !entry ||
-    !(await probeSshManagedEntry(
-      ctx,
-      args.manifest,
-      entry,
-      remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version)
-    ))
-  ) {
+  const smoke = entry
+    ? await probeSshManagedEntry(
+        ctx,
+        args.manifest,
+        entry,
+        remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version)
+      )
+    : null
+  if (!entry || !smoke || smoke.code !== 0) {
     return {
       status: 'failed',
-      error: `Rollback target ${record.rollback.version} failed its smoke test`
+      error: `Rollback target ${record.rollback.version} failed its smoke test${
+        smoke ? `: ${probeTail(smoke)}` : ''
+      }`
     }
   }
   await writeSshManagedActivation(ctx, args.tool, { active: record.rollback, rollback: record.active })
@@ -97,11 +101,12 @@ export async function resolveSshManagedLanguageServerCommand(args: {
   if (!record) {
     return null
   }
-  const entry =
-    args.version !== undefined && args.version !== record.active.version
-      ? sshEntryForVersion(ctx, args.manifest, args.tool, args.version)
-      : (manifestEntryById(args.manifest, record.active.entryId) ??
-        sshEntryForVersion(ctx, args.manifest, args.tool, record.active.version))
+  const entry = manifestEntryForLaunch(
+    args.manifest,
+    record,
+    { tool: args.tool, version: args.version },
+    { platform: ctx.remotePlatform, arch: ctx.remoteArch }
+  )
   if (!entry) {
     return null
   }
@@ -111,22 +116,6 @@ export async function resolveSshManagedLanguageServerCommand(args: {
     entry,
     remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version),
     'command'
-  )
-}
-
-/** Platform-aware fallback lookup — one version ships several per-Host entries. */
-function sshEntryForVersion(
-  ctx: SshManagedInstallContext,
-  manifest: ManagedLanguageServerManifest,
-  tool: string,
-  version: string
-): ManagedLanguageServerManifestEntry | undefined {
-  return manifest.entries.find(
-    (entry) =>
-      entry.tool === tool &&
-      entry.version === version &&
-      entry.platform === ctx.remotePlatform &&
-      entry.arch === ctx.remoteArch
   )
 }
 

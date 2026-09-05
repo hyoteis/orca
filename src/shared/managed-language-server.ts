@@ -214,3 +214,38 @@ export function resolveManagedLanguageServerCommand(
   }
   return { executable: substitute(template.executable), args: template.args.map(substitute) }
 }
+
+/** Platform-aware version lookup — one version ships several per-Host entries,
+ * and picking another platform's would yield node.exe paths on macOS/Linux. */
+export function manifestEntryForVersion(
+  manifest: ManagedLanguageServerManifest,
+  tool: ManagedLanguageServerToolId,
+  version: string,
+  host: { platform: string; arch: string }
+): ManagedLanguageServerManifestEntry | undefined {
+  return manifest.entries.find(
+    (entry) =>
+      entry.tool === tool &&
+      entry.version === version &&
+      entry.platform === host.platform &&
+      entry.arch === host.arch
+  )
+}
+
+/** Launch-entry fallback chain shared by every Host adapter: an explicitly
+ * requested version wins over the record; the record's entryId falls back to
+ * a platform match when manifest rotation retired the id. */
+export function manifestEntryForLaunch(
+  manifest: ManagedLanguageServerManifest,
+  record: ManagedLanguageServerActivationRecord,
+  target: { tool: ManagedLanguageServerToolId; version?: string },
+  host: { platform: string; arch: string }
+): ManagedLanguageServerManifestEntry | undefined {
+  if (target.version !== undefined && target.version !== record.active.version) {
+    return manifestEntryForVersion(manifest, target.tool, target.version, host)
+  }
+  return (
+    manifest.entries.find((entry) => entry.id === record.active.entryId) ??
+    manifestEntryForVersion(manifest, target.tool, record.active.version, host)
+  )
+}
