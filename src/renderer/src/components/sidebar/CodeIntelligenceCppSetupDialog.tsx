@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Copy, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
@@ -10,8 +10,7 @@ import {
   type CodeIntelligenceCppSetupResult
 } from '../../../../shared/code-intelligence-cpp-setup'
 import { getCppScopeIdForRepo } from '../../../../shared/code-intelligence-scope'
-import { listRuntimeFiles } from '../../runtime/runtime-file-client'
-import { getCachedCodeIntelligenceDirectories } from '../../lib/language-server/code-intelligence-directory-scan-cache'
+import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
 import { Button } from '../ui/button'
 import {
@@ -26,11 +25,10 @@ import { SettingsSegmentedControl } from '../settings/SettingsFormControls'
 import { CodeIntelligenceBasicOptions } from './CodeIntelligenceBasicOptions'
 import { CodeIntelligenceDirectoryPicker } from './CodeIntelligenceDirectoryPicker'
 import {
-  getCodeIntelligenceCustomPaths,
-  getMinimalCodeIntelligenceDirectories
-} from './code-intelligence-directory-list'
+  useSetupScopeSelection,
+  type SetupScopeSelectionMode
+} from './code-intelligence-setup-scope-selection'
 
-type SelectionMode = 'all' | 'selected'
 type ModalData = { repoId?: string }
 
 export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | null {
@@ -40,110 +38,47 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
   const repos = useAppStore((state) => state.repos)
   const settings = useAppStore((state) => state.settings)
   const fetchSettings = useAppStore((state) => state.fetchSettings)
-  const settingsRef = useRef(settings)
-  settingsRef.current = settings
   const repo = repos.find((candidate) => candidate.id === modalData.repoId) ?? null
-  const [mode, setMode] = useState<SelectionMode>('all')
-  const [roots, setRoots] = useState<string[]>([])
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [directoryQuery, setDirectoryQuery] = useState('')
-  const [scanGeneration, setScanGeneration] = useState(0)
   const [additionalIncludes, setAdditionalIncludes] = useState('')
   const [defines, setDefines] = useState('')
   const [cppStandard, setCppStandard] = useState<'c++17' | 'c++20' | 'c++23'>('c++17')
-  const [stage, setStage] = useState<'idle' | 'discovering' | 'running' | 'success'>('idle')
+  const [stage, setStage] = useState<'idle' | 'running' | 'success'>('idle')
   const [result, setResult] = useState<CodeIntelligenceCppSetupResult | null>(null)
   const open = activeModal === 'code-intelligence-cpp-setup'
   const setupHost = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
   const setupSupported = setupHost?.kind === 'local' || setupHost?.kind === 'ssh'
   const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)
   const setupHostLabel = setupHost?.kind === 'ssh' ? (sshTargetLabels.get(setupHost.targetId) ?? setupHost.targetId) : ''
+  const {
+    mode,
+    setMode,
+    language,
+    setLanguage,
+    roots,
+    selected,
+    setSelected,
+    directoryQuery,
+    setDirectoryQuery,
+    rescan,
+    scanning,
+    scanError,
+    selectedRoots,
+    pythonScopeId
+  } = useSetupScopeSelection({ open, repo })
 
   useEffect(() => {
     if (!open) {
       return
     }
-    setScanGeneration(0)
+    setResult(null)
+    setStage('idle')
   }, [open, repo?.id])
 
   useEffect(() => {
-    if (!open || !repo) {
-      return
+    if (scanError) {
+      setResult(scanError)
     }
-    let cancelled = false
-    setMode('all')
-    setDirectoryQuery('')
-    setResult(null)
-    setStage('discovering')
-    const host = parseExecutionHostId(getRepoExecutionHostId(repo))
-    const executionHostId = getRepoExecutionHostId(repo)
-    void getCachedCodeIntelligenceDirectories({
-      key: `${executionHostId}:${repo.id}:${repo.path}`,
-      force: scanGeneration > 0,
-      loadFiles: () =>
-        listRuntimeFiles(
-          {
-            settings: { ...settingsRef.current, activeRuntimeEnvironmentId: null },
-            worktreeId: repo.id,
-            worktreePath: repo.path,
-            connectionId: repo.connectionId ?? undefined,
-            expectedExecutionHostId:
-              host?.kind === 'local' || host?.kind === 'ssh' ? host.id : undefined
-          },
-          { rootPath: repo.path }
-        )
-    })
-      .then((detected) => {
-        if (cancelled) {
-          return
-        }
-        const existingMembers =
-          settingsRef.current?.codeIntelligenceScopes
-            ?.find((scope) => scope.id === getCppScopeIdForRepo(repo))
-            ?.members.map((member) => member.path) ?? []
-        setRoots(detected)
-        // Why: tree rows map 1:1 to members — pre-check exactly what the scope holds.
-        setSelected(new Set(existingMembers))
-        setStage('idle')
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return
-        }
-        setResult({
-          ok: false,
-          message: translate(
-            'settings.codeIntelligence.buildScanFailed',
-            'Could not scan C++ build folders'
-          ),
-          log: error instanceof Error ? (error.stack ?? error.message) : String(error),
-          relativeRoots: [],
-          installedTools: []
-        })
-        setStage('idle')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [open, repo, scanGeneration])
-
-  const relativeSelectedRoots = useMemo(
-    () =>
-      mode === 'all'
-        ? roots.includes('.')
-          ? ['.']
-          : roots
-        : getMinimalCodeIntelligenceDirectories(roots, selected),
-    [mode, roots, selected]
-  )
-  const customRoots = useMemo(
-    () => getCodeIntelligenceCustomPaths(roots, selected),
-    [roots, selected]
-  )
-  const selectedRoots = useMemo(
-    () => [...relativeSelectedRoots, ...customRoots],
-    [relativeSelectedRoots, customRoots]
-  )
+  }, [scanError])
 
   const runSetup = async (): Promise<void> => {
     if (!repo) {
@@ -233,8 +168,39 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     }
   }
 
+  /** Python needs no toolchain — persist folder members and close, like the
+      removed add-folder dialog did. */
+  const savePythonScope = async (): Promise<void> => {
+    if (!repo || !pythonScopeId || selectedRoots.length === 0) {
+      return
+    }
+    const existing = settings?.codeIntelligenceScopes?.find(
+      (scope) => scope.id === pythonScopeId
+    )
+    const base =
+      existing ??
+      createRepositoryCodeIntelligenceScope({
+        repoId: repo.id,
+        repoName: repo.displayName,
+        repoPath: repo.path,
+        isFolder: isFolderRepo(repo),
+        executionHostId: getRepoExecutionHostId(repo),
+        language: 'python'
+      })
+    const saved = await writeCodeIntelligenceScopeEdit({
+      ...base,
+      members: selectedRoots.map((path) => ({ path, visibleResults: true }))
+    })
+    if (saved) {
+      toast.success(
+        translate('settings.codeIntelligence.pythonScopeSaved', 'Python folders saved')
+      )
+      closeModal()
+    }
+  }
+
   const runningText =
-    stage === 'discovering'
+    scanning
       ? translate('settings.codeIntelligence.scanningBuildFolders', 'Scanning CMake and GN build folders...')
       : setupHost?.kind === 'ssh'
         ? translate('settings.codeIntelligence.runningSetupOnHost', 'Installing tools and generating compile commands on {{host}}...', { host: setupHostLabel })
@@ -243,24 +209,29 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
   if (!open || !repo) {
     return null
   }
-  const busy = stage === 'discovering' || stage === 'running'
+  const busy = scanning || stage === 'running'
   return (
     <Dialog open onOpenChange={(next) => !next && !busy && closeModal()}>
       <DialogContent className="max-h-[calc(100vh-2rem)] w-[calc(100%-2rem)] min-w-0 overflow-x-hidden overflow-y-auto scrollbar-sleek sm:w-[36rem] sm:max-w-[36rem]">
         <DialogHeader>
           <DialogTitle>
-            {translate('settings.codeIntelligence.setupTitle', 'Configure C++ code intelligence')}
+            {translate('settings.codeIntelligence.setupTitle', 'Configure code intelligence')}
           </DialogTitle>
           <DialogDescription>
-            {setupHost?.kind === 'ssh'
+            {language === 'python'
               ? translate(
-                  'settings.codeIntelligence.sshSetupDescription',
-                  'Orca runs C++ setup on the connected SSH Host and installs missing tools there.'
+                  'settings.codeIntelligence.pythonSetupDescription',
+                  'Pick Python code folders. They stay relative to the workspace; no tools are installed.'
                 )
-              : translate(
-                  'settings.codeIntelligence.setupDescription',
-                  'Orca installs missing tools and generates compile commands. Source files are not modified.'
-                )}
+              : setupHost?.kind === 'ssh'
+                ? translate(
+                    'settings.codeIntelligence.sshSetupDescription',
+                    'Orca runs C++ setup on the connected SSH Host and installs missing tools there.'
+                  )
+                : translate(
+                    'settings.codeIntelligence.setupDescription',
+                    'Orca installs missing tools and generates compile commands. Source files are not modified.'
+                  )}
           </DialogDescription>
         </DialogHeader>
 
@@ -278,8 +249,20 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         ) : (
           <div className="min-w-0 space-y-4">
             <SettingsSegmentedControl
+              value={language}
+              onChange={(value) => setLanguage(value as 'cpp' | 'python')}
+              ariaLabel={translate(
+                'settings.codeIntelligence.languageSelection',
+                'Language scope'
+              )}
+              options={[
+                { value: 'cpp', label: 'C++' },
+                { value: 'python', label: 'Python' }
+              ]}
+            />
+            <SettingsSegmentedControl
               value={mode}
-              onChange={(value) => setMode(value as SelectionMode)}
+              onChange={(value) => setMode(value as SetupScopeSelectionMode)}
               ariaLabel={translate('settings.codeIntelligence.scopeSelection', 'Scope selection')}
               options={[
                 {
@@ -297,20 +280,22 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
                 directories={roots}
                 selected={selected}
                 query={directoryQuery}
-                discovering={stage === 'discovering'}
+                discovering={scanning}
                 onQueryChange={setDirectoryQuery}
                 onSelectedChange={setSelected}
-                onRescan={() => setScanGeneration((value) => value + 1)}
+                onRescan={rescan}
               />
             ) : null}
-            <CodeIntelligenceBasicOptions
-              additionalIncludes={additionalIncludes}
-              defines={defines}
-              cppStandard={cppStandard}
-              onAdditionalIncludesChange={setAdditionalIncludes}
-              onDefinesChange={setDefines}
-              onCppStandardChange={setCppStandard}
-            />
+            {language === 'cpp' ? (
+              <CodeIntelligenceBasicOptions
+                additionalIncludes={additionalIncludes}
+                defines={defines}
+                cppStandard={cppStandard}
+                onAdditionalIncludesChange={setAdditionalIncludes}
+                onDefinesChange={setDefines}
+                onCppStandardChange={setCppStandard}
+              />
+            ) : null}
             {busy ? (
               <div
                 className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -368,13 +353,23 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
               : translate('settings.codeIntelligence.cancel', 'Cancel')}
           </Button>
           {setupSupported && stage !== 'success' ? (
-            <Button
-              type="button"
-              disabled={busy || selectedRoots.length === 0}
-              onClick={() => void runSetup()}
-            >
-              {translate('settings.codeIntelligence.generateEnable', 'Generate and enable')}
-            </Button>
+            language === 'python' ? (
+              <Button
+                type="button"
+                disabled={selectedRoots.length === 0}
+                onClick={() => void savePythonScope()}
+              >
+                {translate('settings.codeIntelligence.saveFolders', 'Save')}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                disabled={busy || selectedRoots.length === 0}
+                onClick={() => void runSetup()}
+              >
+                {translate('settings.codeIntelligence.generateEnable', 'Generate and enable')}
+              </Button>
+            )
           ) : null}
         </DialogFooter>
       </DialogContent>

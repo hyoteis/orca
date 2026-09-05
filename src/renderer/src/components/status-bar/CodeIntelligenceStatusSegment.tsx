@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Folder,
   FolderOpen,
-  RefreshCw,
   ShieldCheck,
   X
 } from 'lucide-react'
@@ -48,7 +47,6 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
   const repos = useAppStore((state) => state.repos)
   const folderWorkspaces = useAppStore((state) => state.folderWorkspaces)
   const activeWorktreeId = useAppStore((state) => state.activeWorktreeId)
-  const openModal = useAppStore((state) => state.openModal)
   const [open, setOpen] = useState(false)
   // Caches managed-install events while closed (#35); flags failures on the icon.
   const installFailure = useManagedInstallEventCacheKeeper()
@@ -384,20 +382,6 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
               >
                 <FolderOpen className="size-3.5" />
                 {translate('settings.codeIntelligence.openDatabase', 'Open database')}
-              </Button>
-            ) : null}
-            {activeRepo ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onClick={() => {
-                  setOpen(false)
-                  openModal('code-intelligence-cpp-setup', { repoId: activeRepo.id })
-                }}
-              >
-                <RefreshCw className="size-3.5" />
-                {translate('settings.codeIntelligence.reconfigure', 'Reconfigure')}
               </Button>
             ) : null}
           </div>

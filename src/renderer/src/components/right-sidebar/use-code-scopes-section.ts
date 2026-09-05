@@ -16,10 +16,8 @@ import {
 import {
   getFolderWorkspaceExecutionHostId
 } from '../../../../shared/folder-workspace-repo-link'
-import { isFolderRepo } from '../../../../shared/repo-kind'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
-import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
 import {
   getStatusBarCodeIntelligenceScopes,
   findSessionLinkedFolderRepo
@@ -33,7 +31,6 @@ import {
 } from './code-panel-member-tree'
 import { readFileExplorerDirectory } from './file-explorer-directory-listing'
 import { openCodePanelFile } from './code-panel-open-file'
-import type { CodePanelAddFolderScopeSeed } from './CodePanelAddFolderDialog'
 import { useLazyDirectoryListing } from './use-lazy-directory-listing'
 
 export type CodePanelDirectoryLister = (dirPath: string) => Promise<DirEntry[]>
@@ -95,19 +92,6 @@ export function useCodeScopesSection({
   }, [scopes])
 
   const seedSourceRepo = activeRepo ?? linkedFolderRepo
-  // Creation seed mirrors the status-bar scope lookup (repoId + folder flag).
-  const addFolderSeed: CodePanelAddFolderScopeSeed | null = useMemo(() => {
-    if (!activeWorktreeId || !effectiveWorktree || !seedSourceRepo || !executionHostId) {
-      return null
-    }
-    return {
-      repoId: bridged ? seedSourceRepo.id : getRepoIdFromWorktreeId(activeWorktreeId),
-      repoName: seedSourceRepo.displayName,
-      repoPath: bridged ? seedSourceRepo.path : effectiveWorktree.path,
-      isFolder: isFolderRepo(seedSourceRepo),
-      executionHostId
-    }
-  }, [activeWorktreeId, effectiveWorktree, seedSourceRepo, executionHostId, bridged])
 
   const openAsWorkspace = (row: CodePanelMemberRow): void => {
     if (!seedSourceRepo) {
@@ -184,10 +168,8 @@ export function useCodeScopesSection({
     folderWorkspace,
     linkedFolderRepo,
     bridged,
-    addFolderSeed,
     hostLabel: executionHostId ? getExecutionHostLabel(executionHostId) : null,
     listing,
-    list,
     openAsWorkspace,
     addWorkspaceFolderAsProject,
     openFile,

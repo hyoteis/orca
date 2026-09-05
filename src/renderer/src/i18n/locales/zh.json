@@ -77,7 +77,6 @@
         "workingLabel": "正在处理…",
         "openLink": "打开下载页面"
       },
-      "setupMenu": "配置代码",
       "setupTitle": "配置代码",
       "setupDescription": "Orca 会安装缺失工具，并生成编译命令。源文件不会被修改。",
       "buildScanFailed": "无法扫描 C++ 构建文件夹",
@@ -173,7 +172,6 @@
       "healthUnknown": "状态不可用",
       "compileCommandCount": "{{value0}} 条编译命令",
       "openDatabase": "打开数据库",
-      "reconfigure": "重新配置",
       "pendingReconsentSummary": "代码智能文件夹自授权后已变更",
       "foldersChangedSinceAuthorization": "自授权后已变更 {{value0}} 个文件夹",
       "configurationChangedSinceAuthorization": "自授权后配置已变更",
@@ -196,7 +194,11 @@
       "setupReady": "C++ 代码智能已就绪",
       "setupUnsupportedHost": "代码智能配置目前支持本地和 SSH 主机。",
       "runningSetupOnHost": "正在 {{host}} 上安装工具并生成编译命令…",
-      "sshSetupDescription": "Orca 会在已连接的 SSH 主机上执行 C++ 设置，并按需在该主机上安装缺失工具。"
+      "sshSetupDescription": "Orca 会在已连接的 SSH 主机上执行 C++ 设置，并按需在该主机上安装缺失工具。",
+      "languageSelection": "语言范围",
+      "pythonSetupDescription": "选择 Python 代码文件夹;仅接受工作区相对路径,无需安装工具。",
+      "saveFolders": "保存",
+      "pythonScopeSaved": "Python 代码范围已保存"
     },
     "appearance": {
       "language": {
@@ -10384,9 +10386,9 @@
             "430f1a62d4": "无法在主机上解决选中的讨论串。"
           },
           "CodeScopesSection": {
-            "addMember": "添加文件夹到代码范围",
             "title": "代码范围",
-            "toggleSection": "切换代码范围段"
+            "toggleSection": "切换代码范围段",
+            "configureCode": "配置代码"
           },
           "CreatePullRequestDialog": {
             "2bc1b4345e": "取消",
@@ -11669,6 +11671,10 @@
             "mayBeSlower": "可能较慢",
             "slowest": "最慢",
             "unlimited": "无限制"
+          },
+          "WorktreeSection": {
+            "title": "工作树",
+            "toggleSection": "切换工作树段"
           }
         }
       },

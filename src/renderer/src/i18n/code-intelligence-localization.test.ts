@@ -4,7 +4,7 @@ import zh from './locales/zh.json'
 describe('code intelligence localization', () => {
   it('ships real Chinese text instead of encoding replacement characters', () => {
     const catalog = zh.settings.codeIntelligence
-    expect(catalog.setupMenu).toBe('配置代码')
+    expect(catalog.setupTitle).toBe('配置代码')
     const flatten = (node: unknown): string[] =>
       typeof node === 'string'
         ? [node]

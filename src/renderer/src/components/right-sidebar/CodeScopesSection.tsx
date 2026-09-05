@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
-import { CodePanelAddFolderDialog } from './CodePanelAddFolderDialog'
 import { LANGUAGE_DISPLAY, LanguageBadge } from './code-panel-language-badge'
 import {
   FolderBridgeInfoLine,
@@ -29,14 +29,12 @@ export function CodeScopesSection({
     folderWorkspace,
     linkedFolderRepo,
     bridged,
-    addFolderSeed,
     hostLabel,
-    listing,
-    list
+    listing
   } = section
   const { pendingDirs } = listing
+  const openModal = useAppStore((s) => s.openModal)
   const [collapsed, setCollapsed] = useState(false)
-  const [addFolderOpen, setAddFolderOpen] = useState(false)
 
   // Hidden when nothing can render — OpenEditorsSection's precedent for empty sections.
   const folderGap = folderWorkspace !== null && linkedFolderRepo === null
@@ -73,20 +71,21 @@ export function CodeScopesSection({
           ) : null}
           <span className="ml-auto tabular-nums">{rows.length}</span>
         </button>
-        {/* #76: the add-member affordance lives in the section header, not the Explorer header. */}
+        {/* #76: configure is the section's single affordance — the setup dialog
+            owns folder add/remove via its directory picker. */}
         <Button
           type="button"
           variant="ghost"
           size="icon-xs"
           className="text-muted-foreground hover:text-foreground"
           aria-label={translate(
-            'auto.components.right.sidebar.CodeScopesSection.addMember',
-            'Add folder to code scopes'
+            'auto.components.right.sidebar.CodeScopesSection.configureCode',
+            'Configure Code'
           )}
-          disabled={!addFolderSeed}
-          onClick={() => setAddFolderOpen(true)}
+          disabled={!configureRepoId}
+          onClick={() => openModal('code-intelligence-cpp-setup', { repoId: configureRepoId })}
         >
-          <Plus className="size-3" />
+          <Settings2 className="size-3" />
         </Button>
       </div>
       {/* ponytail: collapse state is session-local, matching OpenEditorsSection. */}
@@ -121,17 +120,6 @@ export function CodeScopesSection({
                   { value0: LANGUAGE_DISPLAY[language] }
                 )}
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="h-5 gap-1 px-1.5"
-                disabled={!addFolderSeed}
-                onClick={() => setAddFolderOpen(true)}
-              >
-                <Plus className="size-3" />
-                {translate('auto.components.rightSidebar.CodePanel.addFolder', 'Add Folder')}
-              </Button>
             </div>
           ))}
           {pendingDirs.size > 0 ? (
@@ -142,15 +130,6 @@ export function CodeScopesSection({
           ) : null}
         </>
       )}
-      {addFolderSeed && addFolderOpen ? (
-        <CodePanelAddFolderDialog
-          onOpenChange={setAddFolderOpen}
-          scopes={scopes}
-          scopeSeed={addFolderSeed}
-          workspaceRootPath={addFolderSeed.repoPath}
-          listDirectory={list}
-        />
-      ) : null}
     </div>
   )
 }

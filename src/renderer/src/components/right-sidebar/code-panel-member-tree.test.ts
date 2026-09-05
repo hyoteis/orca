@@ -42,11 +42,19 @@ describe('buildCodePanelMemberRows', () => {
     expect(rows).toEqual([
       {
         path: 'src/core',
+        displayName: 'src/core',
         directory: '/ws/repo-1/src/core',
         languages: ['cpp', 'python'],
         browseBlocked: false
       }
     ])
+  })
+
+  it('labels the workspace-root member with the root folder name, not "."', () => {
+    const rows = buildCodePanelMemberRows([scope({ members: [{ path: '.', visibleResults: true }] })])
+    expect(rows[0]?.path).toBe('.')
+    expect(rows[0]?.displayName).toBe('repo-1')
+    expect(rows[0]?.directory).toBe('/ws/repo-1')
   })
 
   it('sorts merged rows by path', () => {
@@ -89,9 +97,10 @@ describe('buildCodePanelMemberRows', () => {
       })
     ])
     expect(rows).toEqual([
-      { path: 'src', directory: '/ws/repo-1/src', languages: ['cpp'], browseBlocked: true },
+      { path: 'src', displayName: 'src', directory: '/ws/repo-1/src', languages: ['cpp'], browseBlocked: true },
       {
         path: 'tools',
+        displayName: 'tools',
         directory: '/ws/repo-1/tools',
         languages: ['python'],
         browseBlocked: false
@@ -117,6 +126,7 @@ describe('buildCodePanelMemberRows', () => {
     expect(rows).toEqual([
       {
         path: 'src',
+        displayName: 'src',
         directory: '/ws/repo-1/src',
         languages: ['cpp', 'python'],
         browseBlocked: true

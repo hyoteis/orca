@@ -76,7 +76,7 @@ export function CodePanelMemberTreeRow({
               )}
             />
           )}
-          <span className="min-w-0 flex-1 truncate font-mono text-xs">{row.path}</span>
+          <span className="min-w-0 flex-1 truncate font-mono text-xs">{row.displayName}</span>
           {row.languages.map((language) => (
             <LanguageBadge key={language} language={language} />
           ))}

@@ -150,14 +150,28 @@ describe('CodeScopesSection shell', () => {
     expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
   })
 
-  it('opens the add-folder picker from the in-section + affordance', () => {
+  it('opens the configure dialog from the in-section gear affordance', () => {
     setupState({ scopes: [scope({ executionHostId: 'ssh:my-host' })], worktreeHostId: 'ssh:my-host' })
     render(<CodeScopesSection listDirectory={vi.fn()} />)
-    const addMember = screen.getByRole('button', { name: 'Add folder to code scopes' })
-    expect((addMember as HTMLButtonElement).disabled).toBe(false)
-    fireEvent.click(addMember)
-    expect(screen.getByText('Add Folder to Code Scopes')).toBeTruthy()
-    expect(screen.getByText(/my-host/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Configure Code' }))
+    expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1'
+    })
+  })
+
+  it('disables the gear when no cpp scope backs a configure target', () => {
+    setupState({
+      scopes: [
+        scope({
+          id: 'local:worktree:repo-1:python',
+          language: 'python',
+          members: [{ path: 'src', visibleResults: true }]
+        })
+      ]
+    })
+    render(<CodeScopesSection listDirectory={vi.fn()} />)
+    const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
+    expect(gear.disabled).toBe(true)
   })
 })
 
@@ -336,7 +350,7 @@ describe('CodeScopesSection folder workspace bridging', () => {
     })
   })
 
-  it('opens the add-folder picker from the bridged repo', () => {
+  it('opens the configure dialog from the bridged repo', () => {
     setupState({
       activeWorktreeId: 'folder:fw-1',
       folderWorkspaces: [FOLDER_WS],
@@ -349,10 +363,12 @@ describe('CodeScopesSection folder workspace bridging', () => {
       ]
     })
     render(<CodeScopesSection listDirectory={vi.fn()} />)
-    const addMember = screen.getByRole('button', { name: 'Add folder to code scopes' })
-    expect((addMember as HTMLButtonElement).disabled).toBe(false)
-    fireEvent.click(addMember)
-    expect(screen.getByText('Add Folder to Code Scopes')).toBeTruthy()
+    const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
+    expect(gear.disabled).toBe(false)
+    fireEvent.click(gear)
+    expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1'
+    })
   })
 
   it('refuses reveal for a bridged ssh workspace', async () => {

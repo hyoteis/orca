@@ -8,7 +8,6 @@ import {
 import type { Range } from '@tanstack/react-virtual'
 import {
   AlertTriangle,
-  Braces,
   ChevronDown,
   CircleX,
   Ellipsis,
@@ -663,7 +662,6 @@ type VirtualizedWorktreeViewportProps = {
   collapsedGroups: Set<string>
   handleCreateForRepo: (projectId: string) => void
   handleOpenRepoSettings: (projectId: string, sectionId?: string) => void
-  handleSetupCodeIntelligence: (projectId: string) => void
   handleOpenWorktreeVisibility: (projectId: string) => void
   handleShowImportedWorktrees: (projectId: string) => void
   handleKeepImportedWorktreesHidden: (projectId: string) => void
@@ -1331,7 +1329,6 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
   collapsedGroups,
   handleCreateForRepo,
   handleOpenRepoSettings,
-  handleSetupCodeIntelligence,
   handleOpenWorktreeVisibility,
   handleShowImportedWorktrees,
   handleKeepImportedWorktreesHidden,
@@ -4616,19 +4613,6 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
                             <DropdownMenuItem
                               onSelect={() => {
                                 if (row.repo) {
-                                  handleSetupCodeIntelligence(row.repo.id)
-                                }
-                              }}
-                            >
-                              <Braces className="size-3.5" />
-                              {translate(
-                                'settings.codeIntelligence.setupMenu',
-                                'Configure C++ code intelligence'
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                if (row.repo) {
                                   handleOpenRepoSettings(
                                     row.repo.id,
                                     getRepositoryIconSectionId(row.repo.id)
@@ -6072,12 +6056,6 @@ const WorktreeList = React.memo(function WorktreeList({
     },
     [openModal]
   )
-  const handleSetupCodeIntelligence = useCallback(
-    (projectId: string) => {
-      openModal('code-intelligence-cpp-setup', { repoId: projectId })
-    },
-    [openModal]
-  )
 
   const setImportedWorktreeCardState = useCallback(
     (projectId: string, state: ImportedWorktreeCardActionState | null) => {
@@ -6876,7 +6854,6 @@ const WorktreeList = React.memo(function WorktreeList({
         collapsedGroups={effectiveCollapsedGroups}
         handleCreateForRepo={handleCreateForRepo}
         handleOpenRepoSettings={handleOpenRepoSettings}
-        handleSetupCodeIntelligence={handleSetupCodeIntelligence}
         handleOpenWorktreeVisibility={handleOpenWorktreeVisibility}
         handleShowImportedWorktrees={handleShowImportedWorktrees}
         handleKeepImportedWorktreesHidden={handleKeepImportedWorktreesHidden}

@@ -104,8 +104,7 @@
         "workingLabel": "Working…",
         "openLink": "Open download page"
       },
-      "setupMenu": "Configure C++ code intelligence",
-      "setupTitle": "Configure C++ code intelligence",
+      "setupTitle": "Configure code intelligence",
       "setupDescription": "Orca installs missing tools and generates compile commands. Source files are not modified.",
       "buildScanFailed": "Could not scan C++ build folders",
       "setupComplete": "C++ setup generated and enabled",
@@ -200,7 +199,6 @@
       "healthUnknown": "Status unavailable",
       "compileCommandCount": "{{value0}} compile commands",
       "openDatabase": "Open database",
-      "reconfigure": "Reconfigure",
       "pendingReconsentSummary": "Code intelligence folders changed since authorization",
       "foldersChangedSinceAuthorization": "{{value0}} folders changed since authorization",
       "configurationChangedSinceAuthorization": "Configuration changed since authorization",
@@ -224,7 +222,11 @@
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
       "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there.",
       "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}...",
-      "toggleFolderTree": "Expand folder"
+      "toggleFolderTree": "Expand folder",
+      "languageSelection": "Language scope",
+      "pythonSetupDescription": "Pick Python code folders. They stay relative to the workspace; no tools are installed.",
+      "saveFolders": "Save",
+      "pythonScopeSaved": "Python folders saved"
     },
     "appearance": {
       "language": {
@@ -10916,9 +10918,9 @@
             "updateReactionFailed": "Failed to update reaction."
           },
           "CodeScopesSection": {
-            "addMember": "Add folder to code scopes",
             "title": "Code scopes",
-            "toggleSection": "Toggle Code scopes section"
+            "toggleSection": "Toggle Code scopes section",
+            "configureCode": "Configure Code"
           },
           "CreatePullRequestDialog": {
             "2bc1b4345e": "Cancel",
@@ -12325,6 +12327,10 @@
             "pin": "Pin",
             "unpin": "Unpin",
             "toggleSection": "Toggle Open Editors section"
+          },
+          "WorktreeSection": {
+            "title": "Worktree",
+            "toggleSection": "Toggle worktree section"
           }
         }
       },
@@ -14925,15 +14931,6 @@
       "rightSidebar": {
         "CodePanel": {
           "addAsProject": "Add Folder as Project",
-          "addFolder": "Add Folder",
-          "addFolderConfirm": "Add",
-          "addFolderCppScope": "C++ scope",
-          "addFolderDescription": "Pick a folder from the workspace tree, or enter an absolute Host path outside the workspace.",
-          "addFolderFailed": "Could not add this folder",
-          "addFolderPythonAbsolute": "Python code folders must stay relative to the workspace",
-          "addFolderPythonOnlyRelative": "Python accepts workspace-relative paths only.",
-          "addFolderPythonScope": "Python scope",
-          "addFolderTitle": "Add Folder to Code Scopes",
           "bridgedInfo": "Code folders come from the linked project {{value0}}; changes here write back to it.",
           "notProjectCopy": "Code folders follow the project. Add this folder as a project to configure C++ / Python indexing here.",
           "notProjectTitle": "This folder is not a project yet",

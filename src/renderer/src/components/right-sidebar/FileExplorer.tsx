@@ -77,6 +77,7 @@ import type { RightSidebarExplorerView } from '../../../../shared/types'
 import { getRuntimeEnvironmentIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { createNewTerminalTab } from '@/components/terminal/terminal-tab-create'
 import { useWorkspaceFileBrowserActionPredicate } from '@/lib/file-preview'
+import { WorktreeSection } from './WorktreeSection'
 
 function FileExplorerFiles(): React.JSX.Element {
   const explorerView = useAppStore((s) => s.rightSidebarExplorerView)
@@ -768,8 +769,6 @@ function FileExplorerFiles(): React.JSX.Element {
           showDotfiles={showDotfiles}
           onToggleDotfiles={handleToggleDotfiles}
         />
-        <OpenEditorsSection />
-        <CodeScopesSection />
         <FileExplorerQueryStrip
           view={explorerView}
           onSelectView={handleSelectExplorerView}
@@ -829,9 +828,12 @@ function FileExplorerFiles(): React.JSX.Element {
         >
           <SearchFilters {...searchPanel.filtersProps} />
         </div>
-        {/* Why: the Files and Contents views share one body slot; layering them
-           avoids remounting heavy virtualized panes while preserving full height. */}
-        <div className="relative min-h-0 flex-1 overflow-hidden">
+        <OpenEditorsSection />
+        <CodeScopesSection />
+        <WorktreeSection>
+          {/* Why: the Files and Contents views share one body slot; layering them
+             avoids remounting heavy virtualized panes while preserving full height. */}
+          <div className="relative min-h-0 flex-1 overflow-hidden">
           <ScrollArea
             className={cn(
               // Why: Radix ScrollArea.Root hard-sets inline `position: relative`,
@@ -955,7 +957,8 @@ function FileExplorerFiles(): React.JSX.Element {
               noWorkspaceSelected()
             )}
           </div>
-        </div>
+          </div>
+        </WorktreeSection>
       </div>
 
       <FileExplorerBackgroundMenu
