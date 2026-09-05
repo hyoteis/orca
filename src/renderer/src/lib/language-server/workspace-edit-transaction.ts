@@ -40,6 +40,12 @@ export type WorkspaceEditTransactionPorts = {
 
 export type WorkspaceEditTransactionScope = WorkspaceEditScopeRef
 
+/** Terminal state of the guarded pipeline; shared module so the flow and the
+ * preview drawer both depend on the engine, not on each other. */
+export type GuardedSemanticEditResult =
+  | { kind: 'cancelled' }
+  | { kind: 'outcome'; outcome: WorkspaceEditTransactionOutcome | null }
+
 // ponytail: one global serial queue — semantic edits are rare user actions;
 // per-path lock graphs can follow if concurrent edits ever contend.
 let transactionQueue: Promise<unknown> = Promise.resolve()

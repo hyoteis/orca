@@ -9,6 +9,7 @@ import { planWorkspaceEdit, type WorkspaceEditPlanView } from './workspace-edit-
 import { openSemanticEditDrawer } from './semantic-workspace-edit-drawer-store'
 import {
   runWorkspaceEditTransaction,
+  type GuardedSemanticEditResult,
   type WorkspaceEditTransactionPorts
 } from './workspace-edit-transaction'
 import {
@@ -53,10 +54,6 @@ export function singleDocumentWorkspaceEdits(
     ? collect(edit.changes![currentUri].filter((candidate) => 'newText' in candidate) as TextEdit[])
     : null
 }
-
-export type GuardedSemanticEditResult =
-  | { kind: 'cancelled' }
-  | { kind: 'outcome'; outcome: WorkspaceEditTransactionOutcome | null }
 
 /** Everything the guarded flow needs to land an edit for one scope. */
 export type SemanticWorkspaceEditContext = {

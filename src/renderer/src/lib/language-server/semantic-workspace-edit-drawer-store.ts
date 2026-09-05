@@ -7,10 +7,10 @@ import type {
   WorkspaceEditPlannedStep,
   WorkspaceEditTransactionOutcome
 } from '../../../../shared/language-server-workspace-edit'
-import type { GuardedSemanticEditResult } from './semantic-workspace-edit-flow'
 import { planWorkspaceEdit, type WorkspaceEditPlanView } from './workspace-edit-plan'
 import {
   runWorkspaceEditTransaction,
+  type GuardedSemanticEditResult,
   type WorkspaceEditTransactionPorts
 } from './workspace-edit-transaction'
 import {
