@@ -3,6 +3,7 @@ import type { DocumentSymbol, SymbolInformation } from 'vscode-languageserver-pr
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   OUTLINE_SUPPORTED_LANGUAGES,
+  outlineLanguageFamily,
   outlineRowsFromDocumentSymbols,
   resolveOutlineTier
 } from './outline-model'
@@ -69,6 +70,20 @@ describe('resolveOutlineTier', () => {
     expect(
       resolveOutlineTier({ language: 'python', scope: scope({ consent: freshConsent }) })
     ).toEqual({ kind: 'semantic' })
+  })
+
+  it('tiers C++ family languages through their cpp scope (#100)', () => {
+    const cppScope = scope({ language: 'cpp', consent: freshConsent })
+    expect(resolveOutlineTier({ language: 'cpp', scope: cppScope })).toEqual({
+      kind: 'semantic'
+    })
+    expect(resolveOutlineTier({ language: 'c', scope: null })).toEqual({
+      kind: 'unavailable',
+      reason: 'no-scope'
+    })
+    expect(resolveOutlineTier({ language: 'objective-cpp', scope: cppScope })).toEqual({
+      kind: 'semantic'
+    })
   })
 
   it('treats a disabled scope like no scope', () => {
@@ -189,7 +204,23 @@ describe('outlineRowsFromDocumentSymbols', () => {
 })
 
 describe('OUTLINE_SUPPORTED_LANGUAGES', () => {
-  it('covers python in T1', () => {
-    expect([...OUTLINE_SUPPORTED_LANGUAGES]).toEqual(['python'])
+  it('covers python and the C++ family', () => {
+    expect([...OUTLINE_SUPPORTED_LANGUAGES]).toEqual([
+      'python',
+      'c',
+      'cpp',
+      'objective-c',
+      'objective-cpp'
+    ])
+  })
+})
+
+describe('outlineLanguageFamily', () => {
+  it('maps python and the C++ family to scope-resolution languages', () => {
+    expect(outlineLanguageFamily('python')).toBe('python')
+    expect(outlineLanguageFamily('c')).toBe('cpp')
+    expect(outlineLanguageFamily('cpp')).toBe('cpp')
+    expect(outlineLanguageFamily('objective-c')).toBe('cpp')
+    expect(outlineLanguageFamily('typescript')).toBeNull()
   })
 })

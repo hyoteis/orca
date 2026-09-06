@@ -1,9 +1,23 @@
 import type { DocumentSymbol, SymbolInformation } from 'vscode-languageserver-protocol'
-import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
+import type {
+  CodeIntelligenceLanguage,
+  CodeIntelligenceScope
+} from '../../../../shared/code-intelligence-scope'
 import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-scope'
 
-/** T1 covers Python; C++ joins with its document-symbol query (#100). */
-export const OUTLINE_SUPPORTED_LANGUAGES = new Set(['python'])
+// Mirrors CPP_LANGUAGES without importing it: this module stays pure (no store
+// import chain) so node-side tests load it alone.
+const CPP_FAMILY_LANGUAGES = new Set(['c', 'cpp', 'objective-c', 'objective-cpp'])
+
+export const OUTLINE_SUPPORTED_LANGUAGES = new Set(['python', ...CPP_FAMILY_LANGUAGES])
+
+/** Scope-resolution family for the active file; null means unsupported. */
+export function outlineLanguageFamily(language: string): CodeIntelligenceLanguage | null {
+  if (CPP_FAMILY_LANGUAGES.has(language)) {
+    return 'cpp'
+  }
+  return language === 'python' ? 'python' : null
+}
 
 export type OutlineRange = {
   start: { line: number; character: number }

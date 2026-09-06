@@ -1,15 +1,18 @@
 import {
   DefinitionRequest,
+  DocumentSymbolRequest,
   HoverRequest,
   SemanticTokensRequest,
   WorkspaceSymbolRequest,
   type CancellationToken,
-  type Hover
+  type DocumentSymbol,
+  type Hover,
+  type SymbolInformation
 } from 'vscode-languageserver-protocol'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import { useAppStore } from '@/store'
 import { toServerFileUri } from './language-server-document-uri'
-import { cacheRequest, requestCacheKey } from './navigation-request-cache'
+import { cacheRequest, cacheRequestCancellable, requestCacheKey } from './navigation-request-cache'
 import { definitionTargets, type CppDefinitionTarget } from './cpp-definition-locations'
 import {
   fileUriToHostPath,
@@ -34,10 +37,13 @@ export { CPP_LANGUAGES } from './cpp-code-intelligence-workspace'
 
 /** Drops sessions and caches; used by tests and hot reloads. */
 export function resetCppCodeIntelligence(): void {
+  // Why null the service: it captures the session singleton at construction.
+  codeIntelligence = null
   resetCppCodeIntelligenceSession()
   definitionCache.clear()
   hoverCache.clear()
   semanticTokenCache.clear()
+  documentSymbolCache.clear()
 }
 
 let codeIntelligence: CppCodeIntelligence | null = null
@@ -91,6 +97,26 @@ class CppCodeIntelligence {
       position: { line: request.lineNumber - 1, character: request.column - 1 }
     })
     return this.session.isActive(scope.id, active) ? result : null
+  }
+
+  /** #100 Outline: either documentSymbol result shape passes through raw. */
+  async documentSymbols(
+    request: CppCodeIntelligenceRequest,
+    token?: CancellationToken
+  ): Promise<DocumentSymbol[] | SymbolInformation[] | null> {
+    const prepared = await this.prepareRequest(request)
+    if (!prepared || token?.isCancellationRequested) {
+      return null
+    }
+    const { scope, active, uri } = prepared
+    const result = await active.client.connection.sendRequest(
+      DocumentSymbolRequest.type,
+      { textDocument: { uri } },
+      token
+    )
+    return !token?.isCancellationRequested && this.session.isActive(scope.id, active)
+      ? result
+      : null
   }
 
   async semanticTokens(request: CppCodeIntelligenceRequest): Promise<Uint32Array | null> {
@@ -188,6 +214,10 @@ class CppCodeIntelligence {
 const definitionCache = new Map<string, Promise<CppDefinitionTarget | null>>()
 const hoverCache = new Map<string, Promise<Hover | null>>()
 const semanticTokenCache = new Map<string, Promise<Uint32Array | null>>()
+const documentSymbolCache = new Map<
+  string,
+  Promise<DocumentSymbol[] | SymbolInformation[] | null>
+>()
 
 export function resolveCppDefinition(
   request: CppCodeIntelligenceRequest
@@ -216,6 +246,19 @@ export function getCppSemanticTokens(
     semanticTokenCache,
     requestCacheKey(request, false),
     () => service().semanticTokens(request),
+    32
+  )
+}
+
+export function getCppDocumentSymbols(
+  request: CppCodeIntelligenceRequest,
+  token?: CancellationToken
+): Promise<DocumentSymbol[] | SymbolInformation[] | null> {
+  return cacheRequestCancellable(
+    documentSymbolCache,
+    requestCacheKey(request, false),
+    () => service().documentSymbols(request, token),
+    token,
     32
   )
 }

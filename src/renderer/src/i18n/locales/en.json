@@ -12338,7 +12338,7 @@
             "705b215356": "Reading symbols…",
             "e8bcf14f01": "Open a file to see its symbols",
             "dee11bd70f": "No symbols for this file type",
-            "edd26ca39f": "Supports Python files",
+            "2b8019ac88": "Supports Python and C++ files",
             "a54eff7728": "No symbols available",
             "a7fc6e9b08": "No code-intelligence scope covers this file",
             "51971afea7": "Code intelligence needs authorization for this workspace",

@@ -7,12 +7,14 @@ import {
   openDefinitionTargetInWorkspace
 } from '@/lib/language-server/code-intelligence-workspace'
 import { getPythonDocumentSymbols } from '@/lib/language-server/python-definition-navigation'
+import { getCppDocumentSymbols } from '@/lib/language-server/cpp-definition-navigation'
 import { toServerFileUri } from '@/lib/language-server/language-server-document-uri'
 import {
   semanticDocumentEditorFor,
   subscribeSemanticDocuments
 } from '@/lib/language-server/semantic-monaco-documents'
 import {
+  outlineLanguageFamily,
   outlineRowsFromDocumentSymbols,
   resolveOutlineTier,
   type OutlineSymbolRow
@@ -47,19 +49,21 @@ export function useOutlineSymbols(): {
   const activeFile = useActiveEditFile()
   const repos = useAppStore((s) => s.repos)
   const settings = useAppStore((s) => s.settings)
-  // Why inline: a cheap path-prefix scan returning a settings-stable ref.
-  const scope = activeFile
-    ? findCodeIntelligenceScope(
-        {
-          filePath: activeFile.filePath,
-          relativePath: activeFile.relativePath,
-          worktreeId: activeFile.worktreeId
-        },
-        'python',
-        { repos, settings }
-      )
-    : null
   const activeLanguage = activeFile?.language ?? ''
+  const family = outlineLanguageFamily(activeLanguage)
+  // Why inline: a cheap path-prefix scan returning a settings-stable ref.
+  const scope =
+    activeFile && family
+      ? findCodeIntelligenceScope(
+          {
+            filePath: activeFile.filePath,
+            relativePath: activeFile.relativePath,
+            worktreeId: activeFile.worktreeId
+          },
+          family,
+          { repos, settings }
+        )
+      : null
   // Why memoized: tier identity must stay stable across renders for the effect deps.
   const tier = useMemo(
     () => resolveOutlineTier({ language: activeLanguage, scope }),
@@ -94,7 +98,8 @@ export function useOutlineSymbols(): {
     setState({ status: 'loading' })
     // Why no text-deps: #102 adds the debounced edit re-query; the version here
     // only keys the shared navigation cache.
-    void getPythonDocumentSymbols({
+    const querySymbols = family === 'cpp' ? getCppDocumentSymbols : getPythonDocumentSymbols
+    void querySymbols({
       fileId: activeFile.id,
       filePath: activeFile.filePath,
       relativePath: activeFile.relativePath,
@@ -118,7 +123,7 @@ export function useOutlineSymbols(): {
           setState({ status: 'ready', rows: [] })
         }
       })
-  }, [activeFile, documentsTick, tier])
+  }, [activeFile, documentsTick, family, tier])
 
   const reveal = (row: OutlineSymbolRow): void => {
     if (!activeFile || !scope) {

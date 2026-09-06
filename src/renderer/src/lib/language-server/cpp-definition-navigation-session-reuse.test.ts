@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { CancellationToken } from 'vscode-languageserver-protocol'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import type { GlobalSettings, Repo } from '../../../../shared/types'
 
@@ -40,7 +41,11 @@ vi.mock('./language-server-client-registry', async () => {
 
 import { resetScriptedLanguageServerClient, scripted } from './scripted-language-server-client'
 
-import { resolveCppDefinition } from './cpp-definition-navigation'
+import {
+  getCppDocumentSymbols,
+  resetCppCodeIntelligence,
+  resolveCppDefinition
+} from './cpp-definition-navigation'
 import type { CppCodeIntelligenceRequest } from './cpp-definition-navigation'
 
 const scope = (revision: number): CodeIntelligenceScope => ({
@@ -70,6 +75,7 @@ const request = (documentVersion: number): CppCodeIntelligenceRequest => ({
 
 beforeEach(() => {
   resetScriptedLanguageServerClient()
+  resetCppCodeIntelligence()
   ;(window as unknown as { api: unknown }).api = { languageServers: {} }
   settings = { codeIntelligenceScopes: [scope(1)] } as GlobalSettings
 })
@@ -85,5 +91,68 @@ describe('cpp definition navigation sessions', () => {
     expect(await resolveCppDefinition(request(2))).toBeNull()
     expect(scripted.opens.map((key) => key.revision)).toEqual([1])
     expect(scripted.closes).toEqual([])
+  })
+})
+
+describe('cpp document symbols', () => {
+  it('requests by textDocument uri and returns hierarchical symbols', async () => {
+    const symbols = [
+      {
+        name: 'main',
+        kind: 12,
+        range: { start: { line: 0, character: 4 }, end: { line: 2, character: 1 } },
+        selectionRange: { start: { line: 0, character: 4 }, end: { line: 0, character: 8 } }
+      }
+    ]
+    let capturedParams: unknown
+    scripted.requestHandlers['textDocument/documentSymbol'] = (params: unknown) => {
+      capturedParams = params
+      return symbols
+    }
+    expect(await getCppDocumentSymbols(request(1))).toEqual(symbols)
+    expect(capturedParams).toEqual({ textDocument: { uri: 'file:///repo/a.cpp' } })
+  })
+
+  it('returns the flat SymbolInformation shape unchanged', async () => {
+    const symbols = [
+      {
+        name: 'Renderer',
+        kind: 23, // Struct
+        containerName: '',
+        location: {
+          uri: 'file:///repo/a.cpp',
+          range: { start: { line: 3, character: 6 }, end: { line: 9, character: 1 } }
+        }
+      }
+    ]
+    scripted.requestHandlers['textDocument/documentSymbol'] = () => symbols
+    expect(await getCppDocumentSymbols(request(2))).toEqual(symbols)
+  })
+
+  it('caches per document version like the Python query', async () => {
+    scripted.requestHandlers['textDocument/documentSymbol'] = () => []
+    await getCppDocumentSymbols(request(3))
+    await getCppDocumentSymbols(request(3))
+    expect(
+      scripted.requestCalls.filter((call) => call === 'textDocument/documentSymbol')
+    ).toHaveLength(1)
+  })
+
+  it('does not cache a cancelled result', async () => {
+    const cancelled: CancellationToken = {
+      isCancellationRequested: true,
+      onCancellationRequested: () => ({ dispose: () => {} })
+    }
+    await getCppDocumentSymbols(request(5), cancelled).catch(() => null)
+    expect(scripted.requestCalls).not.toContain('textDocument/documentSymbol')
+    scripted.requestHandlers['textDocument/documentSymbol'] = () => []
+    await getCppDocumentSymbols(request(5))
+    expect(scripted.requestCalls).toContain('textDocument/documentSymbol')
+  })
+
+  it('returns null without a cpp scope and never asks the server', async () => {
+    settings = { codeIntelligenceScopes: [] as CodeIntelligenceScope[] } as GlobalSettings
+    expect(await getCppDocumentSymbols(request(4))).toBeNull()
+    expect(scripted.requestCalls).not.toContain('textDocument/documentSymbol')
   })
 })

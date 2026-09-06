@@ -12,12 +12,17 @@ import { OutlinePanel } from './OutlinePanel'
 
 const mocks = vi.hoisted(() => ({
   getPythonDocumentSymbols: vi.fn(),
+  getCppDocumentSymbols: vi.fn(),
   openDefinitionTargetInWorkspace: vi.fn(() => true),
   semanticDocumentEditorFor: vi.fn()
 }))
 
 vi.mock('@/lib/language-server/python-definition-navigation', () => ({
   getPythonDocumentSymbols: mocks.getPythonDocumentSymbols
+}))
+
+vi.mock('@/lib/language-server/cpp-definition-navigation', () => ({
+  getCppDocumentSymbols: mocks.getCppDocumentSymbols
 }))
 
 vi.mock('@/lib/language-server/code-intelligence-workspace', async (importOriginal) => {
@@ -37,7 +42,7 @@ vi.mock('@/lib/language-server/semantic-monaco-documents', async (importOriginal
   }
 })
 
-function pythonScope(overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligenceScope {
+function scopeFixture(overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligenceScope {
   return {
     id: 'local:worktree:repo-1:python',
     name: 'repo-1',
@@ -91,7 +96,7 @@ function setState(overrides: Record<string, unknown> = {}): void {
       })
     ],
     repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
-    settings: { codeIntelligenceScopes: [pythonScope()] },
+    settings: { codeIntelligenceScopes: [scopeFixture()] },
     ...overrides
   } as unknown as Partial<ReturnType<typeof useAppStore.getState>>)
 }
@@ -115,6 +120,7 @@ const treeSymbols = [
 
 beforeEach(() => {
   mocks.getPythonDocumentSymbols.mockReset()
+  mocks.getCppDocumentSymbols.mockReset()
   mocks.openDefinitionTargetInWorkspace.mockClear()
   mocks.semanticDocumentEditorFor.mockReset()
   mocks.semanticDocumentEditorFor.mockReturnValue({
@@ -204,7 +210,7 @@ describe('OutlinePanel', () => {
         })
       ],
       repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
-      settings: { codeIntelligenceScopes: [pythonScope()] }
+      settings: { codeIntelligenceScopes: [scopeFixture()] }
     } as unknown as Partial<ReturnType<typeof useAppStore.getState>>)
     mocks.getPythonDocumentSymbols.mockResolvedValueOnce(other)
 
@@ -212,6 +218,52 @@ describe('OutlinePanel', () => {
     expect(screen.queryByRole('button', { name: /Renderer/ })).not.toBeInTheDocument()
     expect(screen.getByText('other.py')).toBeInTheDocument()
   })
+
+  it.each([
+    ['renderer.cpp', 'cpp'],
+    ['header.h', 'c']
+  ])(
+    'renders the %s symbol tree through the C++ document-symbol query (#100)',
+    async (fileName, language) => {
+      setState({
+        openFiles: [
+          openFileFixture({
+            id: 'f1',
+            filePath: `/ws/repo-1/src/${fileName}`,
+            relativePath: `src/${fileName}`,
+            language
+          })
+        ],
+        settings: {
+          codeIntelligenceScopes: [scopeFixture({ language: 'cpp' })]
+        }
+      })
+      mocks.getCppDocumentSymbols.mockResolvedValue([
+        {
+          name: 'Renderer',
+          kind: 23, // Struct
+          range: { start: { line: 0, character: 6 }, end: { line: 40, character: 0 } },
+          selectionRange: { start: { line: 0, character: 6 }, end: { line: 0, character: 14 } },
+          children: [
+            {
+              name: 'draw',
+              kind: 6,
+              range: { start: { line: 10, character: 4 }, end: { line: 12, character: 9 } },
+              selectionRange: {
+                start: { line: 10, character: 7 },
+                end: { line: 10, character: 11 }
+              }
+            }
+          ]
+        }
+      ])
+      renderPanel()
+      expect(await screen.findByRole('button', { name: /Renderer/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /draw/ })).toBeInTheDocument()
+      expect(screen.getByText(fileName)).toBeInTheDocument()
+      expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+    }
+  )
 
   it('shows the static no-symbols state for unsupported file types without querying', async () => {
     setState({
@@ -224,7 +276,7 @@ describe('OutlinePanel', () => {
         })
       ],
       repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
-      settings: { codeIntelligenceScopes: [pythonScope()] }
+      settings: { codeIntelligenceScopes: [scopeFixture()] }
     })
     renderPanel()
     expect(await screen.findByText('No symbols for this file type')).toBeInTheDocument()
@@ -244,7 +296,7 @@ describe('OutlinePanel', () => {
   it('shows an unavailable state when the covering scope lacks fresh consent', async () => {
     setState({
       repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
-      settings: { codeIntelligenceScopes: [pythonScope({ consent: undefined })] }
+      settings: { codeIntelligenceScopes: [scopeFixture({ consent: undefined })] }
     })
     renderPanel()
     expect(await screen.findByText('No symbols available')).toBeInTheDocument()

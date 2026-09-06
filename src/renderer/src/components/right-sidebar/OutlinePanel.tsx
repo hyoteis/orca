@@ -137,8 +137,8 @@ export function OutlinePanel(): React.JSX.Element {
             'No symbols for this file type'
           )}
           subtitle={translate(
-            'auto.components.right.sidebar.OutlinePanel.edd26ca39f',
-            'Supports Python files'
+            'auto.components.right.sidebar.OutlinePanel.2b8019ac88',
+            'Supports Python and C++ files'
           )}
         />
       )}
