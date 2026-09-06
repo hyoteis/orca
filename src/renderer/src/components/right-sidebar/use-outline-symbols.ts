@@ -308,6 +308,12 @@ export function useOutlineSymbols(): {
         if (generationRef.current !== generation) {
           return
         }
+        if (symbols === null) {
+          // Resolved null = the session dropped mid-query (clangd restart, scope
+          // reset) — treat like a rejection, not an empty file (#107).
+          setState({ status: 'error', heuristicRows: heuristicRowsFor(activeFile) })
+          return
+        }
         setState({ status: 'ready', rows: outlineRowsFromDocumentSymbols(symbols) })
       })
       .catch(() => {

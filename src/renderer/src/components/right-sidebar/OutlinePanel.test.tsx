@@ -750,6 +750,42 @@ describe('OutlinePanel heuristic tier (#103)', () => {
     expect(renderedRowNames()).toEqual([])
   })
 
+  it('renders the error state with heuristic rows and retry when the session dropped (query resolves null, #107)', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValueOnce(null)
+    documentHarness.text = HEURISTIC_TEXT
+    renderPanel()
+    expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
+    expect(renderedRowNames()).toEqual(['Renderer', 'draw', 'main'])
+    expect(screen.getByTestId('outline-approximate-badge')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByText('No symbols in this file')).not.toBeInTheDocument()
+  })
+
+  it('renders the error state for a dropped C++ session too (#107)', async () => {
+    setState({
+      openFiles: [
+        openFileFixture({
+          id: 'f1',
+          filePath: '/ws/repo-1/src/renderer.cpp',
+          relativePath: 'src/renderer.cpp',
+          language: 'cpp'
+        })
+      ],
+      settings: { codeIntelligenceScopes: [scopeFixture({ language: 'cpp' })] }
+    })
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce(null)
+    renderPanel()
+    expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('keeps the empty-file state when the query resolves a real empty array (#107)', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValueOnce([])
+    renderPanel()
+    expect(await screen.findByText('No symbols in this file')).toBeInTheDocument()
+    expect(screen.queryByText('Language server connection failed')).not.toBeInTheDocument()
+  })
+
   it('shows heuristic rows under the plain no-scope message', async () => {
     setState({ repos: [], settings: { codeIntelligenceScopes: [] } })
     documentHarness.text = HEURISTIC_TEXT
