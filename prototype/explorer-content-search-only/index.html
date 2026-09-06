@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PROTOTYPE — Explorer 仅内容搜索(删除 Names 文件名过滤)</title>
+<!--
+  THROWAWAY PROTOTYPE — do not ship. 回答的问题:
+  "删除 explorer 的 Names(文件名过滤)模式、只留 Contents(内容搜索)后,
+   顶部搜索条长什么样?树和搜索结果怎么切换?"
+
+  三个结构不同的变体, ?variant=A|B|C 切换(底部浮动条 / ←→ 键):
+    A 单行紧凑   — range 切换内联进搜索行;空查询=树,查询=结果替换树 body
+    B 两行保留   — 最小删除式:第二行只剩 range 切换,右端挂结果计数/清空
+    C 结果插入式 — 树永远在;结果作吸附区块插在树上方,可折叠/清空
+
+  对照现状:FileExplorerQueryStrip(查询行 + Names/Contents 切换)、
+  FileExplorerRangeSwitch(◆ Scope|Worktree)、SearchFilters(include/exclude)。
+-->
+<style>
+  /* tokens lifted verbatim from src/renderer/src/assets/main.css */
+  :root {
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --background: #fff; --foreground: #0a0a0a;
+    --card: #fff; --card-foreground: #0a0a0a;
+    --muted: #f5f5f5; --muted-foreground: #737373;
+    --accent: #f5f5f5; --accent-foreground: #171717;
+    --border: #e5e5e5; --input: #e5e5e5; --ring: #a1a1aa;
+    --explorer-section-divider: rgb(0 0 0 / 0.06);
+  }
+  .dark {
+    --background: #0a0a0a; --foreground: #fafafa;
+    --card: #171717; --card-foreground: #fafafa;
+    --muted: #262626; --muted-foreground: #a1a1a1;
+    --accent: #404040; --accent-foreground: #fafafa;
+    --border: rgb(255 255 255 / 0.07); --input: rgb(255 255 255 / 0.15); --ring: #737373;
+    --explorer-section-divider: rgb(255 255 255 / 0.07);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--background); color: var(--foreground);
+    font-family: var(--font-sans); font-size: 13px; display: flex; flex-direction: column; }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
+  .stage { flex: 1; display: flex; justify-content: center; padding: 40px 24px 120px; }
+
+  /* ── replica explorer panel (~300px right sidebar) ── */
+  .explorer { width: 308px; display: flex; flex-direction: column; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--card); overflow: hidden; max-height: 720px; align-self: flex-start; }
+  .toolbar { height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+    border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .toolbar .repo { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; font-weight: 500; }
+  .toolbar .repo .path { font-weight: 400; font-size: 10.5px; color: var(--muted-foreground);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar .spring { flex: 1; }
+  .tbtn { height: 24px; min-width: 24px; border-radius: 6px; display: inline-flex; align-items: center;
+    justify-content: center; color: var(--muted-foreground); font-size: 12px; }
+  .tbtn:hover { background: var(--accent); color: var(--foreground); }
+  .tbtn svg { width: 13px; height: 13px; }
+
+  .strip { padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+  .search-row { height: 28px; display: flex; align-items: stretch; gap: 4px; }
+  .field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; height: 28px;
+    border: 1px solid var(--border); border-radius: 5px; background: color-mix(in srgb, var(--input) 50%, transparent);
+    padding: 0 6px; }
+  .field:focus-within { border-color: var(--ring); }
+  .field svg.mag { width: 14px; height: 14px; color: var(--muted-foreground); flex-shrink: 0; }
+  .field input { flex: 1; min-width: 0; border: none; outline: none; background: transparent;
+    color: var(--foreground); font: inherit; font-size: 12px; }
+  .field input::placeholder { color: color-mix(in srgb, var(--muted-foreground) 50%, transparent); }
+  .mini-toggle { width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center;
+    justify-content: center; color: var(--muted-foreground); font-size: 11px; flex-shrink: 0; }
+  .mini-toggle:hover { color: var(--foreground); }
+  .mini-toggle.on { background: var(--accent); color: var(--foreground); }
+  .mini-toggle svg { width: 13px; height: 13px; }
+  .clear-btn { width: 18px; height: 18px; border-radius: 4px; display: none; align-items: center;
+    justify-content: center; color: var(--muted-foreground); flex-shrink: 0; }
+  .clear-btn.show { display: inline-flex; }
+  .clear-btn:hover { background: var(--input); color: var(--foreground); }
+  .clear-btn svg { width: 11px; height: 11px; }
+
+  /* range toggle pill — FileExplorerRangeSwitch replica */
+  .range-switch { height: 28px; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0;
+    border-radius: 6px; background: color-mix(in srgb, var(--input) 40%, transparent); padding: 2px; }
+  .range-switch.sm { height: 22px; align-self: center; }
+  .range-switch button { height: 100%; border-radius: 4px; padding: 0 8px; font-size: 11px;
+    color: var(--muted-foreground); white-space: nowrap; }
+  .range-switch button:hover { background: color-mix(in srgb, var(--background) 40%, transparent); color: var(--foreground); }
+  .range-switch button.on { background: var(--background); color: var(--foreground); font-weight: 500;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.08); }
+
+  .switch-row { height: 28px; display: flex; align-items: center; gap: 4px; }
+  .switch-row .status { flex: 1; min-width: 0; text-align: right; font-size: 10.5px;
+    color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .filters { padding: 0 8px 6px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+  .filters .frow { display: flex; align-items: center; gap: 5px; }
+  .filters label { font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted-foreground); width: 62px; flex-shrink: 0; text-align: right; }
+  .filters input { flex: 1; min-width: 0; height: 22px; border: 1px solid var(--border); border-radius: 5px;
+    background: transparent; color: var(--foreground); font: inherit; font-size: 11px; padding: 0 6px; outline: none; }
+  .filters input:focus { border-color: var(--ring); }
+  .filters input::placeholder { color: color-mix(in srgb, var(--muted-foreground) 60%, transparent); }
+
+  /* accordion sections */
+  .sec-head { border-top: 1px solid var(--explorer-section-divider); border-bottom: 1px solid var(--explorer-section-divider);
+    padding: 4px; flex-shrink: 0; }
+  .sec-head button { display: flex; width: 100%; align-items: center; gap: 4px; border-radius: 4px;
+    padding: 0 4px; font-size: 10px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--muted-foreground); }
+  .sec-head button:hover { color: var(--foreground); }
+  .sec-head .chev { width: 12px; height: 12px; flex-shrink: 0; }
+  .sec-head .count { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .sec-body { overflow-y: auto; }
+  .sec-body.collapsed { display: none; }
+
+  .body-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+
+  /* open editor rows */
+  .oe-row { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; font-size: 12px;
+    color: var(--muted-foreground); white-space: nowrap; }
+  .oe-row.active { color: var(--foreground); font-weight: 500; }
+  .oe-row .dot-un { width: 6px; height: 6px; border-radius: 99px; background: var(--muted-foreground); flex-shrink: 0; }
+
+  /* tree rows */
+  .tree-row { display: flex; align-items: center; gap: 5px; height: 24px; font-size: 12px;
+    color: var(--muted-foreground); white-space: nowrap; cursor: pointer; }
+  .tree-row:hover { background: var(--accent); }
+  .tree-row .chev { width: 12px; height: 12px; flex-shrink: 0; transition: transform .1s ease; }
+  .tree-row .chev.open { transform: rotate(90deg); }
+  .tree-row .ficon { width: 14px; height: 14px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .tree-row .ficon svg { width: 13px; height: 13px; }
+  .tree-row.modified .fname { color: var(--status-modified, #d97706); }
+  .kids { overflow: hidden; }
+  .kids.closed { display: none; }
+
+  /* search results */
+  .results-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 10px;
+    color: var(--muted-foreground); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .results-head .x { margin-left: auto; width: 18px; height: 18px; border-radius: 4px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--muted-foreground); }
+  .results-head .x:hover { background: var(--input); color: var(--foreground); }
+  .results-head .x svg { width: 11px; height: 11px; }
+  .res-file { display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px 0 10px;
+    font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .res-file .cnt { font-size: 10px; font-weight: 400; color: var(--muted-foreground); }
+  .res-line { display: flex; gap: 8px; padding: 2px 8px 2px 28px; font-size: 11.5px; line-height: 1.45;
+    color: var(--muted-foreground); cursor: pointer; white-space: nowrap; }
+  .res-line:hover { background: var(--accent); }
+  .res-line .ln { font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+    min-width: 24px; text-align: right; flex-shrink: 0; }
+  .res-line mark { background: color-mix(in srgb, #fbbf24 35%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+  .empty-hint { display: flex; align-items: center; justify-content: center; height: 120px;
+    color: var(--muted-foreground); font-size: 12px; }
+
+  /* scope prefix pill inside field (variant C) */
+  .scope-pill { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px;
+    border-radius: 4px; background: color-mix(in srgb, var(--input) 55%, transparent);
+    font-size: 10.5px; color: var(--muted-foreground); flex-shrink: 0; white-space: nowrap; }
+  .scope-pill:hover { color: var(--foreground); }
+  .scope-pill .mini-chev { font-size: 8px; }
+
+  .pane-note { font-size: 10px; color: var(--muted-foreground); padding: 10px 2px 0; width: 308px; margin: 0 auto; }
+  .state-out { width: 308px; margin: 20px auto 0; font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px; color: var(--muted-foreground); min-height: 16px; }
+
+  /* floating variant switcher */
+  .switcher { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 100;
+    display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--popover, var(--card)); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); padding: 6px 12px; }
+  .switcher button { width: 26px; height: 26px; border-radius: 999px; display: inline-flex; align-items: center;
+    justify-content: center; color: var(--muted-foreground); font-size: 14px; }
+  .switcher button:hover { background: var(--accent); color: var(--foreground); }
+  .switcher .lbl { font-size: 12px; font-weight: 500; min-width: 170px; text-align: center; }
+  .switcher .lbl small { display: block; font-weight: 400; font-size: 10px; color: var(--muted-foreground); }
+  .theme-toggle { position: fixed; top: 12px; right: 14px; z-index: 100; border: 1px solid var(--border);
+    border-radius: 99px; padding: 4px 12px; font-size: 11.5px; color: var(--muted-foreground); background: var(--card); }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle">◐ theme</button>
+
+<div class="stage">
+  <div>
+    <div class="explorer" id="explorer"></div>
+    <div class="pane-note">输入查询后按 Enter 出结果;× / 清空回树;range 可切换;区块头可折叠。</div>
+    <div class="state-out" id="stateOut"></div>
+  </div>
+</div>
+
+<div class="switcher" id="switcher">
+  <button id="prevBtn" title="上一个变体 (←)">‹</button>
+  <div class="lbl" id="varLbl"></div>
+  <button id="nextBtn" title="下一个变体 (→)">›</button>
+</div>
+
+<script>
+'use strict'
+
+/* ── mock data ── */
+const TREE = [
+  { name: 'src', kids: [
+    { name: 'main', kids: [
+      { name: 'index.ts', mod: false }, { name: 'window.ts', mod: true },
+    ]},
+    { name: 'renderer', kids: [
+      { name: 'App.tsx', mod: true }, { name: 'main.tsx', mod: false },
+      { name: 'components', kids: [ { name: 'Search.tsx', mod: false } ]},
+    ]},
+    { name: 'shared', kids: [ { name: 'types.ts', mod: false } ]},
+  ]},
+  { name: 'package.json', mod: true }, { name: 'pnpm-lock.yaml', mod: false },
+]
+const RESULTS = [
+  { file: 'src/renderer/components/Search.tsx', lines: [
+    [41, 'const [query, setQuery] = <mark>useState</mark>(\'\')'],
+    [88, 'function runSearch(q: string) { /* <mark>useState</mark> dep */ }'],
+  ]},
+  { file: 'src/renderer/App.tsx', lines: [
+    [12, 'import { <mark>useState</mark> } from \'react\''],
+  ]},
+  { file: 'src/shared/types.ts', lines: [
+    [210, 'export type SearchState = ReturnType<typeof <mark>useState</mark>>'],
+    [211, '// TODO: drop <mark>useState</mark> indirection'],
+  ]},
+]
+
+const state = {
+  variant: 'A',
+  query: '',
+  range: 'worktree',        // 'worktree' | 'scope'
+  searched: false,          // Enter pressed with non-empty query
+  filtersOpen: true,
+  sec: { openEditors: true, codeScopes: true, worktree: true, resultsCollapsed: false },
+  toggles: { aa: false, regex: false, sym: false },
+}
+
+const ICONS = {
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  mag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>',
+  collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
+  dotfile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>',
+  dir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+  brace: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/></svg>',
+}
+
+function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild }
+
+function rangeSwitchHTML(cls) {
+  return `<div class="range-switch ${cls || ''}" data-range>
+    <button data-r="scope" class="${state.range === 'scope' ? 'on' : ''}" ${state.range !== 'scope' ? '' : ''}>◆ Scope</button>
+    <button data-r="worktree" class="${state.range === 'worktree' ? 'on' : ''}">Worktree</button>
+  </div>`
+}
+
+function searchFieldHTML(placeholder, opts = {}) {
+  const scopePill = opts.scopePill
+    ? `<button class="scope-pill" id="scopePill" title="切换搜索范围">${state.range === 'scope' ? '◆ Scope' : 'Worktree'}<span class="mini-chev">▼</span></button>`
+    : ''
+  return `<div class="field">
+    <span class="mag">${ICONS.mag}</span>
+    ${scopePill}
+    <input id="q" type="text" placeholder="${placeholder}" value="${state.query}" spellcheck="false">
+    <button class="mini-toggle ${state.toggles.aa ? 'on' : ''}" data-t="aa" title="区分大小写">Aa</button>
+    <button class="mini-toggle ${state.toggles.regex ? 'on' : ''}" data-t="regex" title="正则表达式">.*</button>
+    <button class="mini-toggle ${state.toggles.sym ? 'on' : ''}" data-t="sym" title="符号搜索">${ICONS.brace}</button>
+    <button class="clear-btn ${state.query ? 'show' : ''}" id="clearQ" title="清空">${ICONS.x}</button>
+  </div>`
+}
+
+function filtersHTML() {
+  return `<div class="filters" id="filters">
+    <div class="frow"><label>include</label><input placeholder="要包含的文件 (例如 *.ts, src/**)"></div>
+    <div class="frow"><label>exclude</label><input placeholder="要排除的文件 (例如 *.min.js, dist/**)"></div>
+  </div>`
+}
+
+function secHead(key, title, count) {
+  const open = state.sec[key]
+  return `<div class="sec-head"><button data-sec="${key}" aria-expanded="${open}">
+    <span class="chev">${open ? ICONS.down : ICONS.chev}</span>${title}
+    <span class="count">${count}</span>
+  </button></div>`
+}
+
+function treeRows(nodes, depth) {
+  return nodes.map((n) => {
+    const pad = 8 + depth * 12
+    if (n.kids) {
+      const open = state.sec['tw-' + n.name] !== false
+      return `<div>
+        <div class="tree-row" data-tw="${n.name}" style="padding-left:${pad}px">
+          <span class="chev ${open ? 'open' : ''}">${ICONS.chev}</span>
+          <span class="ficon">${ICONS.dir}</span><span class="fname">${n.name}</span>
+        </div>
+        <div class="kids ${open ? '' : 'closed'}">${treeRows(n.kids, depth + 1)}</div>
+      </div>`
+    }
+    return `<div class="tree-row ${n.mod ? 'modified' : ''}" style="padding-left:${pad + 14}px">
+      <span class="ficon">${ICONS.file}</span><span class="fname">${n.name}</span>
+    </div>`
+  }).join('')
+}
+
+function resultsHTML() {
+  const total = RESULTS.reduce((a, f) => a + f.lines.length, 0)
+  const body = state.sec.resultsCollapsed ? '' : RESULTS.map((f) =>
+    `<div class="res-file"><span class="ficon">${ICONS.file}</span>${f.file}<span class="cnt">${f.lines.length}</span></div>` +
+    f.lines.map(([ln, txt]) => `<div class="res-line"><span class="ln">${ln}</span><span>${txt}</span></div>`).join('')
+  ).join('')
+  return `<div>
+    <div class="results-head">
+      <span class="chev" style="width:12px;height:12px;display:inline-flex">${state.sec.resultsCollapsed ? ICONS.chev : ICONS.down}</span>
+      <span>${total} 个结果 · ${RESULTS.length} 个文件 · ${state.range === 'scope' ? '◆ Scope' : 'Worktree'}</span>
+      <button class="x" id="closeResults" title="清空并回到文件树">${ICONS.x}</button>
+    </div>${body}
+  </div>`
+}
+
+const OPEN_EDITORS = ['App.tsx', 'Search.tsx', 'window.ts', 'README.md']
+
+function panelHTML() {
+  const A = state.variant === 'A', C = state.variant === 'C'
+  const showResults = state.searched && state.query !== ''
+
+  // strip: A = 搜索行内联 range;B = 搜索行 + 第二行 range;C = scope pill 在框内
+  let stripInner
+  if (A) {
+    stripInner = `<div class="search-row">${searchFieldHTML('搜索文件内容...')}${rangeSwitchHTML()}</div>`
+  } else if (C) {
+    stripInner = `<div class="search-row">${searchFieldHTML('搜索文件内容...', { scopePill: true })}</div>`
+  } else {
+    const status = showResults
+      ? `${RESULTS.reduce((a, f) => a + f.lines.length, 0)} 个结果 · <span id="clearInline" style="text-decoration:underline;cursor:pointer">清空</span>`
+      : ''
+    stripInner = `<div class="search-row">${searchFieldHTML('搜索文件内容...')}</div>
+      <div class="switch-row">${rangeSwitchHTML()}<span class="status">${status}</span></div>`
+  }
+
+  const treeSection = `${secHead('worktree', 'Worktree', 'orca')}
+    <div class="sec-body ${state.sec.worktree ? '' : 'collapsed'}">${treeRows(TREE, 0)}</div>`
+
+  const body = A || state.variant === 'B'
+    ? (showResults
+        ? `<div class="body-scroll">${resultsHTML()}</div>`
+        : `<div class="body-scroll">
+            <div>${secHead('openEditors', 'Open Editors', OPEN_EDITORS.length)}
+              <div class="sec-body ${state.sec.openEditors ? '' : 'collapsed'}">${
+                OPEN_EDITORS.map((f, i) => `<div class="oe-row ${i === 0 ? 'active' : ''}">${i === 1 ? '<span class="dot-un"></span>' : '<span style="width:6px;flex-shrink:0"></span>'}${f}</div>`).join('')
+              }</div></div>
+            ${secHead('codeScopes', 'Code scopes', 2)}
+            <div class="sec-body ${state.sec.codeScopes ? '' : 'collapsed'}" style="padding:4px 10px;font-size:11px;color:var(--muted-foreground)">◆ src/renderer · ◆ src/shared</div>
+            ${treeSection}
+          </div>`)
+    : /* C */ `<div class="body-scroll">
+        ${showResults ? resultsHTML() : ''}
+        ${treeSection}
+      </div>`
+
+  return `
+    <div class="toolbar">
+      <span class="repo">${ICONS.dir}<span class="path">D:\\zwf\\Projects\\orca</span></span>
+      <span class="spring"></span>
+      <button class="tbtn" title="刷新">${ICONS.refresh}</button>
+      <button class="tbtn" title="全部折叠">${ICONS.collapse}</button>
+      <button class="tbtn" title="显示 git 忽略文件">${ICONS.eye}</button>
+      <button class="tbtn" title="显示点文件">${ICONS.dotfile}</button>
+    </div>
+    <div class="strip">${stripInner}</div>
+    ${state.filtersOpen ? filtersHTML() : ''}
+    ${body}`
+}
+
+/* ── render + interactions ── */
+const explorer = document.getElementById('explorer')
+const stateOut = document.getElementById('stateOut')
+
+function render() {
+  explorer.innerHTML = panelHTML()
+  stateOut.textContent = `variant=${state.variant} query="${state.query}" range=${state.range} body=${state.searched && state.query ? 'results' : (state.variant === 'C' ? 'tree(+results?)' : 'tree')}`
+  const q = explorer.querySelector('#q')
+  if (q) {
+    q.addEventListener('input', () => {
+      state.query = q.value
+      explorer.querySelector('#clearQ')?.classList.toggle('show', !!q.value)
+      if (!q.value) { state.searched = false; render(); explorer.querySelector('#q')?.focus() }
+    })
+    q.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && q.value.trim()) { state.searched = true; render() }
+    })
+  }
+  explorer.querySelector('#clearQ')?.addEventListener('click', () => { state.query = ''; state.searched = false; render() })
+  explorer.querySelector('#closeResults')?.addEventListener('click', () => { state.query = ''; state.searched = false; render() })
+  explorer.querySelector('#clearInline')?.addEventListener('click', () => { state.query = ''; state.searched = false; render() })
+  explorer.querySelector('#scopePill')?.addEventListener('click', () => {
+    state.range = state.range === 'scope' ? 'worktree' : 'scope'; render()
+  })
+  explorer.querySelectorAll('[data-range] button').forEach((b) => b.addEventListener('click', () => { state.range = b.dataset.r; render() }))
+  explorer.querySelectorAll('[data-t]').forEach((b) => b.addEventListener('click', () => { state.toggles[b.dataset.t] = !state.toggles[b.dataset.t]; render() }))
+  explorer.querySelectorAll('[data-sec]').forEach((b) => b.addEventListener('click', () => { state.sec[b.dataset.sec] = !state.sec[b.dataset.sec]; render() }))
+  explorer.querySelectorAll('[data-tw]').forEach((r) => r.addEventListener('click', () => {
+    const k = 'tw-' + r.dataset.tw; state.sec[k] = state.sec[k] === false ? true : false; render()
+  }))
+}
+
+/* ── theme + variant switcher ── */
+document.getElementById('themeToggle').addEventListener('click', () => {
+  document.documentElement.classList.toggle('dark')
+})
+
+const VARIANTS = [
+  { key: 'A', name: '单行紧凑', desc: 'range 内联 · 结果替换树' },
+  { key: 'B', name: '两行保留', desc: '最小删除式 · 结果替换树' },
+  { key: 'C', name: '结果插入式', desc: '树常驻 · 结果吸附上方' },
+]
+function setVariant(key, push) {
+  state.variant = key
+  state.searched = false
+  render()
+  document.getElementById('varLbl').innerHTML = `${key} · ${VARIANTS.find((v) => v.key === key).name}<small>${VARIANTS.find((v) => v.key === key).desc}</small>`
+  const u = new URL(location.href); u.searchParams.set('variant', key)
+  if (push !== false) history.replaceState(null, '', u)
+}
+document.getElementById('prevBtn').addEventListener('click', () => {
+  const i = VARIANTS.findIndex((v) => v.key === state.variant)
+  setVariant(VARIANTS[(i + VARIANTS.length - 1) % VARIANTS.length].key)
+})
+document.getElementById('nextBtn').addEventListener('click', () => {
+  const i = VARIANTS.findIndex((v) => v.key === state.variant)
+  setVariant(VARIANTS[(i + 1) % VARIANTS.length].key)
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  const t = e.target
+  if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
+  ;(e.key === 'ArrowLeft' ? document.getElementById('prevBtn') : document.getElementById('nextBtn')).click()
+})
+
+setVariant(new URLSearchParams(location.search).get('variant') || 'A', false)
+</script>
+</body>
+</html>
