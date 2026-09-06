@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PROTOTYPE — Open Tabs Overview(Chrome Tab Search 形态)</title>
+<!--
+  THROWAWAY PROTOTYPE — do not ship. Answers: "命令按钮前的展开箭头下拉,
+  列出 worktree 全部打开标签,长什么样?" — 用户选定参照物:Chrome 左上角
+  Tab Search(⌄ → 搜索框 + 打开的标签页列表 + hover X + 当前标签高亮)。
+  共识(2026-09-05): worktree 级;agent=挂 agent 的 terminal,shell=裸 terminal,
+  文件=全部 editor 类;browser/simulator 各一组,空组隐藏;点击跳转+hover 关闭;
+  组序 AGENT→SHELL→文件→BROWSER→模拟器;激活行高亮;组头计数。
+  Chrome 参照物带搜索框 → 保留(实现时走现成 searchOpenTabs)。
+-->
+<style>
+  /* tokens lifted verbatim from src/renderer/src/assets/main.css */
+  :root {
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --background: #fff; --foreground: #0a0a0a;
+    --card: #fff; --card-foreground: #0a0a0a;
+    --popover: #fff; --popover-foreground: #0a0a0a;
+    --muted: #f5f5f5; --muted-foreground: #737373;
+    --accent: #f5f5f5; --accent-foreground: #171717;
+    --border: #e5e5e5; --input: #e5e5e5; --ring: #a1a1aa;
+    --status-success: #15803d; --status-amber: #d97706; --status-idle: #a1a1aa;
+    --shadow-menu: 0 16px 36px rgba(0,0,0,0.24);
+  }
+  .dark {
+    --background: #0a0a0a; --foreground: #fafafa;
+    --card: #171717; --card-foreground: #fafafa;
+    --popover: #171717; --popover-foreground: #fafafa;
+    --muted: #262626; --muted-foreground: #a1a1a1;
+    --accent: #404040; --accent-foreground: #fafafa;
+    --border: rgb(255 255 255 / 0.07); --input: rgb(255 255 255 / 0.15); --ring: #737373;
+    --status-success: #86efac; --status-amber: #fbbf24; --status-idle: #71717a;
+    --shadow-menu: 0 16px 36px rgba(0,0,0,0.55);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: var(--background); color: var(--foreground);
+    font-family: var(--font-sans); font-size: 13px; display: flex; flex-direction: column; }
+  button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
+  .stage { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 48px 40px 120px; }
+
+  /* ── replica TabGroupPanel strip (32px, bg-card) ── */
+  .tab-row-frame { max-width: 900px; margin: 0 auto; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .tab-row { height: 32px; background: var(--card); border-bottom: 1px solid var(--border); display: flex; align-items: stretch; padding-right: 6px; }
+  .strip { display: flex; flex: 1; min-width: 0; overflow: hidden; }
+  .rtab { display: flex; align-items: center; gap: 5px; padding: 0 10px; max-width: 160px;
+    border-right: 1px solid var(--border); font-size: 12px; color: var(--muted-foreground);
+    white-space: nowrap; overflow: hidden; flex-shrink: 0; }
+  .rtab.active { color: var(--foreground); background: var(--background); font-weight: 500; }
+  .rtab .lbl { overflow: hidden; text-overflow: ellipsis; }
+  .strip-fade { width: 28px; flex-shrink: 0; background: linear-gradient(90deg, transparent, var(--card)); }
+  .actions { display: flex; align-items: center; gap: 2px; margin-left: 6px; flex-shrink: 0; }
+  .icon-btn { height: 28px; min-width: 28px; display: inline-flex; align-items: center; justify-content: center;
+    gap: 4px; border-radius: 6px; color: var(--muted-foreground); padding: 0 6px; font-size: 12px; font-weight: 500; }
+  .icon-btn:hover { background: var(--accent); color: var(--foreground); }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .chevron-btn.open { background: var(--accent); color: var(--foreground); }
+  .chevron-btn svg { transition: transform .12s ease; }
+  .chevron-btn.open svg { transform: rotate(180deg); }
+  .dot { width: 7px; height: 7px; border-radius: 99px; flex-shrink: 0; }
+  .dot.working { background: var(--status-success); }
+  .dot.permission { background: var(--status-amber); }
+  .dot.idle { background: var(--status-idle); }
+  .dot.sm { width: 6px; height: 6px; }
+  .pane-note { font-size: 10px; color: var(--muted-foreground); padding: 8px 2px; max-width: 900px; margin: 0 auto; }
+
+  /* ── Chrome-Tab-Search style panel ── */
+  .panel { position: absolute; top: 40px; right: 0; width: 360px; background: var(--popover);
+    color: var(--popover-foreground); border: 1px solid var(--border); border-radius: 11px;
+    box-shadow: var(--shadow-menu); z-index: 40; display: none; overflow: hidden; flex-direction: column; }
+  .panel.open { display: flex; }
+  .search-box { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .search-box svg { width: 14px; height: 14px; color: var(--muted-foreground); flex-shrink: 0; }
+  .search-box input { flex: 1; border: none; outline: none; background: transparent; color: var(--foreground); font: inherit; font-size: 13px; }
+  .search-box input::placeholder { color: var(--muted-foreground); }
+  .kbd { font-size: 10.5px; color: var(--muted-foreground); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+  .list { max-height: 430px; overflow-y: auto; padding: 5px; }
+  .grp-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 4px;
+    font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600; }
+  .grp-head .count { font-variant-numeric: tabular-nums; opacity: .8; }
+  .grp-sep { border-top: 1px solid var(--border); margin: 4px 4px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; cursor: pointer; min-width: 0; }
+  .row:hover, .row.kbd-focus { background: var(--accent); }
+  .row.current { background: var(--accent); font-weight: 500; }
+  .row .lead { display: flex; align-items: center; gap: 4px; flex-shrink: 0; width: 32px; }
+  .row .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .row .sub { font-size: 10.5px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 42%; flex-shrink: 1; }
+  .row .close { visibility: hidden; width: 18px; height: 18px; border-radius: 4px; display: inline-flex;
+    align-items: center; justify-content: center; color: var(--muted-foreground); flex-shrink: 0; }
+  .row:hover .close, .row.kbd-focus .close { visibility: visible; }
+  .row .close:hover { background: var(--input); color: var(--foreground); }
+  .row .close svg { width: 11px; height: 11px; }
+  .agent-glyph { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 3px; background: var(--input); }
+  .file-glyph svg, .globe-glyph svg, .term-glyph svg { width: 13px; height: 13px; color: var(--muted-foreground); }
+  .empty { padding: 22px 12px; text-align: center; color: var(--muted-foreground); font-size: 12px; }
+  .state-out { max-width: 900px; margin: 26px auto 0; font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--muted-foreground); min-height: 18px; }
+  .theme-toggle { position: fixed; top: 12px; right: 14px; z-index: 100; border: 1px solid var(--border);
+    border-radius: 99px; padding: 4px 12px; font-size: 11.5px; color: var(--muted-foreground); background: var(--card); }
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle">◐ theme</button>
+
+<div class="stage">
+  <div class="tab-row-frame">
+    <div style="position:relative">
+      <div class="tab-row">
+        <div class="strip">
+          <div class="rtab active"><span class="dot sm idle"></span><span class="lbl">main.ts</span></div>
+          <div class="rtab"><span class="dot sm working"></span><span class="agent-glyph">C</span><span class="lbl">claude · implement</span></div>
+          <div class="rtab"><span class="dot sm permission"></span><span class="agent-glyph">X</span><span class="lbl">codex · fix-bug</span></div>
+          <div class="rtab"><span class="lbl">› pnpm dev</span></div>
+          <div class="rtab"><span class="lbl">diff: api.ts</span></div>
+          <div class="strip-fade"></div>
+        </div>
+        <div class="actions">
+          <button class="icon-btn" title="New tab">＋</button>
+          <button class="icon-btn chevron-btn" id="chevBtn" title="打开的标签页" aria-label="Open tabs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <button class="icon-btn" title="命令">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72L19 12 8 5.14z"/></svg>命令
+          </button>
+          <button class="icon-btn" title="Pane Actions">⋯</button>
+        </div>
+      </div>
+
+      <!-- Chrome Tab Search 形态:搜索框 + 分组列表 -->
+      <div class="panel" id="panel">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="q" type="text" placeholder="搜索标签页" autocomplete="off">
+          <span class="kbd">esc</span>
+        </div>
+        <div class="list" id="list"></div>
+      </div>
+    </div>
+  </div>
+  <div class="pane-note">↑ 复刻 TabGroupPanel 标签行。▾ 为新入口(命令按钮前),形态 = Chrome 左上角 Tab Search。</div>
+  <div class="state-out" id="stateOut">state: —</div>
+</div>
+
+<script>
+// fake worktree tab model — mirrors SearchableWorkspaceTab shapes
+const TABS = [
+  { id:'t1', kind:'agent',  agent:'claude', agentState:'working',    title:'claude · implement drawer', sub:'#39', current:false },
+  { id:'t2', kind:'agent',  agent:'codex',  agentState:'permission', title:'codex · fix-bug',           sub:'#84', current:false },
+  { id:'t3', kind:'shell',  title:'› pnpm dev',  sub:'', current:false },
+  { id:'t4', kind:'shell',  title:'› build',     sub:'', current:false },
+  { id:'f1', kind:'file',   title:'main.ts',     sub:'src/renderer/…/main.tsx', current:true },
+  { id:'f2', kind:'file',   title:'TabBar.tsx',  sub:'src/renderer/…/tab-bar/', current:false },
+  { id:'f3', kind:'file',   title:'conflict: api.ts', sub:'merge conflict review', current:false },
+  { id:'b1', kind:'browser', title:'GitHub PR #39', sub:'github.com', current:false },
+  // simulator: intentionally empty → group hidden
+];
+const GROUPS = [
+  { kind:'agent',   label:'Agent' }, { kind:'shell', label:'Shell' }, { kind:'file', label:'文件' },
+  { kind:'browser', label:'Browser' }, { kind:'simulator', label:'模拟器' },
+];
+const X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+const FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/></svg>';
+const TERM_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 17 6-6-6-6M12 19h8"/></svg>';
+const GLOBE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/></svg>';
+
+const stateOut = document.getElementById('stateOut');
+const log = (s) => { stateOut.textContent = 'state: ' + s; };
+const closed = new Set();
+
+function leadHtml(t) {
+  if (t.kind === 'agent')  return `<span class="dot sm ${t.agentState}"></span><span class="agent-glyph">${t.agent[0].toUpperCase()}</span>`;
+  if (t.kind === 'shell')  return `<span class="term-glyph">${TERM_SVG}</span>`;
+  if (t.kind === 'file')   return `<span class="file-glyph">${FILE_SVG}</span>`;
+  if (t.kind === 'browser')return `<span class="globe-glyph">${GLOBE_SVG}</span>`;
+  return '<span class="dot sm idle"></span>';
+}
+function rowHtml(t, i) {
+  return `<div class="row ${t.current ? 'current' : ''}" data-id="${t.id}" data-idx="${i}" role="option" aria-selected="${t.current}">
+    <span class="lead">${leadHtml(t)}</span>
+    <span class="title">${t.title}</span>
+    ${t.sub ? `<span class="sub">${t.sub}</span>` : ''}
+    <button class="close" data-close="${t.id}" aria-label="关闭 ${t.title}">${X_SVG}</button>
+  </div>`;
+}
+
+let query = '';
+let focusIdx = -1;
+function visible() {
+  const q = query.trim().toLowerCase();
+  return TABS.filter(t => !closed.has(t.id) && (!q || (t.title + ' ' + t.sub).toLowerCase().includes(q)));
+}
+function render() {
+  const vs = visible();
+  const list = document.getElementById('list');
+  if (!vs.length) { list.innerHTML = '<div class="empty">没有匹配的标签页</div>'; return; }
+  list.innerHTML = GROUPS.map(g => {
+    const ts = vs.filter(t => t.kind === g.kind);
+    if (!ts.length) return '';
+    return `<div class="grp-head"><span>${g.label}</span><span class="count">${ts.length}</span></div>` +
+      ts.map(t => rowHtml(t, vs.indexOf(t))).join('') + `<div class="grp-sep"></div>`;
+  }).join('').replace(/<div class="grp-sep"><\/div>$/, '');
+  if (focusIdx >= 0) list.querySelector(`[data-idx="${focusIdx}"]`)?.classList.add('kbd-focus');
+}
+
+const chev = document.getElementById('chevBtn');
+const panel = document.getElementById('panel');
+const qEl = document.getElementById('q');
+let openState = false;
+function applyOpen() { panel.classList.toggle('open', openState); chev.classList.toggle('open', openState); }
+chev.onclick = (e) => {
+  e.stopPropagation();
+  openState = !openState; applyOpen();
+  if (openState) { query = ''; qEl.value = ''; focusIdx = -1; render(); setTimeout(() => qEl.focus(), 0); }
+};
+document.addEventListener('click', (e) => {
+  if (openState && !e.target.closest('.panel') && !e.target.closest('.chevron-btn')) { openState = false; applyOpen(); }
+  const close = e.target.closest('[data-close]');
+  if (close) {
+    e.stopPropagation();
+    const t = TABS.find(x => x.id === close.dataset.close);
+    closed.add(t.id); log(`close ${t.kind} "${t.title}" (id=${t.id}) → tab strip 同步移除`);
+    render(); return;
+  }
+  const row = e.target.closest('[data-id]');
+  if (row) {
+    const t = TABS.find(x => x.id === row.dataset.id);
+    log(`activate ${t.kind} "${t.title}" (id=${t.id}) → 走 activateOpenTabSearchResult`);
+    TABS.forEach(x => x.current = x.id === t.id);
+    openState = false; applyOpen();
+  }
+});
+qEl.addEventListener('input', () => { query = qEl.value; focusIdx = -1; render(); });
+// Chrome tab search keyboard: ↑/↓ move, Enter activate, Esc close
+qEl.addEventListener('keydown', (e) => {
+  const vs = visible();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    focusIdx = e.key === 'ArrowDown' ? (focusIdx + 1) % vs.length : (focusIdx - 1 + vs.length) % vs.length;
+    render();
+  } else if (e.key === 'Enter' && focusIdx >= 0 && vs[focusIdx]) {
+    e.preventDefault();
+    const t = vs[focusIdx];
+    log(`activate ${t.kind} "${t.title}" (id=${t.id}, 键盘)`);
+    TABS.forEach(x => x.current = x.id === t.id);
+    openState = false; applyOpen();
+  } else if (e.key === 'Escape') { openState = false; applyOpen(); }
+});
+document.getElementById('themeToggle').onclick = () => { document.documentElement.classList.toggle('dark'); };
+render();
+</script>
+</body>
+</html>
