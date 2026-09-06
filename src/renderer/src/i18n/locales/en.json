@@ -12341,8 +12341,13 @@
             "2b8019ac88": "Supports Python and C++ files",
             "a54eff7728": "No symbols available",
             "a7fc6e9b08": "No code-intelligence scope covers this file",
+            "db937ed166": "Enable code intelligence",
+            "f0c48ff046": "Enable code intelligence to see symbols",
             "51971afea7": "Code intelligence needs authorization for this workspace",
             "5c0a0b5e02": "No symbols in this file"
+          },
+          "use.outline.symbols": {
+            "640345dd02": "{{value0}} {{value1}} — Outline default"
           }
         }
       },

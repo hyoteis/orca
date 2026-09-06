@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { basename } from '@/lib/path'
+import { translate } from '@/i18n/i18n'
+import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import { isFolderRepo } from '../../../../shared/repo-kind'
 import {
+  findCodeIntelligenceRepo,
   findCodeIntelligenceScope,
   openDefinitionTargetInWorkspace
 } from '@/lib/language-server/code-intelligence-workspace'
@@ -16,6 +20,7 @@ import {
 import {
   outlineLanguageFamily,
   outlineRowsFromDocumentSymbols,
+  resolveOutlineAutoScope,
   resolveOutlineTier,
   type OutlineSymbolRow
 } from './outline-model'
@@ -25,6 +30,7 @@ export type OutlineSymbolsState =
   | { status: 'unsupported' }
   | { status: 'unavailable'; reason: 'no-scope' | 'consent' }
   | { status: 'loading' }
+  | { status: 'enable'; repoId: string }
   | { status: 'ready'; rows: OutlineSymbolRow[] }
 
 function useActiveEditFile(): OpenFile | null {
@@ -69,11 +75,79 @@ export function useOutlineSymbols(): {
     () => resolveOutlineTier({ language: activeLanguage, scope }),
     [activeLanguage, scope]
   )
+  // Auto default scope (#101) — decided only when no scope covers the file, so
+  // consented workspaces never pay for the check.
+  const autoDecision = useMemo(() => {
+    if (tier.kind !== 'unavailable' || tier.reason !== 'no-scope' || !activeFile || !family) {
+      return null
+    }
+    // Same repo resolution as findCodeIntelligenceScope — one shared predicate.
+    const repo = activeFile
+      ? findCodeIntelligenceRepo(
+          { filePath: activeFile.filePath, worktreeId: activeFile.worktreeId },
+          { repos }
+        )
+      : null
+    return {
+      repo,
+      decision: resolveOutlineAutoScope({
+        workspace: repo
+          ? {
+              repoId: repo.id,
+              repoName: repo.displayName,
+              repoPath: repo.path,
+              isFolder: isFolderRepo(repo)
+            }
+          : null,
+        executionHostId: repo ? getRepoExecutionHostId(repo) : null,
+        language: family,
+        scopeName: translate(
+          'auto.components.right.sidebar.use.outline.symbols.640345dd02',
+          '{{value0}} {{value1}} — Outline default',
+          {
+            value0: repo?.displayName ?? '',
+            value1: family === 'python' ? 'Python' : 'C++'
+          }
+        ),
+        scopes: settings?.codeIntelligenceScopes ?? [],
+        declinedAutoScopeIds: settings?.codeIntelligenceDeclinedAutoScopes ?? []
+      })
+    }
+  }, [tier, activeFile, family, repos, settings])
   const [state, setState] = useState<OutlineSymbolsState>({ status: 'no-file' })
   const generationRef = useRef(0)
+  // One auto-create attempt per id per mount: a failed upsert surfaces as the
+  // plain no-scope state instead of a retry loop.
+  const autoAttemptedRef = useRef(new Set<string>())
   // Why subscribe: the editor model registers a frame after this panel mounts.
   const [documentsTick, setDocumentsTick] = useState(0)
   useEffect(() => subscribeSemanticDocuments(() => setDocumentsTick((tick) => tick + 1)), [])
+
+  useEffect(() => {
+    if (autoDecision?.decision.kind !== 'create') {
+      return
+    }
+    const scope = autoDecision.decision.scope
+    if (autoAttemptedRef.current.has(scope.id)) {
+      return
+    }
+    autoAttemptedRef.current.add(scope.id)
+    void (async () => {
+      try {
+        const saved = await window.api.codeIntelligence.upsertScope(scope)
+        // Same first-install pattern as the setup dialog: the flow that saves
+        // the scope grants its consent — zero-config means no extra prompt.
+        await window.api.codeIntelligence.grantConsent({
+          scopeId: saved.id,
+          revision: saved.revision
+        })
+        await useAppStore.getState().fetchSettings()
+      } catch {
+        // Attempt stays consumed: a failed create shows the no-scope state, no retry loop.
+        setState({ status: 'unavailable', reason: 'no-scope' })
+      }
+    })()
+  }, [autoDecision])
 
   useEffect(() => {
     if (!activeFile) {
@@ -85,6 +159,18 @@ export function useOutlineSymbols(): {
       return
     }
     if (tier.kind === 'unavailable') {
+      if (tier.reason === 'no-scope' && autoDecision) {
+        const { decision, repo } = autoDecision
+        if ((decision.kind === 'declined' || decision.kind === 'remote-host') && repo) {
+          setState({ status: 'enable', repoId: repo.id })
+          return
+        }
+        if (decision.kind === 'create') {
+          // Scope creation is in flight; symbols follow once its session warms.
+          setState({ status: 'loading' })
+          return
+        }
+      }
       setState({ status: 'unavailable', reason: tier.reason })
       return
     }
@@ -123,7 +209,7 @@ export function useOutlineSymbols(): {
           setState({ status: 'ready', rows: [] })
         }
       })
-  }, [activeFile, documentsTick, family, tier])
+  }, [activeFile, autoDecision, documentsTick, family, tier])
 
   const reveal = (row: OutlineSymbolRow): void => {
     if (!activeFile || !scope) {

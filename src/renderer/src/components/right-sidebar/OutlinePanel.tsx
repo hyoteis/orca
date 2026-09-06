@@ -13,6 +13,8 @@ import {
   Variable,
   type LucideIcon
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useAppStore } from '@/store'
 import type { OutlineSymbolRow } from './outline-model'
 import { useOutlineSymbols } from './use-outline-symbols'
 import { translate } from '@/i18n/i18n'
@@ -79,17 +81,20 @@ function OutlineRows({
 function OutlineEmptyState({
   icon: Icon,
   title,
-  subtitle
+  subtitle,
+  action
 }: {
   icon: LucideIcon
   title: string
   subtitle?: string
+  action?: React.ReactNode
 }): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-5 py-8 text-center">
       <Icon className="size-7 text-muted-foreground" aria-hidden />
       <p className="text-xs text-foreground">{title}</p>
       {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
+      {action ? <div className="mt-2">{action}</div> : null}
     </div>
   )
 }
@@ -97,6 +102,7 @@ function OutlineEmptyState({
 /** Right-sidebar Outline tab (#99): symbol tree of the active editor file. */
 export function OutlinePanel(): React.JSX.Element {
   const { state, fileName, reveal } = useOutlineSymbols()
+  const openModal = useAppStore((s) => s.openModal)
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-sidebar"
@@ -153,6 +159,34 @@ export function OutlinePanel(): React.JSX.Element {
             'auto.components.right.sidebar.OutlinePanel.a7fc6e9b08',
             'No code-intelligence scope covers this file'
           )}
+        />
+      )}
+      {state.status === 'enable' && (
+        // #101: auto-create refused (deleted before, or a non-local Host) —
+        // the enable action routes to Code scopes configuration.
+        <OutlineEmptyState
+          icon={Braces}
+          title={translate(
+            'auto.components.right.sidebar.OutlinePanel.a54eff7728',
+            'No symbols available'
+          )}
+          subtitle={translate(
+            'auto.components.right.sidebar.OutlinePanel.f0c48ff046',
+            'Enable code intelligence to see symbols'
+          )}
+          action={
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => openModal('code-intelligence-cpp-setup', { repoId: state.repoId })}
+            >
+              {translate(
+                'auto.components.right.sidebar.OutlinePanel.db937ed166',
+                'Enable code intelligence'
+              )}
+            </Button>
+          }
         />
       )}
       {state.status === 'unavailable' && state.reason === 'consent' && (

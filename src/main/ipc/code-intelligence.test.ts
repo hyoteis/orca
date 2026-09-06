@@ -200,6 +200,34 @@ describe('codeIntelligence:removeScope directory cleanup', () => {
   })
 })
 
+describe('codeIntelligence:removeScope declined-auto-scope memory (#101)', () => {
+  const handlerByName = (name: string) =>
+    handleMock.mock.calls.find(([channel]) => channel === name)?.[1] as (
+      event: unknown,
+      ...args: unknown[]
+    ) => unknown
+
+  it('records the id when an outline-auto scope is deleted, once', async () => {
+    const scope = localCppScope({ origin: 'outline-auto' })
+    const { store, scopes: scopeStore } = settingsStore([scope])
+    registerCodeIntelligenceHandlers(scopeStore, store as unknown as Store)
+    await handlerByName('codeIntelligence:removeScope')!(null, scope.id)
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([scope.id])
+    await expect(handlerByName('codeIntelligence:removeScope')!(null, scope.id)).resolves.toBe(
+      false
+    )
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([scope.id])
+  })
+
+  it('leaves ordinary scope deletions unrecorded', async () => {
+    const scope = localCppScope()
+    const { store, scopes: scopeStore } = settingsStore([scope])
+    registerCodeIntelligenceHandlers(scopeStore, store as unknown as Store)
+    await handlerByName('codeIntelligence:removeScope')!(null, scope.id)
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toBeUndefined()
+  })
+})
+
 const sshCppScope = (scopeId: string): CodeIntelligenceScope =>
   localCppScope({
     id: scopeId,

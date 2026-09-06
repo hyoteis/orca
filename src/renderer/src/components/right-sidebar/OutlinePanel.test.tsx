@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   getPythonDocumentSymbols: vi.fn(),
   getCppDocumentSymbols: vi.fn(),
   openDefinitionTargetInWorkspace: vi.fn(() => true),
-  semanticDocumentEditorFor: vi.fn()
+  semanticDocumentEditorFor: vi.fn(),
+  upsertScope: vi.fn(),
+  grantConsent: vi.fn(),
+  fetchSettings: vi.fn().mockResolvedValue(undefined)
 }))
 
 vi.mock('@/lib/language-server/python-definition-navigation', () => ({
@@ -127,7 +130,20 @@ beforeEach(() => {
     editor: {},
     model: { getValue: () => 'class Renderer:', getVersionId: () => 7 }
   })
-  setState()
+  mocks.upsertScope.mockReset()
+  mocks.upsertScope.mockImplementation(async (scope: CodeIntelligenceScope) => ({
+    ...scope,
+    revision: 1
+  }))
+  mocks.grantConsent.mockReset()
+  mocks.grantConsent.mockResolvedValue(undefined)
+  mocks.fetchSettings.mockClear()
+  mocks.fetchSettings.mockResolvedValue(undefined)
+  // #101: the Outline may auto-create a scope — shim the IPC surface it uses.
+  globalThis.window.api = {
+    codeIntelligence: { upsertScope: mocks.upsertScope, grantConsent: mocks.grantConsent }
+  } as unknown as typeof window.api
+  setState({ fetchSettings: mocks.fetchSettings })
 })
 
 afterEach(() => {
@@ -283,14 +299,73 @@ describe('OutlinePanel', () => {
     expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
   })
 
-  it('shows an unavailable state when no scope covers the file', async () => {
+  it('shows an unavailable state when the file backs no workspace repo', async () => {
     setState({
-      repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
+      repos: [],
       settings: { codeIntelligenceScopes: [] }
     })
     renderPanel()
     expect(await screen.findByText('No symbols available')).toBeInTheDocument()
     expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+    expect(mocks.upsertScope).not.toHaveBeenCalled()
+  })
+
+  it('auto-creates the Outline default scope on an uncovered local file (#101)', async () => {
+    setState({ settings: { codeIntelligenceScopes: [] } })
+    renderPanel()
+    await waitFor(() => expect(mocks.upsertScope).toHaveBeenCalledTimes(1))
+    const created = mocks.upsertScope.mock.calls[0][0] as CodeIntelligenceScope
+    expect(created).toMatchObject({
+      id: 'local:worktree:repo-1:python',
+      origin: 'outline-auto',
+      workspaceRoot: '/ws/repo-1',
+      members: [{ path: '.', visibleResults: true }],
+      serverSource: { type: 'automatic' },
+      enabled: true
+    })
+    // Zero-config = the creation flow grants consent, like the setup dialog.
+    expect(mocks.grantConsent).toHaveBeenCalledWith({
+      scopeId: created.id,
+      revision: 1
+    })
+    expect(mocks.fetchSettings).toHaveBeenCalled()
+    expect(await screen.findByText('Reading symbols…')).toBeInTheDocument()
+  })
+
+  it('shows the enable affordance instead of resurrecting a deleted auto scope', async () => {
+    setState({
+      settings: {
+        codeIntelligenceScopes: [],
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+      }
+    })
+    renderPanel()
+    expect(await screen.findByText('Enable code intelligence')).toBeInTheDocument()
+    expect(mocks.upsertScope).not.toHaveBeenCalled()
+  })
+
+  it('shows the enable affordance on SSH-host repos without auto-creating', async () => {
+    setState({
+      repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: 'box' }],
+      settings: { codeIntelligenceScopes: [] }
+    })
+    renderPanel()
+    expect(await screen.findByText('Enable code intelligence to see symbols')).toBeInTheDocument()
+    expect(mocks.upsertScope).not.toHaveBeenCalled()
+  })
+
+  it('routes the enable button to the Code scopes configuration dialog', async () => {
+    const openModal = vi.fn()
+    setState({
+      openModal,
+      settings: {
+        codeIntelligenceScopes: [],
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+      }
+    })
+    renderPanel()
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable code intelligence' }))
+    expect(openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', { repoId: 'repo-1' })
   })
 
   it('shows an unavailable state when the covering scope lacks fresh consent', async () => {

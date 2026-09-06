@@ -23,9 +23,17 @@ even before any scope is configured.
 
 - Auto-created scopes are ordinary, visible scopes in Code scopes (born from
   Outline, editable, deletable). Deleting one means "don't recreate": the
-  Outline view then degrades to heuristic symbols plus an explicit enable
-  button, never silent resurrection.
+  deletion is recorded (settings `codeIntelligenceDeclinedAutoScopes`, keyed by
+  the deterministic scope id) and the Outline view then degrades to heuristic
+  symbols plus an explicit enable button, never silent resurrection.
 - SSH hosts never auto-create: setup there is heavy, so SSH shows the enable
   button instead (plus heuristic symbols meanwhile).
+- Consent verification (#101): no first-install consent prompt exists for a
+  scope with no consent — only *stale* consents surface in the editor banner
+  and status-bar popover. So the Outline's creation flow grants consent itself
+  right after upserting the scope, the same save-and-grant pattern the C++
+  setup dialog and the managed-server switch use. Zero-config means no extra
+  prompt; the user's off-switch remains deleting the scope (which is
+  remembered).
 - Monaco-internal TS worker symbols stay out of scope for now; if wanted
   later they arrive as just another Outline data provider.

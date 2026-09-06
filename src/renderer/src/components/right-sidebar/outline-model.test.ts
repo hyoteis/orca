@@ -5,6 +5,7 @@ import {
   OUTLINE_SUPPORTED_LANGUAGES,
   outlineLanguageFamily,
   outlineRowsFromDocumentSymbols,
+  resolveOutlineAutoScope,
   resolveOutlineTier
 } from './outline-model'
 
@@ -200,6 +201,129 @@ describe('outlineRowsFromDocumentSymbols', () => {
 
   it('returns empty rows for null (no symbols)', () => {
     expect(outlineRowsFromDocumentSymbols(null)).toEqual([])
+  })
+})
+
+describe('resolveOutlineAutoScope', () => {
+  const workspace = {
+    repoId: 'repo-1',
+    repoName: 'repo-1',
+    repoPath: '/ws/repo-1',
+    isFolder: false
+  }
+
+  it('creates a whole-root outline-auto scope on a local host', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace,
+        executionHostId: 'local',
+        language: 'python',
+        scopeName: 'repo-1 Python (Outline)',
+        scopes: [],
+        declinedAutoScopeIds: []
+      })
+    ).toEqual({
+      kind: 'create',
+      scope: expect.objectContaining({
+        id: 'local:worktree:repo-1:python',
+        name: 'repo-1 Python (Outline)',
+        origin: 'outline-auto',
+        workspaceRoot: '/ws/repo-1',
+        members: [{ path: '.', visibleResults: true }],
+        serverSource: { type: 'automatic' },
+        enabled: true
+      })
+    })
+  })
+
+  it('keys folder repos under the folder workspace', () => {
+    const decision = resolveOutlineAutoScope({
+      workspace: { ...workspace, isFolder: true },
+      executionHostId: 'local',
+      language: 'cpp',
+      scopeName: 'n',
+      scopes: [],
+      declinedAutoScopeIds: []
+    })
+    expect(decision.kind === 'create' && decision.scope.workspaceKey).toBe('folder:repo-1')
+  })
+
+  it('creates once: skips when any scope already holds the deterministic id', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace,
+        executionHostId: 'local',
+        language: 'python',
+        scopeName: 'n',
+        scopes: [scope({ enabled: false })],
+        declinedAutoScopeIds: []
+      })
+    ).toEqual({ kind: 'exists' })
+  })
+
+  it('prefers exists over declined when the user manually recreated the scope', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace,
+        executionHostId: 'local',
+        language: 'python',
+        scopeName: 'n',
+        scopes: [scope({ origin: undefined })],
+        declinedAutoScopeIds: ['local:worktree:repo-1:python']
+      })
+    ).toEqual({ kind: 'exists' })
+  })
+
+  it('never resurrects a deleted auto scope recorded in the declined list', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace,
+        executionHostId: 'local',
+        language: 'python',
+        scopeName: 'n',
+        scopes: [],
+        declinedAutoScopeIds: ['local:worktree:repo-1:python']
+      })
+    ).toEqual({ kind: 'declined' })
+  })
+
+  it('refuses to auto-create on SSH hosts', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace,
+        executionHostId: 'ssh:box',
+        language: 'python',
+        scopeName: 'n',
+        scopes: [],
+        declinedAutoScopeIds: []
+      })
+    ).toEqual({ kind: 'remote-host' })
+  })
+
+  it('refuses to auto-create on runtime hosts', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace,
+        executionHostId: 'runtime:env-1',
+        language: 'python',
+        scopeName: 'n',
+        scopes: [],
+        declinedAutoScopeIds: []
+      })
+    ).toEqual({ kind: 'remote-host' })
+  })
+
+  it('answers no-workspace when no repo backs the file', () => {
+    expect(
+      resolveOutlineAutoScope({
+        workspace: null,
+        executionHostId: null,
+        language: 'python',
+        scopeName: 'n',
+        scopes: [],
+        declinedAutoScopeIds: []
+      })
+    ).toEqual({ kind: 'no-workspace' })
   })
 })
 

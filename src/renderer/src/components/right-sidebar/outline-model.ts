@@ -1,9 +1,15 @@
 import type { DocumentSymbol, SymbolInformation } from 'vscode-languageserver-protocol'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type {
   CodeIntelligenceLanguage,
   CodeIntelligenceScope
 } from '../../../../shared/code-intelligence-scope'
-import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-scope'
+import {
+  getCodeIntelligenceScopeId,
+  getCodeIntelligenceWorkspaceKey,
+  isCodeIntelligenceConsentStale
+} from '../../../../shared/code-intelligence-scope'
+import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
 
 // Mirrors CPP_LANGUAGES without importing it: this module stays pure (no store
 // import chain) so node-side tests load it alone.
@@ -65,6 +71,67 @@ export function resolveOutlineTier({
     return { kind: 'unavailable', reason: 'consent' }
   }
   return { kind: 'semantic' }
+}
+
+export type OutlineAutoScopeWorkspace = {
+  repoId: string
+  repoName: string
+  repoPath: string
+  isFolder: boolean
+}
+
+export type OutlineAutoScopeDecision =
+  | { kind: 'create'; scope: CodeIntelligenceScope }
+  | { kind: 'exists' }
+  | { kind: 'declined' }
+  | { kind: 'remote-host' }
+  | { kind: 'no-workspace' }
+
+/** Zero-config default scope (ADR 0003 tier 2): create once on local hosts,
+ * never resurrect a deleted one, never auto-create off-host. Exists-check runs
+ * before declined so a manually recreated scope is left alone. */
+export function resolveOutlineAutoScope(args: {
+  workspace: OutlineAutoScopeWorkspace | null
+  executionHostId: ExecutionHostId | null
+  language: CodeIntelligenceLanguage
+  /** Localized origin-marking name; persisted verbatim on creation. */
+  scopeName: string
+  scopes: readonly CodeIntelligenceScope[]
+  /** Scope ids whose outline-auto scope the user deleted (never recreate). */
+  declinedAutoScopeIds: readonly string[]
+}): OutlineAutoScopeDecision {
+  if (!args.workspace || !args.executionHostId) {
+    return { kind: 'no-workspace' }
+  }
+  if (args.executionHostId !== 'local') {
+    return { kind: 'remote-host' }
+  }
+  const id = getCodeIntelligenceScopeId({
+    executionHostId: args.executionHostId,
+    workspaceKey: getCodeIntelligenceWorkspaceKey(args.workspace.repoId, args.workspace.isFolder),
+    language: args.language
+  })
+  if (args.scopes.some((scope) => scope.id === id)) {
+    return { kind: 'exists' }
+  }
+  if (args.declinedAutoScopeIds.includes(id)) {
+    return { kind: 'declined' }
+  }
+  return {
+    kind: 'create',
+    scope: {
+      ...createRepositoryCodeIntelligenceScope({
+        repoId: args.workspace.repoId,
+        repoName: args.workspace.repoName,
+        repoPath: args.workspace.repoPath,
+        isFolder: args.workspace.isFolder,
+        executionHostId: args.executionHostId,
+        language: args.language
+      }),
+      name: args.scopeName,
+      origin: 'outline-auto'
+    }
+  }
 }
 
 function treeRows(symbols: readonly DocumentSymbol[]): OutlineSymbolRow[] {

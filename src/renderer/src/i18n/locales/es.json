@@ -11447,8 +11447,13 @@
             "2b8019ac88": "Admite archivos Python y C++",
             "a54eff7728": "No hay símbolos disponibles",
             "a7fc6e9b08": "Ningún ámbito de inteligencia de código cubre este archivo",
+            "db937ed166": "Habilitar inteligencia de código",
+            "f0c48ff046": "Habilita la inteligencia de código para ver los símbolos",
             "51971afea7": "La inteligencia de código necesita autorización para este espacio de trabajo",
             "5c0a0b5e02": "No hay símbolos en este archivo"
+          },
+          "use.outline.symbols": {
+            "640345dd02": "{{value0}} {{value1}} — esquema predeterminado"
           }
         }
       },

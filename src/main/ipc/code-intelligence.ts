@@ -87,10 +87,7 @@ async function sweepRemoteOrphanCppScopeDirectories(
     const live = new Set(
       scopes
         .list()
-        .filter(
-          (scope) =>
-            scope.language === 'cpp' && scope.executionHostId === `ssh:${targetId}`
-        )
+        .filter((scope) => scope.language === 'cpp' && scope.executionHostId === `ssh:${targetId}`)
         .map((scope) => cppScopeDirectoryName(scope.id))
     )
     const queue = new SshSetupExecQueue(connection)
@@ -158,6 +155,15 @@ export function registerCodeIntelligenceHandlers(
     const scope = scopes.list().find((candidate) => candidate.id === scopeId)
     const result = scopes.remove(scopeId)
     if (result.removed) {
+      // Deleting an Outline-born scope means "don't recreate" (ADR 0003).
+      if (scope?.origin === 'outline-auto') {
+        const declined = store.getSettings().codeIntelligenceDeclinedAutoScopes ?? []
+        if (!declined.includes(scopeId)) {
+          store.updateSettings({
+            codeIntelligenceDeclinedAutoScopes: [...declined, scopeId]
+          })
+        }
+      }
       broadcastScopeChange({ scopeId, revision: null, removed: true })
       if (scope) {
         await deleteCppScopeDirectory(scope, cppCacheRoot)
