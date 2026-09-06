@@ -665,6 +665,14 @@ describe('OutlinePanel heuristic tier (#103)', () => {
       'No language server connected — symbols are approximate and jumps are line-level'
     )
     expect(screen.getByRole('button', { name: 'Enable code intelligence' })).toBeInTheDocument()
+    // While filtering, the no-match/match state stands alone — the tier footer
+    // must not stack a second status visual under it (review finding).
+    fireEvent.click(screen.getByRole('button', { name: 'Filter symbols' }))
+    fireEvent.change(screen.getByPlaceholderText('Filter symbols'), {
+      target: { value: 'zzz-no-match' }
+    })
+    expect(screen.getByText('No matching symbols')).toBeInTheDocument()
+    expect(screen.queryByTestId('outline-status-footer')).not.toBeInTheDocument()
   })
 
   it('reveals a heuristic row by line through the pending-editor-reveal path', async () => {
@@ -703,6 +711,15 @@ describe('OutlinePanel heuristic tier (#103)', () => {
     expect(renderedRowNames()).toEqual(['Renderer', 'draw', 'main'])
     expect(screen.getByTestId('outline-approximate-badge')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('keeps the approximate badge when heuristic extraction finds nothing (tier, not rows)', async () => {
+    setDeclinedScope()
+    documentHarness.text = 'pass\n'
+    renderPanel()
+    expect(await screen.findByText('No symbols available')).toBeInTheDocument()
+    expect(screen.getByTestId('outline-approximate-badge')).toBeInTheDocument()
+    expect(renderedRowNames()).toEqual([])
   })
 
   it('shows heuristic rows under the plain no-scope message', async () => {

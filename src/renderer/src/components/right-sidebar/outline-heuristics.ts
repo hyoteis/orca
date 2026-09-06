@@ -1,3 +1,4 @@
+import { SymbolKind } from 'vscode-languageserver-protocol'
 import type { CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 import { outlineLanguageFamily, type OutlineSymbolRow } from './outline-model'
 
@@ -55,14 +56,14 @@ function pyLine(line: string): LineMatch | null {
   }
   let match = /^(?:async\s+)?class\s+([A-Za-z_]\w*)/.exec(text)
   if (match) {
-    return { name: match[1], kind: 5, column: indent + match[0].indexOf(match[1]) }
+    return { name: match[1], kind: SymbolKind.Class, column: indent + match[0].indexOf(match[1]) }
   }
   match = /^(?:async\s+)?def\s+([A-Za-z_]\w*)/.exec(text)
   if (match) {
     // Indented defs read as methods, column-0 as functions — flat either way.
     return {
       name: match[1],
-      kind: indent === 0 ? 12 : 6,
+      kind: indent === 0 ? SymbolKind.Function : SymbolKind.Method,
       column: indent + match[0].indexOf(match[1])
     }
   }
@@ -70,7 +71,11 @@ function pyLine(line: string): LineMatch | null {
   match = indent === 0 ? /^([A-Za-z_]\w*)\s*=(?!=)/.exec(text) : null
   if (match && !PY_ASSIGNMENT_KEYWORDS.has(match[1])) {
     const constant = /^[A-Z_][A-Z0-9_]*$/.test(match[1])
-    return { name: match[1], kind: constant ? 14 : 13, column: indent }
+    return {
+      name: match[1],
+      kind: constant ? SymbolKind.Constant : SymbolKind.Variable,
+      column: indent
+    }
   }
   return null
 }
@@ -95,17 +100,25 @@ function cppLine(line: string): LineMatch | null {
   if (match) {
     return {
       name: match[1],
-      kind: 3,
+      kind: SymbolKind.Namespace,
       column: columnShift + match.index + match[0].indexOf(match[1])
     }
   }
   match = /^\s*#\s*define\s+([A-Za-z_]\w*)/.exec(text)
   if (match) {
-    return { name: match[1], kind: 14, column: columnShift + match[0].indexOf(match[1]) }
+    return {
+      name: match[1],
+      kind: SymbolKind.Constant,
+      column: columnShift + match[0].indexOf(match[1])
+    }
   }
   match = /^\s*enum(?:\s+class)?\s+([A-Za-z_]\w*)/.exec(text)
   if (match) {
-    return { name: match[1], kind: 10, column: columnShift + match[0].indexOf(match[1]) }
+    return {
+      name: match[1],
+      kind: SymbolKind.Enum,
+      column: columnShift + match[0].indexOf(match[1])
+    }
   }
   // Forward declarations have no body on the line; real definitions carry `{`.
   match = /^\s*(class|struct)\s+([A-Za-z_]\w*)/.exec(text)
@@ -115,7 +128,7 @@ function cppLine(line: string): LineMatch | null {
     }
     return {
       name: match[2],
-      kind: match[1] === 'class' ? 5 : 23,
+      kind: match[1] === 'class' ? SymbolKind.Class : SymbolKind.Struct,
       column: columnShift + match.index + match[0].indexOf(match[2])
     }
   }
@@ -128,7 +141,7 @@ function cppLine(line: string): LineMatch | null {
       const [qualifier, name] = match[1].split('::')
       return {
         name: match[1],
-        kind: qualifier === name ? 9 : 12,
+        kind: qualifier === name ? SymbolKind.Constructor : SymbolKind.Function,
         column: columnShift + match.index + match[0].indexOf(match[1])
       }
     }
@@ -138,7 +151,7 @@ function cppLine(line: string): LineMatch | null {
   if (match && /^\s*[:{]/.test(cppTailAfterLastParen(text))) {
     return {
       name: match[1],
-      kind: 9,
+      kind: SymbolKind.Constructor,
       column: columnShift + match.index + match[0].indexOf(match[1])
     }
   }
@@ -150,7 +163,7 @@ function cppLine(line: string): LineMatch | null {
     if (!CPP_BAD_PREFIX_WORDS.has(prefixWord) && cppDefinitionTail(cppTailAfterLastParen(text))) {
       return {
         name: match[1],
-        kind: 12,
+        kind: SymbolKind.Function,
         column: columnShift + match.index + match[0].lastIndexOf(match[1])
       }
     }
@@ -159,7 +172,7 @@ function cppLine(line: string): LineMatch | null {
   if (match && !CPP_BAD_PREFIX_WORDS.has(text.trim().split(/\s+/)[0] ?? '')) {
     return {
       name: match[1],
-      kind: 13,
+      kind: SymbolKind.Variable,
       column: columnShift + match.index + match[0].indexOf(match[1])
     }
   }

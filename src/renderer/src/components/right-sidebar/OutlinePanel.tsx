@@ -11,6 +11,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
@@ -100,7 +101,12 @@ export function OutlinePanel(): React.JSX.Element {
       ? (state.heuristicRows ?? EMPTY_ROWS)
       : EMPTY_ROWS
   const rows = state.status === 'ready' ? state.rows : heuristicRows
-  const approximate = heuristicRows.length > 0
+  // Tier-based, not row-based: an empty extraction still marks the tier (#98
+  // story 12); undefined (document not mounted) shows the plain status only.
+  const approximate =
+    (state.status === 'enable' || state.status === 'unavailable' || state.status === 'error') &&
+    heuristicRows !== EMPTY_ROWS
+  const filtering = filterQuery.trim().length > 0
   const visibleRows = useMemo(
     () => filterOutlineRows(sortOutlineRows(rows, sortMode), filterQuery),
     [rows, sortMode, filterQuery]
@@ -245,7 +251,7 @@ export function OutlinePanel(): React.JSX.Element {
       <OutlineEmptyState
         icon={ListTree}
         title={
-          filterQuery.trim()
+          filtering
             ? translate(
                 'auto.components.right.sidebar.OutlinePanel.093263f7bf',
                 'No matching symbols'
@@ -270,16 +276,17 @@ export function OutlinePanel(): React.JSX.Element {
         {approximate && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span
+              <Badge
+                variant="outline"
                 data-testid="outline-approximate-badge"
                 aria-label={translate(
                   'auto.components.right.sidebar.OutlinePanel.70a1c94357',
                   'No language server connected — symbols are approximate and jumps are line-level'
                 )}
-                className="rounded border border-border px-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground"
+                className="px-1.5 py-0 text-[11px] font-semibold tracking-wider text-muted-foreground"
               >
                 {translate('auto.components.right.sidebar.OutlinePanel.9152d1a19e', 'Approximate')}
-              </span>
+              </Badge>
             </TooltipTrigger>
             <TooltipContent className="max-w-56">
               {translate(
@@ -374,17 +381,17 @@ export function OutlinePanel(): React.JSX.Element {
       )}
       {state.status !== 'loading' &&
         (statusBlock ? (
-          rows.length > 0 ? (
-            <>
-              {tree}
-              <OutlineStatusFooter block={statusBlock} />
-            </>
+          // While filtering, the no-match state is the status; the tier footer
+          // would stack a second status visual on top of it.
+          rows.length > 0 || filtering ? (
+            tree
           ) : (
             <OutlineEmptyState {...statusBlock} />
           )
         ) : (
           tree
         ))}
+      {statusBlock && rows.length > 0 && !filtering && <OutlineStatusFooter block={statusBlock} />}
     </div>
   )
 }
