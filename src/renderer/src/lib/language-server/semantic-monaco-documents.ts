@@ -14,6 +14,23 @@ export function requestAtPosition(model: Monaco.editor.ITextModel, position: Mon
   return documents.get(model.uri.toString())?.requestAt(position) ?? null
 }
 
+const documentListeners = new Set<() => void>()
+
+/** Live document-registry changes; Outline re-derives its query when the
+ * active editor registers a moment after the panel mounts. */
+export function subscribeSemanticDocuments(listener: () => void): () => void {
+  documentListeners.add(listener)
+  return () => {
+    documentListeners.delete(listener)
+  }
+}
+
+function notifyDocumentListeners(): void {
+  for (const listener of documentListeners) {
+    listener()
+  }
+}
+
 export function registerSemanticMonacoDocument(
   editor: Monaco.editor.IStandaloneCodeEditor,
   requestAt: DocumentContext['requestAt']
@@ -25,9 +42,11 @@ export function registerSemanticMonacoDocument(
   const key = model.uri.toString()
   const context = { token: Symbol(key), requestAt, editor }
   documents.set(key, context)
+  notifyDocumentListeners()
   return () => {
     if (documents.get(key)?.token === context.token) {
       documents.delete(key)
+      notifyDocumentListeners()
     }
   }
 }
@@ -42,7 +61,10 @@ export const SEMANTIC_CODE_ACTION_COMMAND = 'orca.semantic.codeAction'
 const languageApis = new Map<string, SemanticMonacoLanguageApi>()
 
 /** Registered per-language request surface; installSemanticMonacoProviders feeds it. */
-export function registerSemanticLanguageApi(language: string, api: SemanticMonacoLanguageApi): void {
+export function registerSemanticLanguageApi(
+  language: string,
+  api: SemanticMonacoLanguageApi
+): void {
   languageApis.set(language, api)
 }
 
@@ -88,4 +110,3 @@ export function semanticDocumentEditorFor(fileId: string): {
   }
   return null
 }
-

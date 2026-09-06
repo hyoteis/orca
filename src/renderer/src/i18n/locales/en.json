@@ -11758,7 +11758,8 @@
             "ef182dcb12": "search",
             "fc3095d2ed": "explorer",
             "folderWorkspaces": "Attached worktrees",
-            "parentPrChecks": "PR Checks"
+            "parentPrChecks": "PR Checks",
+            "outlineTab": "Outline"
           },
           "right": {
             "panel": {
@@ -12331,6 +12332,17 @@
           "WorktreeSection": {
             "title": "Worktree",
             "toggleSection": "Toggle worktree section"
+          },
+          "OutlinePanel": {
+            "7e498c4509": "Outline",
+            "705b215356": "Reading symbols…",
+            "e8bcf14f01": "Open a file to see its symbols",
+            "dee11bd70f": "No symbols for this file type",
+            "edd26ca39f": "Supports Python files",
+            "a54eff7728": "No symbols available",
+            "a7fc6e9b08": "No code-intelligence scope covers this file",
+            "51971afea7": "Code intelligence needs authorization for this workspace",
+            "5c0a0b5e02": "No symbols in this file"
           }
         }
       },

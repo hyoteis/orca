@@ -2440,6 +2440,7 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
     for (const [id, tab] of Object.entries(omitted)) {
       if (
         tab === 'explorer' ||
+        tab === 'outline' ||
         tab === 'vault' ||
         tab === 'workspaces' ||
         tab === 'pr-checks' ||

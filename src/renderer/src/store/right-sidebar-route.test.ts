@@ -16,6 +16,13 @@ describe('normalizeRightSidebarRoute', () => {
     })
   })
 
+  it('preserves the Outline tab (#99)', () => {
+    expect(normalizeRightSidebarRoute('outline')).toEqual({
+      rightSidebarTab: 'outline',
+      rightSidebarExplorerView: 'files'
+    })
+  })
+
   it('still normalizes invalid tabs to Explorer files', () => {
     expect(normalizeRightSidebarRoute('missing')).toEqual({
       rightSidebarTab: 'explorer',

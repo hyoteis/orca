@@ -11198,7 +11198,8 @@
             "fc3095d2ed": "资源管理器",
             "aiVaultSessionHistory": "智能体",
             "folderWorkspaces": "已附加的工作树",
-            "parentPrChecks": "PR 检查"
+            "parentPrChecks": "PR 检查",
+            "outlineTab": "大纲"
           },
           "right": {
             "panel": {
@@ -11675,6 +11676,17 @@
           "WorktreeSection": {
             "title": "工作树",
             "toggleSection": "切换工作树段"
+          },
+          "OutlinePanel": {
+            "7e498c4509": "大纲",
+            "705b215356": "正在读取符号…",
+            "e8bcf14f01": "打开文件以查看其符号",
+            "dee11bd70f": "此文件类型没有符号",
+            "edd26ca39f": "支持 Python 文件",
+            "a54eff7728": "没有可用符号",
+            "a7fc6e9b08": "没有代码智能范围覆盖此文件",
+            "51971afea7": "此工作区需要授权代码智能",
+            "5c0a0b5e02": "此文件中没有符号"
           }
         }
       },

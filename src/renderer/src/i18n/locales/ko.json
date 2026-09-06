@@ -10970,7 +10970,8 @@
             "fc3095d2ed": "탐색기",
             "aiVaultSessionHistory": "에이전트",
             "folderWorkspaces": "연결된 워크트리",
-            "parentPrChecks": "PR 검사"
+            "parentPrChecks": "PR 검사",
+            "outlineTab": "개요"
           },
           "right": {
             "panel": {
@@ -11437,6 +11438,17 @@
             "mayBeSlower": "느려질 수 있음",
             "slowest": "가장 느림",
             "unlimited": "무제한"
+          },
+          "OutlinePanel": {
+            "7e498c4509": "개요",
+            "705b215356": "기호를 읽는 중…",
+            "e8bcf14f01": "파일을 열면 기호가 표시됩니다",
+            "dee11bd70f": "이 파일 형식에는 기호가 없습니다",
+            "edd26ca39f": "Python 파일 지원",
+            "a54eff7728": "사용할 수 있는 기호가 없습니다",
+            "a7fc6e9b08": "이 파일을 포함하는 코드 인텔리전스 범위가 없습니다",
+            "51971afea7": "이 워크스페이스에는 코드 인텔리전스 권한이 필요합니다",
+            "5c0a0b5e02": "이 파일에 기호가 없습니다"
           }
         }
       },

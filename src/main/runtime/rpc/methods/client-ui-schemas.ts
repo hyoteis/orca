@@ -41,6 +41,7 @@ const WorktreeCardProperties = z
 const STATIC_RIGHT_SIDEBAR_TABS = [
   'code',
   'explorer',
+  'outline',
   'search',
   'vault',
   'workspaces',
