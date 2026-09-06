@@ -33,6 +33,7 @@ export function normalizeRightSidebarRoute(
   if (
     tab === 'explorer' ||
     tab === 'search' ||
+    tab === 'outline' ||
     tab === 'vault' ||
     tab === 'workspaces' ||
     tab === 'pr-checks' ||

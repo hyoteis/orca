@@ -2,9 +2,7 @@ import type * as Monaco from 'monaco-editor'
 import {
   CancellationTokenSource,
   type CancellationToken,
-  type Diagnostic,
-  type DocumentSymbol,
-  type SymbolInformation
+  type Diagnostic
 } from 'vscode-languageserver-protocol'
 import { translate } from '@/i18n/i18n'
 import { toast } from 'sonner'
@@ -30,6 +28,7 @@ import { toServerFileUri } from './language-server-document-uri'
 import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
 import { createSemanticMonacoStack } from './semantic-monaco-stack'
 import { getPythonCodeIntelligenceSession } from './python-code-intelligence-session'
+import { lspSymbolsToMonaco, toMonacoRange } from './document-symbol-monaco-mapping'
 
 const pythonStack = createSemanticMonacoStack({
   serverLabel: 'basedpyright',
@@ -50,59 +49,17 @@ let installed = false
 // LSP severity 1..4 (Error..Hint) → monaco MarkerSeverity (8,4,2,1).
 const LSP_TO_MONACO_SEVERITY = [8, 4, 2, 1]
 
-function toMonacoRange(range: {
-  start: { line: number; character: number }
-  end: { line: number; character: number }
-}): Monaco.IRange {
-  return {
-    startLineNumber: range.start.line + 1,
-    startColumn: range.start.character + 1,
-    endLineNumber: range.end.line + 1,
-    endColumn: range.end.character + 1
-  }
-}
-
 export function lspDiagnosticToMonacoMarkers(
   diagnostics: Diagnostic[]
 ): Monaco.editor.IMarkerData[] {
   return diagnostics.map((diagnostic) => ({
     ...toMonacoRange(diagnostic.range),
-    message:
-      typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value,
+    message: typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value,
     // Missing severity defaults to Error, mirroring vscode-languageclient.
-    severity: (LSP_TO_MONACO_SEVERITY[(diagnostic.severity ?? 1) - 1] ?? 8) as Monaco.MarkerSeverity,
+    severity: (LSP_TO_MONACO_SEVERITY[(diagnostic.severity ?? 1) - 1] ??
+      8) as Monaco.MarkerSeverity,
     source: diagnostic.source
   }))
-}
-
-// LSP SymbolKind 1..26 and monaco SymbolKind 0..25 share ordering.
-function monacoSymbolTags(symbol: { deprecated?: boolean }): Monaco.languages.SymbolTag[] {
-  return symbol.deprecated ? [1 satisfies Monaco.languages.SymbolTag] : []
-}
-
-export function lspSymbolsToMonaco(
-  symbols: DocumentSymbol[] | SymbolInformation[]
-): Monaco.languages.DocumentSymbol[] {
-  return symbols.map((symbol) =>
-    'location' in symbol
-      ? {
-          name: symbol.name,
-          detail: symbol.containerName ?? '',
-          kind: (symbol.kind - 1) as Monaco.languages.SymbolKind,
-          tags: monacoSymbolTags(symbol),
-          range: toMonacoRange(symbol.location.range),
-          selectionRange: toMonacoRange(symbol.location.range)
-        }
-      : {
-          name: symbol.name,
-          detail: symbol.detail ?? '',
-          kind: (symbol.kind - 1) as Monaco.languages.SymbolKind,
-          tags: monacoSymbolTags(symbol),
-          range: toMonacoRange(symbol.range),
-          selectionRange: toMonacoRange(symbol.selectionRange),
-          children: symbol.children ? lspSymbolsToMonaco(symbol.children) : undefined
-        }
-  )
 }
 
 function toLspCancellationToken(token: Monaco.CancellationToken): CancellationToken {
@@ -166,16 +123,10 @@ export function textSearchFallback(
   useAppStore.getState().showRightSidebarSearch({ query: word })
 }
 
-function offerSemanticSearch(
-  request: PythonCodeIntelligenceRequest,
-  word: string | null
-): void {
+function offerSemanticSearch(request: PythonCodeIntelligenceRequest, word: string | null): void {
   toast.info(translate('settings.codeIntelligence.noSemanticDefinition', 'No definition found'), {
     action: {
-      label: translate(
-        'settings.codeIntelligence.searchTextForSymbol',
-        'Search text for symbol'
-      ),
+      label: translate('settings.codeIntelligence.searchTextForSymbol', 'Search text for symbol'),
       onClick: () => textSearchFallback(request, word)
     }
   })
@@ -207,9 +158,7 @@ function installProviders(monaco: MonacoApi): void {
       if (!request || token.isCancellationRequested) {
         return null
       }
-      const hover = await getPythonHover(request, toLspCancellationToken(token)).catch(
-        () => null
-      )
+      const hover = await getPythonHover(request, toLspCancellationToken(token)).catch(() => null)
       if (!hover || token.isCancellationRequested) {
         return null
       }
@@ -225,10 +174,9 @@ function installProviders(monaco: MonacoApi): void {
       if (!request || token.isCancellationRequested) {
         return []
       }
-      const symbols = await getPythonDocumentSymbols(
-        request,
-        toLspCancellationToken(token)
-      ).catch(() => null)
+      const symbols = await getPythonDocumentSymbols(request, toLspCancellationToken(token)).catch(
+        () => null
+      )
       return symbols ? lspSymbolsToMonaco(symbols) : []
     }
   })
@@ -238,10 +186,9 @@ function installProviders(monaco: MonacoApi): void {
       if (!request || token.isCancellationRequested) {
         return []
       }
-      const references = await getPythonReferences(
-        request,
-        toLspCancellationToken(token)
-      ).catch(() => null)
+      const references = await getPythonReferences(request, toLspCancellationToken(token)).catch(
+        () => null
+      )
       if (references === null) {
         // No semantic session: route to the labelled text search (#13).
         const word = model.getWordAtPosition(position)?.word ?? null
@@ -293,11 +240,7 @@ export function registerPythonMonacoDocument(
     if (documents.get(key)?.token !== context.token) {
       return
     }
-    monaco.editor.setModelMarkers(
-      model,
-      'orca-python',
-      lspDiagnosticToMonacoMarkers(diagnostics)
-    )
+    monaco.editor.setModelMarkers(model, 'orca-python', lspDiagnosticToMonacoMarkers(diagnostics))
   }
   const unsubscribeDiagnostics = subscribePythonDiagnostics((uri) => {
     const request = requestAt({ lineNumber: 1, column: 1 })

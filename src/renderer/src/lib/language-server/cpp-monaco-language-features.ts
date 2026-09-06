@@ -1,5 +1,11 @@
 import type * as Monaco from 'monaco-editor'
-import type { Hover, MarkedString, Range as LspRange } from 'vscode-languageserver-protocol'
+import {
+  CancellationTokenSource,
+  type CancellationToken,
+  type Hover,
+  type MarkedString,
+  type Range as LspRange
+} from 'vscode-languageserver-protocol'
 import { translate } from '@/i18n/i18n'
 import type { CppDefinitionTarget } from './cpp-definition-locations'
 import { installCppDefinitionLinkAffordance } from './cpp-definition-link-affordance'
@@ -8,10 +14,12 @@ import { CPP_LANGUAGES, findCppCodeIntelligenceScope } from './cpp-code-intellig
 import { getCppSession } from './cpp-code-intelligence-session'
 import {
   getCppHover,
+  getCppDocumentSymbols,
   openCppDefinitionTarget,
   type CppCodeIntelligenceRequest
 } from './cpp-definition-navigation'
 import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
+import { lspSymbolsToMonaco } from './document-symbol-monaco-mapping'
 import { createSemanticMonacoStack } from './semantic-monaco-stack'
 
 const cppStack = createSemanticMonacoStack({
@@ -74,6 +82,12 @@ function hoverContents(hover: Hover): Monaco.IMarkdownString[] {
   return contents.filter(Boolean).map((entry) => ({ value: entry }))
 }
 
+function toLspCancellationToken(monacoToken: Monaco.CancellationToken): CancellationToken {
+  const source = new CancellationTokenSource()
+  monacoToken.onCancellationRequested(() => source.cancel())
+  return source.token
+}
+
 function contextForModel(model: Monaco.editor.ITextModel): DocumentContext | null {
   return documents.get(model.uri.toString()) ?? null
 }
@@ -100,6 +114,18 @@ function installProviders(monaco: MonacoApi): void {
           contents: hoverContents(hover),
           range: hover.range ? toMonacoRange(monaco, hover.range) : undefined
         }
+      }
+    })
+    monaco.languages.registerDocumentSymbolProvider(language, {
+      provideDocumentSymbols: async (model, token) => {
+        const request = contextForModel(model)?.requestAt({ lineNumber: 1, column: 1 })
+        if (!request || token.isCancellationRequested) {
+          return []
+        }
+        const symbols = await getCppDocumentSymbols(request, toLspCancellationToken(token)).catch(
+          () => null
+        )
+        return symbols ? lspSymbolsToMonaco(symbols) : []
       }
     })
   }

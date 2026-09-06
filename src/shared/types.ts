@@ -2809,6 +2809,9 @@ export type GlobalSettings = {
   appFontFamily: string
   /** User-authorized semantic scopes; absent for profiles created before code intelligence. */
   codeIntelligenceScopes?: CodeIntelligenceScope[]
+  /** Scope ids whose Outline auto default scope the user deleted (#101) — main-owned,
+   * so the Outline never silently recreates them. */
+  codeIntelligenceDeclinedAutoScopes?: string[]
   editorAutoSave: boolean
   editorAutoSaveDelayMs: number
   editorMinimapEnabled: boolean
@@ -3400,6 +3403,7 @@ export type TaskResumeState = {
 
 export type RightSidebarTab =
   | 'explorer'
+  | 'outline'
   | 'search'
   | 'vault'
   | 'workspaces'

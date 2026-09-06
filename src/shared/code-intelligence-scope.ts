@@ -11,9 +11,7 @@ import {
 export type CodeIntelligenceLanguage = 'python' | 'cpp'
 
 /** The server a scope's language launches; Python scopes use basedpyright. */
-export function languageServerKindForScope(
-  language: CodeIntelligenceLanguage
-): LanguageServerKind {
+export function languageServerKindForScope(language: CodeIntelligenceLanguage): LanguageServerKind {
   return language === 'cpp' ? 'clangd' : 'basedpyright'
 }
 
@@ -81,6 +79,10 @@ export type CodeIntelligenceScope = {
   serverSource: CodeIntelligenceServerSource
   consent?: CodeIntelligenceScopeConsent
   setupStatus?: CodeIntelligenceSetupStatus
+  /** Provenance: scopes born from the Outline's zero-config default (ADR 0003).
+   * Metadata only — deliberately outside scopeConfigurationPayload so flipping
+   * it never touches consent staleness. */
+  origin?: 'outline-auto'
   /** Per-scope format-on-save (#20): off unless explicitly enabled; deliberately
    * outside scopeConfigurationPayload so flipping it never demands re-consent. */
   formatOnSave?: boolean

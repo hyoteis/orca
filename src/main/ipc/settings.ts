@@ -52,6 +52,7 @@ function sanitizeRendererSettingsUpdate(args: Partial<GlobalSettings>): Partial<
   delete sanitizedArgs.pluginConsents
   delete sanitizedArgs.disabledPlugins
   delete sanitizedArgs.codeIntelligenceScopes
+  delete sanitizedArgs.codeIntelligenceDeclinedAutoScopes
   return sanitizedArgs
 }
 

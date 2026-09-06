@@ -37,10 +37,10 @@ vi.mock('./semantic-monaco-stack', () => ({
 import { toast } from 'sonner'
 import {
   lspDiagnosticToMonacoMarkers,
-  lspSymbolsToMonaco,
   pythonDefinitionFallbackAction,
   textSearchFallback
 } from './python-monaco-language-features'
+import { lspSymbolsToMonaco } from './document-symbol-monaco-mapping'
 import type { PythonCodeIntelligenceRequest } from './python-definition-navigation'
 
 const request: PythonCodeIntelligenceRequest = {
@@ -88,9 +88,7 @@ describe('python definition fallback router', () => {
   })
 
   it('does nothing for non-python documents', () => {
-    expect(
-      pythonDefinitionFallbackAction({ ...request, language: 'cpp' })
-    ).toBeNull()
+    expect(pythonDefinitionFallbackAction({ ...request, language: 'cpp' })).toBeNull()
     textSearchFallback({ ...request, language: 'cpp' }, 'word')
     expect(showRightSidebarSearch).not.toHaveBeenCalled()
   })

@@ -1,6 +1,15 @@
 /* eslint-disable max-lines -- Why: the right sidebar owns activity-bar visibility, routing, and resize behavior as one interaction surface; splitting the tab table away would make hidden-tab fallbacks harder to audit. */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { Plug, Files, GitBranch, ListChecks, PanelRight, Search, Workflow } from 'lucide-react'
+import {
+  Plug,
+  Files,
+  GitBranch,
+  ListChecks,
+  ListTree,
+  PanelRight,
+  Search,
+  Workflow
+} from 'lucide-react'
 import { useAppStore } from '@/store'
 import type { ActiveRightSidebarTab, ActivityBarPosition } from '@/store/slices/editor'
 import { useRepoById } from '@/store/selectors'
@@ -120,6 +129,14 @@ function RightSidebarInner(): React.JSX.Element {
         icon: Search,
         title: translate('auto.components.right.sidebar.index.searchTab', 'Search'),
         shortcut: searchShortcut === 'Unassigned' ? '' : searchShortcut
+      },
+      {
+        // Why: Outline sits right after the content-search panel (#99); no
+        // global shortcut in v1.
+        id: 'outline',
+        icon: ListTree,
+        title: translate('auto.components.right.sidebar.index.outlineTab', 'Outline'),
+        shortcut: ''
       },
       {
         id: 'vault',

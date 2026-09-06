@@ -14,6 +14,10 @@ describe('normalizeRightSidebarRoute', () => {
     expect(normalizeRightSidebarRoute('pr-checks')).toEqual({ rightSidebarTab: 'pr-checks' })
   })
 
+  it('preserves the Outline tab (#99)', () => {
+    expect(normalizeRightSidebarRoute('outline')).toEqual({ rightSidebarTab: 'outline' })
+  })
+
   it('still normalizes invalid tabs to Explorer', () => {
     expect(normalizeRightSidebarRoute('missing')).toEqual({ rightSidebarTab: 'explorer' })
   })

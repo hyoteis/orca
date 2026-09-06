@@ -1,6 +1,7 @@
 import { detectLanguage } from '@/lib/language-detect'
 import { useAppStore } from '@/store'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import type { Repo } from '../../../../shared/types'
 import type {
   CodeIntelligenceLanguage,
   CodeIntelligenceScope
@@ -97,16 +98,30 @@ export function fileUriToHostPath(uri: string, executionHostId: string): string 
   return pathname
 }
 
+/** The workspace repo owning a file: session id first, then path containment. */
+export function findCodeIntelligenceRepo(
+  request: Pick<CodeIntelligenceWorkspaceRequest, 'filePath' | 'worktreeId'>,
+  // Subscription-fed override so React callers re-derive on repos changes.
+  state: Pick<ReturnType<typeof useAppStore.getState>, 'repos'> = useAppStore.getState()
+): Repo | null {
+  return (
+    state.repos.find(
+      (candidate) =>
+        candidate.id === request.worktreeId || pathStartsWith(request.filePath, candidate.path)
+    ) ?? null
+  )
+}
+
 export function findCodeIntelligenceScope(
   request: CodeIntelligenceWorkspaceRequest,
   language: CodeIntelligenceLanguage,
   // Subscription-fed override so React callers re-derive on settings/repos changes.
-  state: Pick<ReturnType<typeof useAppStore.getState>, 'repos' | 'settings'> = useAppStore.getState()
+  state: Pick<
+    ReturnType<typeof useAppStore.getState>,
+    'repos' | 'settings'
+  > = useAppStore.getState()
 ): CodeIntelligenceScope | null {
-  const repo = state.repos.find(
-    (candidate) =>
-      candidate.id === request.worktreeId || pathStartsWith(request.filePath, candidate.path)
-  )
+  const repo = findCodeIntelligenceRepo(request, state)
   if (!repo) {
     return null
   }

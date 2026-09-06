@@ -5,6 +5,7 @@ import { isPluginPanelTabKey } from '../../../../shared/plugins/plugin-manifest'
 
 const FileExplorer = lazy(() => import('./FileExplorer'))
 const SearchPanel = lazy(() => import('./SearchPanel'))
+const OutlinePanel = lazy(() => import('./OutlinePanel'))
 const SourceControl = lazy(() => import('./SourceControl'))
 const ChecksPanel = lazy(() => import('./ChecksPanel'))
 const PortsPanel = lazy(() => import('./PortsPanel'))
@@ -27,6 +28,7 @@ export function RightSidebarPanelContent({
       <Suspense fallback={null}>
         {effectiveTab === 'explorer' && <FileExplorer />}
         {effectiveTab === 'search' && <SearchPanel />}
+        {effectiveTab === 'outline' && <OutlinePanel />}
         {effectiveTab === 'source-control' && <SourceControl />}
         {effectiveTab === 'checks' && <ChecksPanel />}
         {/* Why: SSH port forwarding still depends on the raw ports.detect data,
