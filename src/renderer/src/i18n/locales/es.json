@@ -11450,7 +11450,6 @@
             "f0c48ff046": "Habilita la inteligencia de código para ver los símbolos",
             "51971afea7": "La inteligencia de código necesita autorización para este espacio de trabajo",
             "5c0a0b5e02": "No hay símbolos en este archivo",
-            "7e3b1edb00": "Conectando con el servidor de lenguaje…",
             "1495dd1774": "El primer inicio puede tardar unos segundos",
             "0a50d43350": "Error de conexión con el servidor de lenguaje",
             "3626bb6a3a": "La consulta de símbolos falló. Inténtalo de nuevo.",
@@ -11459,7 +11458,8 @@
             "20330722dc": "Ordenar por nombre",
             "d8fa5b0f7d": "Ordenar por tipo",
             "308cd32c19": "Filtrar símbolos",
-            "093263f7bf": "No hay símbolos coincidentes"
+            "093263f7bf": "No hay símbolos coincidentes",
+            "705b215356": "Leyendo símbolos…"
           },
           "use.outline.symbols": {
             "640345dd02": "{{value0}} {{value1}} — esquema predeterminado"

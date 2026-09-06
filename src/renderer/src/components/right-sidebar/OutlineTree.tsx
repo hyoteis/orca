@@ -124,7 +124,13 @@ export function OutlineTree({
                     expanded ? 'Collapse' : 'Expand'
                   )}
                   className="grid size-5 shrink-0 place-items-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  onClick={() => onToggleCollapsed(row.key)}
+                  onClick={() => {
+                    // While filtering the tree is force-expanded: a click must not
+                    // write a collapse the user never saw take effect (#102 review).
+                    if (!filtering) {
+                      onToggleCollapsed(row.key)
+                    }
+                  }}
                 >
                   <ChevronRight
                     className={cn('size-3 transition-transform', expanded && 'rotate-90')}

@@ -35,7 +35,7 @@ export type OutlineSymbolsState =
   | { status: 'ready'; rows: OutlineSymbolRow[] }
 
 /** Document-change → symbol re-query delay (#102). */
-export const OUTLINE_REFRESH_DEBOUNCE_MS = 500
+const OUTLINE_REFRESH_DEBOUNCE_MS = 500
 
 // Session collapse memory (#102): survives tab switches in-memory, keyed by
 // file path; never persists across app restarts (out of scope per #98).

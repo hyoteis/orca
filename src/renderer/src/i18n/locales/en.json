@@ -12344,7 +12344,6 @@
             "f0c48ff046": "Enable code intelligence to see symbols",
             "51971afea7": "Code intelligence needs authorization for this workspace",
             "5c0a0b5e02": "No symbols in this file",
-            "7e3b1edb00": "Connecting to language server…",
             "1495dd1774": "The first start can take a few seconds",
             "0a50d43350": "Language server connection failed",
             "3626bb6a3a": "The symbol query failed. Try again.",
@@ -12353,7 +12352,8 @@
             "20330722dc": "Sort by name",
             "d8fa5b0f7d": "Sort by kind",
             "308cd32c19": "Filter symbols",
-            "093263f7bf": "No matching symbols"
+            "093263f7bf": "No matching symbols",
+            "705b215356": "Reading symbols…"
           },
           "use.outline.symbols": {
             "640345dd02": "{{value0}} {{value1}} — Outline default"

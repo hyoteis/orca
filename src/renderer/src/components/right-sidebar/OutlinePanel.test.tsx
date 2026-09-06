@@ -421,7 +421,7 @@ describe('OutlinePanel', () => {
       revision: 1
     })
     expect(mocks.fetchSettings).toHaveBeenCalled()
-    expect(await screen.findByText('Connecting to language server…')).toBeInTheDocument()
+    expect(await screen.findByText('Reading symbols…')).toBeInTheDocument()
   })
 
   it('shows the enable affordance instead of resurrecting a deleted auto scope', async () => {
@@ -485,7 +485,7 @@ describe('OutlinePanel', () => {
       })
     )
     renderPanel()
-    expect(await screen.findByText('Connecting to language server…')).toBeInTheDocument()
+    expect(await screen.findByText('Reading symbols…')).toBeInTheDocument()
     gate.release?.(treeSymbols)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Renderer/ })).toBeInTheDocument()
@@ -534,6 +534,9 @@ describe('OutlinePanel interactions (#102)', () => {
     expect(document.querySelector('mark')?.textContent).toBe('ren')
     // The retained ancestor stays expandable (its chevron renders as expanded).
     expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument()
+    // Filtering force-expands: a chevron click neither collapses nor writes memory.
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }))
+    expect(renderedRowNames()).toEqual(['alpha', 'render_pass'])
 
     fireEvent.change(input, { target: { value: '' } })
     expect(renderedRowNames()).toEqual(['zed', 'mid', 'alpha', 'draw', 'render_pass'])

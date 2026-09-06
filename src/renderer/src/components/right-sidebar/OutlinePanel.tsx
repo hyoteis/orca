@@ -11,6 +11,8 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import {
@@ -51,6 +53,10 @@ function OutlineEmptyState({
 /** Stable empty reference so the projection memo deps hold across non-ready renders. */
 const EMPTY_ROWS: readonly never[] = []
 
+// Shared header-control base (segmented sort + filter toggle), prototype .ctl.
+const HEADER_CONTROL_CLASS =
+  'grid h-[22px] place-items-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+
 /** Right-sidebar Outline tab (#99): symbol tree of the active editor file.
  * #102 adds the interactions: filter, sort, cursor-follow, collapse memory,
  * live refresh, and the server-error retry state. */
@@ -87,7 +93,7 @@ export function OutlinePanel(): React.JSX.Element {
       mode: 'name',
       label: translate('auto.components.right.sidebar.OutlinePanel.20330722dc', 'Sort by name'),
       glyph: (
-        <span className="font-mono text-[9px] leading-none" aria-hidden>
+        <span className="font-mono text-[11px] leading-none" aria-hidden>
           A–Z
         </span>
       )
@@ -117,54 +123,63 @@ export function OutlinePanel(): React.JSX.Element {
           {rows.length > 0 && (
             <div className="flex overflow-hidden rounded-md border border-border">
               {sortGlyphs.map(({ mode, label, glyph }, index) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-pressed={sortMode === mode}
-                  aria-label={label}
-                  title={label}
-                  className={cn(
-                    'grid h-[22px] w-[26px] place-items-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                    index > 0 && 'border-l border-border',
-                    sortMode === mode && 'bg-accent text-foreground'
-                  )}
-                  onClick={() => setSortMode(mode)}
-                >
-                  {glyph}
-                </button>
+                <Tooltip key={mode}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-pressed={sortMode === mode}
+                      aria-label={label}
+                      className={cn(
+                        HEADER_CONTROL_CLASS,
+                        'w-[30px]',
+                        index > 0 && 'border-l border-border',
+                        sortMode === mode && 'bg-accent text-foreground'
+                      )}
+                      onClick={() => setSortMode(mode)}
+                    >
+                      {glyph}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{label}</TooltipContent>
+                </Tooltip>
               ))}
             </div>
           )}
-          <button
-            type="button"
-            aria-pressed={filterOpen}
-            aria-label={filterLabel}
-            title={filterLabel}
-            className={cn(
-              'grid size-[22px] place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-              filterOpen && 'bg-accent text-foreground'
-            )}
-            onClick={() => {
-              setFilterOpen((open) => !open)
-              // Closing the filter clears it — filtered rows must never stay hidden.
-              if (filterOpen) {
-                setFilterQuery('')
-              }
-            }}
-          >
-            <ListFilter className="size-3.5" aria-hidden />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-pressed={filterOpen}
+                aria-label={filterLabel}
+                className={cn(
+                  HEADER_CONTROL_CLASS,
+                  'rounded-md',
+                  filterOpen && 'bg-accent text-foreground'
+                )}
+                onClick={() => {
+                  setFilterOpen((open) => !open)
+                  // Closing the filter clears it — filtered rows must never stay hidden.
+                  if (filterOpen) {
+                    setFilterQuery('')
+                  }
+                }}
+              >
+                <ListFilter className="size-3.5" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{filterLabel}</TooltipContent>
+          </Tooltip>
         </div>
       </div>
       {filterOpen && (
         <div className="border-b border-border px-2 py-1.5">
-          <input
+          <Input
             type="text"
             value={filterQuery}
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder={filterLabel}
             aria-label={filterLabel}
-            className="h-6 w-full rounded-md border border-border bg-secondary px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+            className="h-6 border-input bg-input/30 px-2 text-xs"
           />
         </div>
       )}
@@ -172,10 +187,7 @@ export function OutlinePanel(): React.JSX.Element {
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-5 py-8 text-center">
           <Loader2 className="size-7 animate-spin text-muted-foreground" aria-hidden />
           <p className="text-xs text-foreground">
-            {translate(
-              'auto.components.right.sidebar.OutlinePanel.7e3b1edb00',
-              'Connecting to language server…'
-            )}
+            {translate('auto.components.right.sidebar.OutlinePanel.705b215356', 'Reading symbols…')}
           </p>
           <p className="text-[11px] text-muted-foreground">
             {translate(
