@@ -11459,7 +11459,9 @@
             "d8fa5b0f7d": "Ordenar por tipo",
             "308cd32c19": "Filtrar símbolos",
             "093263f7bf": "No hay símbolos coincidentes",
-            "705b215356": "Leyendo símbolos…"
+            "705b215356": "Leyendo símbolos…",
+            "70a1c94357": "Sin servidor de lenguaje conectado: los símbolos son aproximados y los saltos son a nivel de línea",
+            "9152d1a19e": "Aproximado"
           },
           "use.outline.symbols": {
             "640345dd02": "{{value0}} {{value1}} — esquema predeterminado"

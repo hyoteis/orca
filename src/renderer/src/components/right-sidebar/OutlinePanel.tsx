@@ -25,19 +25,21 @@ import { useOutlineSymbols } from './use-outline-symbols'
 import { OutlineTree } from './OutlineTree'
 import { translate } from '@/i18n/i18n'
 
+type StatusBlock = {
+  icon: LucideIcon
+  title: string
+  subtitle?: string
+  action?: React.ReactNode
+  tone?: 'destructive'
+}
+
 function OutlineEmptyState({
   icon: Icon,
   title,
   subtitle,
   action,
   tone
-}: {
-  icon: LucideIcon
-  title: string
-  subtitle?: string
-  action?: React.ReactNode
-  tone?: 'destructive'
-}): React.JSX.Element {
+}: StatusBlock): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-5 py-8 text-center">
       <Icon className="size-7 text-muted-foreground" aria-hidden />
@@ -46,6 +48,30 @@ function OutlineEmptyState({
       </p>
       {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
       {action ? <div className="mt-2">{action}</div> : null}
+    </div>
+  )
+}
+
+/** Same copy as the empty state, but compact and pinned below heuristic rows
+ * (#103) — the status message stays honest while the tree stays usable. */
+function OutlineStatusFooter({ block }: { block: StatusBlock }): React.JSX.Element {
+  return (
+    <div
+      data-testid="outline-status-footer"
+      className="flex flex-col items-center gap-0.5 border-t border-border px-2 py-1.5 text-center"
+    >
+      <p
+        className={cn(
+          'text-[11px] text-foreground',
+          block.tone === 'destructive' && 'text-destructive'
+        )}
+      >
+        {block.title}
+      </p>
+      {block.subtitle ? (
+        <p className="text-[11px] text-muted-foreground">{block.subtitle}</p>
+      ) : null}
+      {block.action ? <div className="mt-1">{block.action}</div> : null}
     </div>
   )
 }
@@ -59,7 +85,8 @@ const HEADER_CONTROL_CLASS =
 
 /** Right-sidebar Outline tab (#99): symbol tree of the active editor file.
  * #102 adds the interactions: filter, sort, cursor-follow, collapse memory,
- * live refresh, and the server-error retry state. */
+ * live refresh, and the server-error retry state. #103 adds the heuristic
+ * tier: approximate rows plus badge when no language server can run. */
 export function OutlinePanel(): React.JSX.Element {
   const { state, fileName, reveal, cursorLine, collapsedKeys, toggleCollapsed, retry } =
     useOutlineSymbols()
@@ -68,12 +95,109 @@ export function OutlinePanel(): React.JSX.Element {
   const [filterOpen, setFilterOpen] = useState(false)
   const [filterQuery, setFilterQuery] = useState('')
 
-  const rows = state.status === 'ready' ? state.rows : EMPTY_ROWS
+  const heuristicRows =
+    state.status === 'enable' || state.status === 'unavailable' || state.status === 'error'
+      ? (state.heuristicRows ?? EMPTY_ROWS)
+      : EMPTY_ROWS
+  const rows = state.status === 'ready' ? state.rows : heuristicRows
+  const approximate = heuristicRows.length > 0
   const visibleRows = useMemo(
     () => filterOutlineRows(sortOutlineRows(rows, sortMode), filterQuery),
     [rows, sortMode, filterQuery]
   )
   const cursorRowKey = cursorLine === null ? null : enclosingOutlineRowKey(visibleRows, cursorLine)
+
+  const statusBlock: StatusBlock | null = useMemo(() => {
+    if (state.status === 'error') {
+      return {
+        icon: CircleAlert,
+        tone: 'destructive',
+        title: translate(
+          'auto.components.right.sidebar.OutlinePanel.0a50d43350',
+          'Language server connection failed'
+        ),
+        subtitle: translate(
+          'auto.components.right.sidebar.OutlinePanel.3626bb6a3a',
+          'The symbol query failed. Try again.'
+        ),
+        action: (
+          <Button type="button" size="xs" variant="outline" onClick={retry}>
+            {translate('auto.components.right.sidebar.OutlinePanel.6987d54751', 'Retry')}
+          </Button>
+        )
+      }
+    }
+    if (state.status === 'no-file') {
+      return {
+        icon: ListTree,
+        title: translate(
+          'auto.components.right.sidebar.OutlinePanel.e8bcf14f01',
+          'Open a file to see its symbols'
+        )
+      }
+    }
+    if (state.status === 'unsupported') {
+      return {
+        icon: CircleOff,
+        title: translate(
+          'auto.components.right.sidebar.OutlinePanel.dee11bd70f',
+          'No symbols for this file type'
+        ),
+        subtitle: translate(
+          'auto.components.right.sidebar.OutlinePanel.2b8019ac88',
+          'Supports Python and C++ files'
+        )
+      }
+    }
+    if (state.status === 'unavailable') {
+      return {
+        icon: Braces,
+        title: translate(
+          'auto.components.right.sidebar.OutlinePanel.a54eff7728',
+          'No symbols available'
+        ),
+        subtitle:
+          state.reason === 'consent'
+            ? translate(
+                'auto.components.right.sidebar.OutlinePanel.51971afea7',
+                'Code intelligence needs authorization for this workspace'
+              )
+            : translate(
+                'auto.components.right.sidebar.OutlinePanel.a7fc6e9b08',
+                'No code-intelligence scope covers this file'
+              )
+      }
+    }
+    if (state.status === 'enable') {
+      // #101: auto-create refused (deleted before, or a non-local Host) —
+      // the enable action routes to Code scopes configuration.
+      return {
+        icon: Braces,
+        title: translate(
+          'auto.components.right.sidebar.OutlinePanel.a54eff7728',
+          'No symbols available'
+        ),
+        subtitle: translate(
+          'auto.components.right.sidebar.OutlinePanel.f0c48ff046',
+          'Enable code intelligence to see symbols'
+        ),
+        action: (
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={() => openModal('code-intelligence-cpp-setup', { repoId: state.repoId })}
+          >
+            {translate(
+              'auto.components.right.sidebar.OutlinePanel.db937ed166',
+              'Enable code intelligence'
+            )}
+          </Button>
+        )
+      }
+    }
+    return null
+  }, [state, openModal, retry])
 
   const filterLabel = translate(
     'auto.components.right.sidebar.OutlinePanel.308cd32c19',
@@ -105,6 +229,35 @@ export function OutlinePanel(): React.JSX.Element {
     }
   ]
 
+  const tree =
+    visibleRows.length > 0 ? (
+      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek py-1">
+        <OutlineTree
+          rows={visibleRows}
+          onReveal={reveal}
+          query={filterQuery}
+          collapsedKeys={collapsedKeys}
+          onToggleCollapsed={toggleCollapsed}
+          cursorRowKey={cursorRowKey}
+        />
+      </div>
+    ) : (
+      <OutlineEmptyState
+        icon={ListTree}
+        title={
+          filterQuery.trim()
+            ? translate(
+                'auto.components.right.sidebar.OutlinePanel.093263f7bf',
+                'No matching symbols'
+              )
+            : translate(
+                'auto.components.right.sidebar.OutlinePanel.5c0a0b5e02',
+                'No symbols in this file'
+              )
+        }
+      />
+    )
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-sidebar"
@@ -114,6 +267,28 @@ export function OutlinePanel(): React.JSX.Element {
         <span className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
           {translate('auto.components.right.sidebar.OutlinePanel.7e498c4509', 'Outline')}
         </span>
+        {approximate && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                data-testid="outline-approximate-badge"
+                aria-label={translate(
+                  'auto.components.right.sidebar.OutlinePanel.70a1c94357',
+                  'No language server connected — symbols are approximate and jumps are line-level'
+                )}
+                className="rounded border border-border px-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground"
+              >
+                {translate('auto.components.right.sidebar.OutlinePanel.9152d1a19e', 'Approximate')}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-56">
+              {translate(
+                'auto.components.right.sidebar.OutlinePanel.70a1c94357',
+                'No language server connected — symbols are approximate and jumps are line-level'
+              )}
+            </TooltipContent>
+          </Tooltip>
+        )}
         {fileName ? (
           <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
             {fileName}
@@ -197,128 +372,18 @@ export function OutlinePanel(): React.JSX.Element {
           </p>
         </div>
       )}
-      {state.status === 'error' && (
-        <OutlineEmptyState
-          icon={CircleAlert}
-          tone="destructive"
-          title={translate(
-            'auto.components.right.sidebar.OutlinePanel.0a50d43350',
-            'Language server connection failed'
-          )}
-          subtitle={translate(
-            'auto.components.right.sidebar.OutlinePanel.3626bb6a3a',
-            'The symbol query failed. Try again.'
-          )}
-          action={
-            <Button type="button" size="xs" variant="outline" onClick={retry}>
-              {translate('auto.components.right.sidebar.OutlinePanel.6987d54751', 'Retry')}
-            </Button>
-          }
-        />
-      )}
-      {state.status === 'no-file' && (
-        <OutlineEmptyState
-          icon={ListTree}
-          title={translate(
-            'auto.components.right.sidebar.OutlinePanel.e8bcf14f01',
-            'Open a file to see its symbols'
-          )}
-        />
-      )}
-      {state.status === 'unsupported' && (
-        <OutlineEmptyState
-          icon={CircleOff}
-          title={translate(
-            'auto.components.right.sidebar.OutlinePanel.dee11bd70f',
-            'No symbols for this file type'
-          )}
-          subtitle={translate(
-            'auto.components.right.sidebar.OutlinePanel.2b8019ac88',
-            'Supports Python and C++ files'
-          )}
-        />
-      )}
-      {state.status === 'unavailable' && state.reason === 'no-scope' && (
-        <OutlineEmptyState
-          icon={Braces}
-          title={translate(
-            'auto.components.right.sidebar.OutlinePanel.a54eff7728',
-            'No symbols available'
-          )}
-          subtitle={translate(
-            'auto.components.right.sidebar.OutlinePanel.a7fc6e9b08',
-            'No code-intelligence scope covers this file'
-          )}
-        />
-      )}
-      {state.status === 'enable' && (
-        // #101: auto-create refused (deleted before, or a non-local Host) —
-        // the enable action routes to Code scopes configuration.
-        <OutlineEmptyState
-          icon={Braces}
-          title={translate(
-            'auto.components.right.sidebar.OutlinePanel.a54eff7728',
-            'No symbols available'
-          )}
-          subtitle={translate(
-            'auto.components.right.sidebar.OutlinePanel.f0c48ff046',
-            'Enable code intelligence to see symbols'
-          )}
-          action={
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => openModal('code-intelligence-cpp-setup', { repoId: state.repoId })}
-            >
-              {translate(
-                'auto.components.right.sidebar.OutlinePanel.db937ed166',
-                'Enable code intelligence'
-              )}
-            </Button>
-          }
-        />
-      )}
-      {state.status === 'unavailable' && state.reason === 'consent' && (
-        <OutlineEmptyState
-          icon={Braces}
-          title={translate(
-            'auto.components.right.sidebar.OutlinePanel.a54eff7728',
-            'No symbols available'
-          )}
-          subtitle={translate(
-            'auto.components.right.sidebar.OutlinePanel.51971afea7',
-            'Code intelligence needs authorization for this workspace'
-          )}
-        />
-      )}
-      {state.status === 'ready' &&
-        (visibleRows.length === 0 ? (
-          <OutlineEmptyState
-            icon={ListTree}
-            title={
-              filterQuery.trim()
-                ? translate(
-                    'auto.components.right.sidebar.OutlinePanel.093263f7bf',
-                    'No matching symbols'
-                  )
-                : translate(
-                    'auto.components.right.sidebar.OutlinePanel.5c0a0b5e02',
-                    'No symbols in this file'
-                  )
-            }
-          />
+      {state.status !== 'loading' &&
+        (statusBlock ? (
+          rows.length > 0 ? (
+            <>
+              {tree}
+              <OutlineStatusFooter block={statusBlock} />
+            </>
+          ) : (
+            <OutlineEmptyState {...statusBlock} />
+          )
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek py-1">
-            <OutlineTree
-              rows={visibleRows}
-              onReveal={reveal}
-              query={filterQuery}
-              collapsedKeys={collapsedKeys}
-              onToggleCollapsed={toggleCollapsed}
-              cursorRowKey={cursorRowKey}
-            />
-          </div>
+          tree
         ))}
     </div>
   )

@@ -7,12 +7,10 @@ import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import {
   findCodeIntelligenceRepo,
-  findCodeIntelligenceScope,
-  openDefinitionTargetInWorkspace
+  findCodeIntelligenceScope
 } from '@/lib/language-server/code-intelligence-workspace'
 import { getPythonDocumentSymbols } from '@/lib/language-server/python-definition-navigation'
 import { getCppDocumentSymbols } from '@/lib/language-server/cpp-definition-navigation'
-import { toServerFileUri } from '@/lib/language-server/language-server-document-uri'
 import {
   semanticDocumentEditorFor,
   subscribeSemanticDocuments
@@ -24,14 +22,16 @@ import {
   resolveOutlineTier,
   type OutlineSymbolRow
 } from './outline-model'
+import { extractHeuristicOutlineRows } from './outline-heuristics'
+import { revealOutlineRow } from './outline-row-reveal'
 
 export type OutlineSymbolsState =
   | { status: 'no-file' }
   | { status: 'unsupported' }
-  | { status: 'unavailable'; reason: 'no-scope' | 'consent' }
+  | { status: 'unavailable'; reason: 'no-scope' | 'consent'; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'loading' }
-  | { status: 'enable'; repoId: string }
-  | { status: 'error' }
+  | { status: 'enable'; repoId: string; heuristicRows?: OutlineSymbolRow[] }
+  | { status: 'error'; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'ready'; rows: OutlineSymbolRow[] }
 
 /** Document-change → symbol re-query delay (#102). */
@@ -41,6 +41,15 @@ const OUTLINE_REFRESH_DEBOUNCE_MS = 500
 // file path; never persists across app restarts (out of scope per #98).
 const collapsedRowsByFile = new Map<string, Set<string>>()
 const EMPTY_COLLAPSED: ReadonlySet<string> = new Set()
+
+/** Heuristic tier rows (ADR 0003 tier 3) from the live editor text; undefined
+ * while the document is not mounted (no badge, plain status). */
+function heuristicRowsFor(activeFile: OpenFile | null): OutlineSymbolRow[] | undefined {
+  const document = activeFile && semanticDocumentEditorFor(activeFile.id)
+  return document && activeFile
+    ? extractHeuristicOutlineRows(document.model.getValue(), activeFile.language)
+    : undefined
+}
 
 function useActiveEditFile(): OpenFile | null {
   // Returns an existing OpenFile reference (or null) so unrelated store writes
@@ -167,13 +176,18 @@ export function useOutlineSymbols(): {
         await useAppStore.getState().fetchSettings()
       } catch {
         // Attempt stays consumed: a failed create shows the no-scope state, no retry loop.
-        setState({ status: 'unavailable', reason: 'no-scope' })
+        setState({
+          status: 'unavailable',
+          reason: 'no-scope',
+          heuristicRows: heuristicRowsFor(activeFile)
+        })
       }
     })()
-  }, [autoDecision])
+  }, [activeFile, autoDecision])
 
   useEffect(() => {
-    if (tier.kind !== 'semantic' || !activeFile) {
+    // #103: cursor-follow + debounced refresh serve heuristic rows too.
+    if (!activeFile || !family) {
       setCursorLine(null)
       return
     }
@@ -198,7 +212,7 @@ export function useOutlineSymbols(): {
       cursorSub.dispose()
       contentSub.dispose()
     }
-  }, [activeFile, tier, documentsTick])
+  }, [activeFile, family, documentsTick])
 
   useEffect(() => {
     setCollapsedKeys(
@@ -240,7 +254,12 @@ export function useOutlineSymbols(): {
       if (tier.reason === 'no-scope' && autoDecision) {
         const { decision, repo } = autoDecision
         if ((decision.kind === 'declined' || decision.kind === 'remote-host') && repo) {
-          setState({ status: 'enable', repoId: repo.id })
+          // #98 story 10/11: heuristic symbols plus the explicit enable action.
+          setState({
+            status: 'enable',
+            repoId: repo.id,
+            heuristicRows: heuristicRowsFor(activeFile)
+          })
           return
         }
         if (decision.kind === 'create') {
@@ -249,7 +268,11 @@ export function useOutlineSymbols(): {
           return
         }
       }
-      setState({ status: 'unavailable', reason: tier.reason })
+      setState({
+        status: 'unavailable',
+        reason: tier.reason,
+        heuristicRows: heuristicRowsFor(activeFile)
+      })
       return
     }
     // Why semanticDocumentEditorFor: the live Monaco text, not a disk re-read.
@@ -285,29 +308,18 @@ export function useOutlineSymbols(): {
         setState({ status: 'ready', rows: outlineRowsFromDocumentSymbols(symbols) })
       })
       .catch(() => {
-        // #102: a failed query is an honest error state with retry; the
-        // heuristic fallback lands with #103.
+        // #103: a failed query keeps the user functional — heuristic rows ride
+        // along with the honest error state and its retry (#102).
         if (generationRef.current === generation) {
-          setState({ status: 'error' })
+          setState({ status: 'error', heuristicRows: heuristicRowsFor(activeFile) })
         }
       })
   }, [activeFile, autoDecision, contentTick, documentsTick, family, retryTick, tier])
 
-  const reveal = (row: OutlineSymbolRow): void => {
-    if (!activeFile || !scope) {
-      return
-    }
-    // Why this path: the shared symbol-open reveal reuses the open tab (#98).
-    openDefinitionTargetInWorkspace(
-      {
-        filePath: activeFile.filePath,
-        relativePath: activeFile.relativePath,
-        worktreeId: activeFile.worktreeId
-      },
-      { uri: toServerFileUri(activeFile.filePath), range: row.range },
-      scope
-    )
-  }
+  const setPendingEditorReveal = useAppStore((s) => s.setPendingEditorReveal)
+
+  const reveal = (row: OutlineSymbolRow): void =>
+    revealOutlineRow(row, activeFile, scope, state.status === 'ready', setPendingEditorReveal)
 
   return {
     state,

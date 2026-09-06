@@ -103,5 +103,12 @@
     "text": "Python",
     "dynamic": false,
     "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/right-sidebar/OutlinePanel.tsx",
+    "kind": "jsx-text",
+    "text": "A–Z",
+    "dynamic": false,
+    "count": 1
   }
 ]

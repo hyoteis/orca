@@ -12353,7 +12353,9 @@
             "d8fa5b0f7d": "Sort by kind",
             "308cd32c19": "Filter symbols",
             "093263f7bf": "No matching symbols",
-            "705b215356": "Reading symbols…"
+            "705b215356": "Reading symbols…",
+            "70a1c94357": "No language server connected — symbols are approximate and jumps are line-level",
+            "9152d1a19e": "Approximate"
           },
           "use.outline.symbols": {
             "640345dd02": "{{value0}} {{value1}} — Outline default"

@@ -638,3 +638,79 @@ describe('OutlinePanel interactions (#102)', () => {
     expect(screen.queryByRole('button', { name: /alpha/ })).not.toBeInTheDocument()
   })
 })
+
+describe('OutlinePanel heuristic tier (#103)', () => {
+  const HEURISTIC_TEXT =
+    'class Renderer:\n    def draw(self):\n        pass\n\ndef main():\n    pass\n'
+  const setDeclinedScope = (): void =>
+    setState({
+      settings: {
+        codeIntelligenceScopes: [],
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+      }
+    })
+
+  it('renders heuristic rows with the approximate badge and the enable action', async () => {
+    setDeclinedScope()
+    documentHarness.text = HEURISTIC_TEXT
+    renderPanel()
+    expect(await screen.findByRole('button', { name: /Renderer/ })).toBeInTheDocument()
+    expect(renderedRowNames()).toEqual(['Renderer', 'draw', 'main'])
+    // Flat line-level rows: no chevrons anywhere.
+    expect(screen.queryByRole('button', { name: 'Collapse' })).not.toBeInTheDocument()
+    const badge = screen.getByTestId('outline-approximate-badge')
+    expect(badge).toHaveTextContent('Approximate')
+    expect(badge).toHaveAttribute(
+      'aria-label',
+      'No language server connected — symbols are approximate and jumps are line-level'
+    )
+    expect(screen.getByRole('button', { name: 'Enable code intelligence' })).toBeInTheDocument()
+  })
+
+  it('reveals a heuristic row by line through the pending-editor-reveal path', async () => {
+    const setPendingEditorReveal = vi.fn()
+    setState({
+      setPendingEditorReveal,
+      settings: {
+        codeIntelligenceScopes: [],
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+      }
+    })
+    documentHarness.text = HEURISTIC_TEXT
+    renderPanel()
+    fireEvent.click(await screen.findByRole('button', { name: /main/ }))
+    expect(setPendingEditorReveal).toHaveBeenCalledWith({
+      filePath: '/ws/repo-1/src/renderer.py',
+      line: 5,
+      column: 5,
+      matchLength: 0
+    })
+    expect(mocks.openDefinitionTargetInWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('keeps a semantic-ready outline free of the approximate badge', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    renderPanel()
+    await screen.findByRole('button', { name: /Renderer/ })
+    expect(screen.queryByTestId('outline-approximate-badge')).not.toBeInTheDocument()
+  })
+
+  it('falls back to heuristic rows plus retry when the semantic query fails', async () => {
+    mocks.getPythonDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
+    documentHarness.text = HEURISTIC_TEXT
+    renderPanel()
+    expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
+    expect(renderedRowNames()).toEqual(['Renderer', 'draw', 'main'])
+    expect(screen.getByTestId('outline-approximate-badge')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('shows heuristic rows under the plain no-scope message', async () => {
+    setState({ repos: [], settings: { codeIntelligenceScopes: [] } })
+    documentHarness.text = HEURISTIC_TEXT
+    renderPanel()
+    expect(await screen.findByText('No symbols available')).toBeInTheDocument()
+    expect(renderedRowNames()).toEqual(['Renderer', 'draw', 'main'])
+    expect(mocks.upsertScope).not.toHaveBeenCalled()
+  })
+})
