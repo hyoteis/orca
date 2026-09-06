@@ -5,6 +5,7 @@ import { basename } from '@/lib/path'
 import { translate } from '@/i18n/i18n'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { isFolderRepo } from '../../../../shared/repo-kind'
+import type { CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 import {
   findCodeIntelligenceRepo,
   findCodeIntelligenceScope
@@ -30,7 +31,7 @@ export type OutlineSymbolsState =
   | { status: 'unsupported' }
   | { status: 'unavailable'; reason: 'no-scope' | 'consent'; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'loading' }
-  | { status: 'enable'; repoId: string; heuristicRows?: OutlineSymbolRow[] }
+  | { status: 'enable'; repoId: string; language: CodeIntelligenceLanguage; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'error'; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'ready'; rows: OutlineSymbolRow[] }
 
@@ -255,9 +256,11 @@ export function useOutlineSymbols(): {
         const { decision, repo } = autoDecision
         if ((decision.kind === 'declined' || decision.kind === 'remote-host') && repo) {
           // #98 story 10/11: heuristic symbols plus the explicit enable action.
+          // autoDecision non-null implies family non-null (#106 preselect).
           setState({
             status: 'enable',
             repoId: repo.id,
+            language: family ?? 'cpp',
             heuristicRows: heuristicRowsFor(activeFile)
           })
           return

@@ -192,7 +192,13 @@ export function OutlinePanel(): React.JSX.Element {
             type="button"
             size="xs"
             variant="outline"
-            onClick={() => openModal('code-intelligence-cpp-setup', { repoId: state.repoId })}
+            onClick={() =>
+              // #106: preselect the active file's language family, not cpp-first.
+              openModal('code-intelligence-cpp-setup', {
+                repoId: state.repoId,
+                language: state.language
+              })
+            }
           >
             {translate(
               'auto.components.right.sidebar.OutlinePanel.db937ed166',

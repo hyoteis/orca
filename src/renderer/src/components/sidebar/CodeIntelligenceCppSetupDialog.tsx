@@ -9,7 +9,7 @@ import {
   clangdCompileCommandsDirArg,
   type CodeIntelligenceCppSetupResult
 } from '../../../../shared/code-intelligence-cpp-setup'
-import { getCppScopeIdForRepo } from '../../../../shared/code-intelligence-scope'
+import { getCppScopeIdForRepo, type CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
 import { Button } from '../ui/button'
@@ -29,7 +29,7 @@ import {
   type SetupScopeSelectionMode
 } from './code-intelligence-setup-scope-selection'
 
-type ModalData = { repoId?: string }
+type ModalData = { repoId?: string; language?: CodeIntelligenceLanguage }
 
 export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | null {
   const activeModal = useAppStore((state) => state.activeModal)
@@ -64,7 +64,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     scanError,
     selectedRoots,
     pythonScopeId
-  } = useSetupScopeSelection({ open, repo })
+  } = useSetupScopeSelection({ open, repo, initialLanguage: modalData.language })
 
   useEffect(() => {
     if (!open) {

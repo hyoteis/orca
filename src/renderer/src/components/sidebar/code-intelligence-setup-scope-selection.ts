@@ -22,7 +22,7 @@ export type SetupScopeSelectionMode = 'all' | 'selected'
 
 /** Directory scan + language/folder selection state for the code-intelligence
  *  setup dialog — one hook so the dialog body stays under max-lines. */
-export function useSetupScopeSelection({ open, repo }: { open: boolean; repo: Repo | null }): {
+export function useSetupScopeSelection({ open, repo, initialLanguage }: { open: boolean; repo: Repo | null; initialLanguage?: CodeIntelligenceLanguage }): {
   mode: SetupScopeSelectionMode
   setMode: (mode: SetupScopeSelectionMode) => void
   language: CodeIntelligenceLanguage
@@ -42,7 +42,7 @@ export function useSetupScopeSelection({ open, repo }: { open: boolean; repo: Re
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const [mode, setMode] = useState<SetupScopeSelectionMode>('all')
-  const [language, setLanguage] = useState<CodeIntelligenceLanguage>('cpp')
+  const [language, setLanguage] = useState<CodeIntelligenceLanguage>(initialLanguage ?? 'cpp')
   const [roots, setRoots] = useState<string[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [directoryQuery, setDirectoryQuery] = useState('')
@@ -66,8 +66,8 @@ export function useSetupScopeSelection({ open, repo }: { open: boolean; repo: Re
       return
     }
     setScanGeneration(0)
-    setLanguage('cpp')
-  }, [open, repo?.id])
+    setLanguage(initialLanguage ?? 'cpp')
+  }, [open, repo?.id, initialLanguage])
 
   useEffect(() => {
     if (!open || !repo) {

@@ -3,6 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../../shared/types'
+import type { CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 
 const mockState = vi.hoisted(() => ({ settings: null as unknown }))
 
@@ -28,9 +29,24 @@ const REPO = {
 
 afterEach(cleanup)
 
-function renderSelection() {
-  return renderHook(() => useSetupScopeSelection({ open: true, repo: REPO }))
+function renderSelection(props: { initialLanguage?: CodeIntelligenceLanguage } = {}) {
+  return renderHook(() => useSetupScopeSelection({ open: true, repo: REPO, ...props }))
 }
+
+/** #106: the enable action preselects the active file's language family. */
+describe('useSetupScopeSelection initialLanguage', () => {
+  it('seeds python instead of the cpp default', async () => {
+    const { result } = renderSelection({ initialLanguage: 'python' })
+    await waitFor(() => expect(result.current.scanning).toBe(false))
+    expect(result.current.language).toBe('python')
+  })
+
+  it('falls back to cpp when absent', async () => {
+    const { result } = renderSelection()
+    await waitFor(() => expect(result.current.scanning).toBe(false))
+    expect(result.current.language).toBe('cpp')
+  })
+})
 
 /** Python members must stay workspace-relative — the invariant the removed
  *  add-folder dialog enforced with a toast, now enforced by dropping custom picks. */

@@ -446,7 +446,7 @@ describe('OutlinePanel', () => {
     expect(mocks.upsertScope).not.toHaveBeenCalled()
   })
 
-  it('routes the enable button to the Code scopes configuration dialog', async () => {
+  it('routes the enable button to the Code scopes dialog with a python preselect (#106)', async () => {
     const openModal = vi.fn()
     setState({
       openModal,
@@ -457,7 +457,35 @@ describe('OutlinePanel', () => {
     })
     renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: 'Enable code intelligence' }))
-    expect(openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', { repoId: 'repo-1' })
+    expect(openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1',
+      language: 'python'
+    })
+  })
+
+  it('preselects cpp when the enable button serves a C++ file (#106)', async () => {
+    const openModal = vi.fn()
+    setState({
+      openModal,
+      openFiles: [
+        openFileFixture({
+          id: 'f1',
+          filePath: '/ws/repo-1/src/renderer.cpp',
+          relativePath: 'src/renderer.cpp',
+          language: 'cpp'
+        })
+      ],
+      settings: {
+        codeIntelligenceScopes: [],
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:cpp']
+      }
+    })
+    renderPanel()
+    fireEvent.click(await screen.findByRole('button', { name: 'Enable code intelligence' }))
+    expect(openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1',
+      language: 'cpp'
+    })
   })
 
   it('shows an unavailable state when the covering scope lacks fresh consent', async () => {
