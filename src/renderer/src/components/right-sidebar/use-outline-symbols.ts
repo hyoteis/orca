@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { basename } from '@/lib/path'
@@ -31,7 +31,16 @@ export type OutlineSymbolsState =
   | { status: 'unavailable'; reason: 'no-scope' | 'consent' }
   | { status: 'loading' }
   | { status: 'enable'; repoId: string }
+  | { status: 'error' }
   | { status: 'ready'; rows: OutlineSymbolRow[] }
+
+/** Document-change → symbol re-query delay (#102). */
+export const OUTLINE_REFRESH_DEBOUNCE_MS = 500
+
+// Session collapse memory (#102): survives tab switches in-memory, keyed by
+// file path; never persists across app restarts (out of scope per #98).
+const collapsedRowsByFile = new Map<string, Set<string>>()
+const EMPTY_COLLAPSED: ReadonlySet<string> = new Set()
 
 function useActiveEditFile(): OpenFile | null {
   // Returns an existing OpenFile reference (or null) so unrelated store writes
@@ -46,11 +55,17 @@ function useActiveEditFile(): OpenFile | null {
 }
 
 /** Outline data (#99): follows the active editor tab; queries only on the
- * semantic tier so unconsented scopes never launch a session. */
+ * semantic tier so unconsented scopes never launch a session. #102 adds
+ * cursor-follow, session collapse memory, debounced edit refresh, and retry. */
 export function useOutlineSymbols(): {
   state: OutlineSymbolsState
   fileName: string | null
   reveal: (row: OutlineSymbolRow) => void
+  /** 0-based LSP line of the editor cursor; null when unknown. */
+  cursorLine: number | null
+  collapsedKeys: ReadonlySet<string>
+  toggleCollapsed: (key: string) => void
+  retry: () => void
 } {
   const activeFile = useActiveEditFile()
   const repos = useAppStore((s) => s.repos)
@@ -116,6 +131,14 @@ export function useOutlineSymbols(): {
   }, [tier, activeFile, family, repos, settings])
   const [state, setState] = useState<OutlineSymbolsState>({ status: 'no-file' })
   const generationRef = useRef(0)
+  const lastFileRef = useRef<string | null>(null)
+  // #102: live refresh + retry + cursor-follow + collapse memory.
+  const [contentTick, setContentTick] = useState(0)
+  const [retryTick, setRetryTick] = useState(0)
+  const [cursorLine, setCursorLine] = useState<number | null>(null)
+  const refreshTimerRef = useRef<number | undefined>(undefined)
+  const filePath = activeFile?.filePath ?? null
+  const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(EMPTY_COLLAPSED)
   // One auto-create attempt per id per mount: a failed upsert surfaces as the
   // plain no-scope state instead of a retry loop.
   const autoAttemptedRef = useRef(new Set<string>())
@@ -150,6 +173,61 @@ export function useOutlineSymbols(): {
   }, [autoDecision])
 
   useEffect(() => {
+    if (tier.kind !== 'semantic' || !activeFile) {
+      setCursorLine(null)
+      return
+    }
+    const document = semanticDocumentEditorFor(activeFile.id)
+    if (!document) {
+      setCursorLine(null)
+      return
+    }
+    const position = document.editor.getPosition?.()
+    setCursorLine(position ? position.lineNumber - 1 : null)
+    const cursorSub = document.editor.onDidChangeCursorPosition((event) =>
+      setCursorLine(event.position.lineNumber - 1)
+    )
+    const contentSub = document.model.onDidChangeContent(() => {
+      clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = window.setTimeout(() => {
+        setContentTick((tick) => tick + 1)
+      }, OUTLINE_REFRESH_DEBOUNCE_MS)
+    })
+    return () => {
+      clearTimeout(refreshTimerRef.current)
+      cursorSub.dispose()
+      contentSub.dispose()
+    }
+  }, [activeFile, tier, documentsTick])
+
+  useEffect(() => {
+    setCollapsedKeys(
+      filePath ? (collapsedRowsByFile.get(filePath) ?? EMPTY_COLLAPSED) : EMPTY_COLLAPSED
+    )
+  }, [filePath])
+
+  const toggleCollapsed = useCallback(
+    (key: string) => {
+      if (!filePath) {
+        return
+      }
+      setCollapsedKeys((prev) => {
+        const next = new Set(prev)
+        if (next.has(key)) {
+          next.delete(key)
+        } else {
+          next.add(key)
+        }
+        collapsedRowsByFile.set(filePath, next)
+        return next
+      })
+    },
+    [filePath]
+  )
+
+  const retry = useCallback(() => setRetryTick((tick) => tick + 1), [])
+
+  useEffect(() => {
     if (!activeFile) {
       setState({ status: 'no-file' })
       return
@@ -181,9 +259,13 @@ export function useOutlineSymbols(): {
       return
     }
     const generation = ++generationRef.current
-    setState({ status: 'loading' })
-    // Why no text-deps: #102 adds the debounced edit re-query; the version here
-    // only keys the shared navigation cache.
+    // Why functional: a same-file re-query (edit refresh, retry) keeps the
+    // stale tree on screen instead of flashing the loading state (#102).
+    const fileSwitched = lastFileRef.current !== activeFile.id
+    lastFileRef.current = activeFile.id
+    setState((prev) => (prev.status === 'ready' && !fileSwitched ? prev : { status: 'loading' }))
+    // Why no text-deps: the debounced edit re-query lands via contentTick; the
+    // version here only keys the shared navigation cache.
     const querySymbols = family === 'cpp' ? getCppDocumentSymbols : getPythonDocumentSymbols
     void querySymbols({
       fileId: activeFile.id,
@@ -203,13 +285,13 @@ export function useOutlineSymbols(): {
         setState({ status: 'ready', rows: outlineRowsFromDocumentSymbols(symbols) })
       })
       .catch(() => {
-        // Why empty, not error: the dedicated error+retry state lands with the
-        // empty-state ticket; emptiness is the honest degraded view meanwhile.
+        // #102: a failed query is an honest error state with retry; the
+        // heuristic fallback lands with #103.
         if (generationRef.current === generation) {
-          setState({ status: 'ready', rows: [] })
+          setState({ status: 'error' })
         }
       })
-  }, [activeFile, autoDecision, documentsTick, family, tier])
+  }, [activeFile, autoDecision, contentTick, documentsTick, family, retryTick, tier])
 
   const reveal = (row: OutlineSymbolRow): void => {
     if (!activeFile || !scope) {
@@ -230,6 +312,10 @@ export function useOutlineSymbols(): {
   return {
     state,
     fileName: activeFile ? basename(activeFile.filePath) : null,
-    reveal
+    reveal,
+    cursorLine,
+    collapsedKeys,
+    toggleCollapsed,
+    retry
   }
 }

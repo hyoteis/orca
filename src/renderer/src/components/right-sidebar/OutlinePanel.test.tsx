@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, act } from '@testing-library/react'
 import { useAppStore } from '@/store'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type * as WorkspaceModule from '@/lib/language-server/code-intelligence-workspace'
@@ -104,6 +104,38 @@ function setState(overrides: Record<string, unknown> = {}): void {
   } as unknown as Partial<ReturnType<typeof useAppStore.getState>>)
 }
 
+/** Live document stand-in (#102): captures the cursor/content listeners the
+ * panel subscribes to, with mutable text for the debounce test. */
+function createDocumentHarness() {
+  const harness = {
+    text: 'class Renderer:',
+    cursorListeners: [] as ((event: { position: { lineNumber: number } }) => void)[],
+    contentListeners: [] as (() => void)[],
+    editor: {} as Record<string, unknown>,
+    model: {} as Record<string, unknown>
+  }
+  harness.editor = {
+    getPosition: () => null,
+    onDidChangeCursorPosition: (
+      listener: (event: { position: { lineNumber: number } }) => void
+    ) => {
+      harness.cursorListeners.push(listener)
+      return { dispose: () => undefined }
+    }
+  }
+  harness.model = {
+    getValue: () => harness.text,
+    getVersionId: () => 7,
+    onDidChangeContent: (listener: () => void) => {
+      harness.contentListeners.push(listener)
+      return { dispose: () => undefined }
+    }
+  }
+  return harness
+}
+
+let documentHarness: ReturnType<typeof createDocumentHarness>
+
 const treeSymbols = [
   {
     name: 'Renderer',
@@ -121,15 +153,74 @@ const treeSymbols = [
   }
 ]
 
+// Root rows zed/mid/alpha order differently under each sort mode (#102 tests).
+const symbolSpan = (startLine: number, endLine: number) => ({
+  start: { line: startLine, character: 0 },
+  end: { line: endLine, character: 0 }
+})
+const nameRange = (line: number, from: number, to: number) => ({
+  start: { line, character: from },
+  end: { line, character: to }
+})
+
+function interactiveSymbols(): unknown[] {
+  return [
+    {
+      name: 'zed',
+      kind: 12,
+      range: symbolSpan(0, 5),
+      selectionRange: nameRange(0, 4, 7)
+    },
+    {
+      name: 'mid',
+      kind: 5,
+      range: symbolSpan(10, 12),
+      selectionRange: nameRange(10, 4, 7)
+    },
+    {
+      name: 'alpha',
+      kind: 23,
+      range: symbolSpan(20, 30),
+      selectionRange: nameRange(20, 6, 11),
+      children: [
+        {
+          name: 'draw',
+          kind: 6,
+          range: symbolSpan(21, 22),
+          selectionRange: nameRange(21, 4, 8)
+        },
+        {
+          name: 'render_pass',
+          kind: 6,
+          range: symbolSpan(25, 26),
+          selectionRange: nameRange(25, 4, 15)
+        }
+      ]
+    }
+  ]
+}
+
+function renderedRowNames(): string[] {
+  return Array.from(document.querySelectorAll('[data-outline-row]')).map(
+    (row) => row.getAttribute('data-outline-row') ?? ''
+  )
+}
+
+function activeRowName(): string | null {
+  return (
+    document
+      .querySelector('[data-active="true"] [data-outline-row]')
+      ?.getAttribute('data-outline-row') ?? null
+  )
+}
+
 beforeEach(() => {
   mocks.getPythonDocumentSymbols.mockReset()
   mocks.getCppDocumentSymbols.mockReset()
   mocks.openDefinitionTargetInWorkspace.mockClear()
   mocks.semanticDocumentEditorFor.mockReset()
-  mocks.semanticDocumentEditorFor.mockReturnValue({
-    editor: {},
-    model: { getValue: () => 'class Renderer:', getVersionId: () => 7 }
-  })
+  documentHarness = createDocumentHarness()
+  mocks.semanticDocumentEditorFor.mockReturnValue(documentHarness)
   mocks.upsertScope.mockReset()
   mocks.upsertScope.mockImplementation(async (scope: CodeIntelligenceScope) => ({
     ...scope,
@@ -150,6 +241,7 @@ afterEach(() => {
   // No `globals: true`, so Testing Library's auto-cleanup never runs.
   cleanup()
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 function renderPanel(): ReturnType<typeof render> {
@@ -329,7 +421,7 @@ describe('OutlinePanel', () => {
       revision: 1
     })
     expect(mocks.fetchSettings).toHaveBeenCalled()
-    expect(await screen.findByText('Reading symbols…')).toBeInTheDocument()
+    expect(await screen.findByText('Connecting to language server…')).toBeInTheDocument()
   })
 
   it('shows the enable affordance instead of resurrecting a deleted auto scope', async () => {
@@ -393,10 +485,153 @@ describe('OutlinePanel', () => {
       })
     )
     renderPanel()
-    expect(await screen.findByText('Reading symbols…')).toBeInTheDocument()
+    expect(await screen.findByText('Connecting to language server…')).toBeInTheDocument()
     gate.release?.(treeSymbols)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Renderer/ })).toBeInTheDocument()
     )
+  })
+
+  it('shows the server-error state with a retry that re-queries (#102)', async () => {
+    mocks.getPythonDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
+    renderPanel()
+    expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
+    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByRole('button', { name: /Renderer/ })).toBeInTheDocument()
+    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('OutlinePanel interactions (#102)', () => {
+  function switchToFile(id: string, filePath: string): void {
+    useAppStore.setState({
+      activeFileId: id,
+      openFiles: [
+        openFileFixture({
+          id,
+          filePath,
+          relativePath: filePath.split('/').pop() ?? filePath,
+          language: 'python'
+        })
+      ],
+      repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
+      settings: { codeIntelligenceScopes: [scopeFixture()] }
+    } as unknown as Partial<ReturnType<typeof useAppStore.getState>>)
+  }
+
+  it('filters rows by name, keeps ancestors expandable, and expands the filter input to its own row', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    renderPanel()
+    await screen.findByRole('button', { name: /render_pass/ })
+    expect(screen.queryByPlaceholderText('Filter symbols')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter symbols' }))
+    const input = screen.getByPlaceholderText('Filter symbols')
+    fireEvent.change(input, { target: { value: 'ren' } })
+
+    expect(renderedRowNames()).toEqual(['alpha', 'render_pass'])
+    expect(document.querySelector('mark')?.textContent).toBe('ren')
+    // The retained ancestor stays expandable (its chevron renders as expanded).
+    expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument()
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(renderedRowNames()).toEqual(['zed', 'mid', 'alpha', 'draw', 'render_pass'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Filter symbols' }))
+    expect(screen.queryByPlaceholderText('Filter symbols')).not.toBeInTheDocument()
+    expect(renderedRowNames()).toEqual(['zed', 'mid', 'alpha', 'draw', 'render_pass'])
+  })
+
+  it('sorts position by default and cycles through name and kind modes', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    renderPanel()
+    await screen.findByRole('button', { name: /alpha/ })
+    expect(renderedRowNames()).toEqual(['zed', 'mid', 'alpha', 'draw', 'render_pass'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by name' }))
+    expect(renderedRowNames()).toEqual(['alpha', 'draw', 'render_pass', 'mid', 'zed'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sort by kind' }))
+    expect(renderedRowNames()).toEqual(['mid', 'zed', 'alpha', 'draw', 'render_pass'])
+  })
+
+  it('highlights the row enclosing the editor cursor and follows moves', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    renderPanel()
+    await screen.findByRole('button', { name: /render_pass/ })
+    const emitCursor = (lineNumber: number): void => {
+      act(() => {
+        documentHarness.cursorListeners.at(-1)?.({ position: { lineNumber } })
+      })
+    }
+
+    emitCursor(26)
+    expect(activeRowName()).toBe('render_pass')
+    emitCursor(1)
+    expect(activeRowName()).toBe('zed')
+    emitCursor(99)
+    expect(activeRowName()).toBeNull()
+  })
+
+  it('remembers per-file collapse state across file switches for the session', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    // Dedicated paths: the session collapse map is module state, shared across tests.
+    switchToFile('f3', '/ws/repo-1/src/collapse.py')
+    renderPanel()
+    // alpha is the only row with children → the only chevron.
+    fireEvent.click(await screen.findByRole('button', { name: 'Collapse' }))
+    expect(screen.queryByRole('button', { name: /render_pass/ })).not.toBeInTheDocument()
+
+    mocks.getPythonDocumentSymbols.mockResolvedValueOnce([
+      { name: 'solo', kind: 12, range: symbolSpan(0, 3), selectionRange: nameRange(0, 4, 8) }
+    ])
+    switchToFile('f4', '/ws/repo-1/src/other.py')
+    expect(await screen.findByRole('button', { name: /solo/ })).toBeInTheDocument()
+
+    switchToFile('f3', '/ws/repo-1/src/collapse.py')
+    await screen.findByRole('button', { name: /zed/ })
+    expect(screen.queryByRole('button', { name: /render_pass/ })).not.toBeInTheDocument()
+  })
+
+  it('refreshes the tree ~500 ms after document edits, not before', async () => {
+    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    switchToFile('f5', '/ws/repo-1/src/refresh.py')
+    renderPanel()
+    await screen.findByRole('button', { name: /render_pass/ })
+
+    vi.useFakeTimers()
+    documentHarness.text = 'class Renderer:\n    def render_pass2(self):'
+    mocks.getPythonDocumentSymbols.mockResolvedValueOnce([
+      { name: 'zed', kind: 12, range: symbolSpan(0, 5), selectionRange: nameRange(0, 4, 7) },
+      {
+        name: 'render_pass2',
+        kind: 6,
+        range: symbolSpan(10, 20),
+        selectionRange: nameRange(10, 4, 16)
+      }
+    ])
+    act(() => {
+      documentHarness.contentListeners.at(-1)?.()
+    })
+    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      vi.advanceTimersByTime(100)
+    })
+    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(2)
+    expect(mocks.getPythonDocumentSymbols.mock.calls[1][0]).toMatchObject({
+      text: 'class Renderer:\n    def render_pass2(self):'
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(screen.getByRole('button', { name: /render_pass2/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /alpha/ })).not.toBeInTheDocument()
   })
 })

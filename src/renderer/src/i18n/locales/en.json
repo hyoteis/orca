@@ -12335,7 +12335,6 @@
           },
           "OutlinePanel": {
             "7e498c4509": "Outline",
-            "705b215356": "Reading symbols…",
             "e8bcf14f01": "Open a file to see its symbols",
             "dee11bd70f": "No symbols for this file type",
             "2b8019ac88": "Supports Python and C++ files",
@@ -12344,10 +12343,24 @@
             "db937ed166": "Enable code intelligence",
             "f0c48ff046": "Enable code intelligence to see symbols",
             "51971afea7": "Code intelligence needs authorization for this workspace",
-            "5c0a0b5e02": "No symbols in this file"
+            "5c0a0b5e02": "No symbols in this file",
+            "7e3b1edb00": "Connecting to language server…",
+            "1495dd1774": "The first start can take a few seconds",
+            "0a50d43350": "Language server connection failed",
+            "3626bb6a3a": "The symbol query failed. Try again.",
+            "6987d54751": "Retry",
+            "9b6b841787": "Sort by position",
+            "20330722dc": "Sort by name",
+            "d8fa5b0f7d": "Sort by kind",
+            "308cd32c19": "Filter symbols",
+            "093263f7bf": "No matching symbols"
           },
           "use.outline.symbols": {
             "640345dd02": "{{value0}} {{value1}} — Outline default"
+          },
+          "OutlineTree": {
+            "313394b2bc": "Collapse",
+            "6bd66ac455": "Expand"
           }
         }
       },

@@ -39,6 +39,8 @@ export type OutlineSymbolRow = {
   line: number
   /** Name range the shared reveal path jumps to. */
   range: OutlineRange
+  /** Symbol extent; cursor-follow containment (#102). */
+  span: OutlineRange
   children: OutlineSymbolRow[]
 }
 
@@ -143,6 +145,7 @@ function treeRows(symbols: readonly DocumentSymbol[]): OutlineSymbolRow[] {
       kind: symbol.kind,
       line: range.start.line + 1,
       range,
+      span: symbol.range,
       children: symbol.children ? treeRows(symbol.children) : []
     }
   })
@@ -166,6 +169,7 @@ function flatRows(symbols: readonly SymbolInformation[]): OutlineSymbolRow[] {
       kind: symbol.kind,
       line: symbol.location.range.start.line + 1,
       range: symbol.location.range,
+      span: symbol.location.range,
       children: []
     }
     let searchIn = root
@@ -193,4 +197,63 @@ export function outlineRowsFromDocumentSymbols(
   return 'location' in symbols[0]
     ? flatRows(symbols as SymbolInformation[])
     : treeRows(symbols as DocumentSymbol[])
+}
+
+export type OutlineSortMode = 'position' | 'name' | 'kind'
+
+/** Sibling ordering within each level; the hierarchy itself never flattens (#102). */
+export function sortOutlineRows(
+  rows: readonly OutlineSymbolRow[],
+  mode: OutlineSortMode
+): OutlineSymbolRow[] {
+  const comparator =
+    mode === 'name'
+      ? (left: OutlineSymbolRow, right: OutlineSymbolRow) =>
+          left.name.localeCompare(right.name) || byPosition(left.span, right.span)
+      : mode === 'kind'
+        ? (left: OutlineSymbolRow, right: OutlineSymbolRow) =>
+            left.kind - right.kind || byPosition(left.span, right.span)
+        : (left: OutlineSymbolRow, right: OutlineSymbolRow) => byPosition(left.span, right.span)
+  return [...rows]
+    .sort(comparator)
+    .map((row) =>
+      row.children.length ? { ...row, children: sortOutlineRows(row.children, mode) } : row
+    )
+}
+
+/** Case-insensitive name filter keeping ancestors of matches; a matching parent
+ * still narrows to its matching children (#102). */
+export function filterOutlineRows(
+  rows: readonly OutlineSymbolRow[],
+  query: string
+): OutlineSymbolRow[] {
+  const needle = query.trim().toLowerCase()
+  if (!needle) {
+    return [...rows]
+  }
+  const walk = (rows: readonly OutlineSymbolRow[]): OutlineSymbolRow[] => {
+    const kept: OutlineSymbolRow[] = []
+    for (const row of rows) {
+      const children = walk(row.children)
+      if (row.name.toLowerCase().includes(needle) || children.length > 0) {
+        kept.push({ ...row, children })
+      }
+    }
+    return kept
+  }
+  return walk(rows)
+}
+
+/** Deepest row whose span contains the cursor line (0-based LSP); the
+ * cursor-follow highlight key (#102). */
+export function enclosingOutlineRowKey(
+  rows: readonly OutlineSymbolRow[],
+  cursorLine: number
+): string | null {
+  for (const row of rows) {
+    if (cursorLine >= row.span.start.line && cursorLine <= row.span.end.line) {
+      return enclosingOutlineRowKey(row.children, cursorLine) ?? row.key
+    }
+  }
+  return null
 }

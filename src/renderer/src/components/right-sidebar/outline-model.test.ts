@@ -3,10 +3,15 @@ import type { DocumentSymbol, SymbolInformation } from 'vscode-languageserver-pr
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   OUTLINE_SUPPORTED_LANGUAGES,
+  enclosingOutlineRowKey,
+  filterOutlineRows,
   outlineLanguageFamily,
   outlineRowsFromDocumentSymbols,
   resolveOutlineAutoScope,
-  resolveOutlineTier
+  resolveOutlineTier,
+  sortOutlineRows,
+  type OutlineRange,
+  type OutlineSymbolRow
 } from './outline-model'
 
 function scope(overrides: Partial<CodeIntelligenceScope>): CodeIntelligenceScope {
@@ -127,6 +132,7 @@ describe('outlineRowsFromDocumentSymbols', () => {
         kind: 5,
         line: 1,
         range: { start: { line: 0, character: 6 }, end: { line: 0, character: 14 } },
+        span: range(0),
         children: [
           {
             key: 'draw@3',
@@ -134,11 +140,29 @@ describe('outlineRowsFromDocumentSymbols', () => {
             kind: 6,
             line: 3,
             range: range(2),
+            span: range(2),
             children: []
           }
         ]
       }
     ])
+  })
+
+  it('uses the symbol extent as span for cursor-follow containment', () => {
+    const symbols: DocumentSymbol[] = [
+      {
+        name: 'Renderer',
+        kind: 5,
+        range: { start: { line: 0, character: 0 }, end: { line: 40, character: 0 } },
+        selectionRange: { start: { line: 0, character: 6 }, end: { line: 0, character: 14 } }
+      }
+    ]
+    const [row] = outlineRowsFromDocumentSymbols(symbols)
+    expect(row?.span).toEqual({ start: { line: 0, character: 0 }, end: { line: 40, character: 0 } })
+    expect(row?.range).toEqual({
+      start: { line: 0, character: 6 },
+      end: { line: 0, character: 14 }
+    })
   })
 
   it('nests a flat SymbolInformation list by containerName in position order', () => {
@@ -201,6 +225,116 @@ describe('outlineRowsFromDocumentSymbols', () => {
 
   it('returns empty rows for null (no symbols)', () => {
     expect(outlineRowsFromDocumentSymbols(null)).toEqual([])
+  })
+})
+
+function outlineRow(
+  name: string,
+  kind: number,
+  span: OutlineRange,
+  children: OutlineSymbolRow[] = []
+): OutlineSymbolRow {
+  return {
+    key: `${name}@${span.start.line + 1}`,
+    name,
+    kind,
+    line: span.start.line + 1,
+    range: span,
+    span,
+    children
+  }
+}
+
+function spanOf(startLine: number, endLine = startLine): OutlineRange {
+  return { start: { line: startLine, character: 0 }, end: { line: endLine, character: 0 } }
+}
+
+function interactionFixture(): OutlineSymbolRow[] {
+  return [
+    outlineRow('zed', 12, spanOf(0), [
+      outlineRow('beta', 6, spanOf(1)),
+      outlineRow('alpha', 6, spanOf(2)),
+      outlineRow('value', 13, spanOf(3))
+    ]),
+    outlineRow('mid', 5, spanOf(4)),
+    outlineRow('alpha', 12, spanOf(5))
+  ]
+}
+
+describe('sortOutlineRows (#102)', () => {
+  it('orders siblings by span position in the default mode', () => {
+    const rows = [interactionFixture()[2], interactionFixture()[1], interactionFixture()[0]]
+    expect(sortOutlineRows(rows, 'position').map((row) => row.name)).toEqual([
+      'zed',
+      'mid',
+      'alpha'
+    ])
+  })
+
+  it('orders siblings by name within each level, position as tie-break', () => {
+    const sorted = sortOutlineRows(interactionFixture(), 'name')
+    expect(sorted.map((row) => row.name)).toEqual(['alpha', 'mid', 'zed'])
+    expect(sorted[2]?.children.map((row) => row.name)).toEqual(['alpha', 'beta', 'value'])
+  })
+
+  it('groups siblings by SymbolKind, position as tie-break', () => {
+    const sorted = sortOutlineRows(interactionFixture(), 'kind')
+    expect(sorted.map((row) => row.name)).toEqual(['mid', 'zed', 'alpha'])
+    expect(sorted[1]?.children.map((row) => row.name)).toEqual(['beta', 'alpha', 'value'])
+  })
+
+  it('does not mutate the input rows', () => {
+    const rows = interactionFixture()
+    sortOutlineRows(rows, 'kind')
+    expect(rows.map((row) => row.name)).toEqual(['zed', 'mid', 'alpha'])
+  })
+})
+
+describe('filterOutlineRows (#102)', () => {
+  it('keeps matching rows and ancestors of matches, drops the rest', () => {
+    const filtered = filterOutlineRows(interactionFixture(), 'lph')
+    expect(filtered.map((row) => row.name)).toEqual(['zed', 'alpha'])
+    // zed survives only as the ancestor of the matching alpha.
+    expect(filtered[0]?.children.map((row) => row.name)).toEqual(['alpha'])
+  })
+
+  it('matches case-insensitively as a substring', () => {
+    expect(filterOutlineRows(interactionFixture(), 'ALPH').map((row) => row.name)).toEqual([
+      'zed',
+      'alpha'
+    ])
+  })
+
+  it('hides non-matching children under a matching parent', () => {
+    const filtered = filterOutlineRows(interactionFixture(), 'zed')
+    expect(filtered.map((row) => row.name)).toEqual(['zed'])
+    expect(filtered[0]?.children).toEqual([])
+  })
+
+  it('returns the rows unchanged for a blank query', () => {
+    expect(filterOutlineRows(interactionFixture(), '  ')).toEqual(interactionFixture())
+  })
+})
+
+describe('enclosingOutlineRowKey (#102)', () => {
+  const nested = [
+    outlineRow('Renderer', 5, spanOf(0, 40), [
+      outlineRow('draw', 6, spanOf(10, 20), [outlineRow('flush', 6, spanOf(12, 15))])
+    ])
+  ]
+
+  it('answers the deepest row whose span contains the cursor line', () => {
+    expect(enclosingOutlineRowKey(nested, 13)).toBe('flush@13')
+    expect(enclosingOutlineRowKey(nested, 17)).toBe('draw@11')
+    expect(enclosingOutlineRowKey(nested, 30)).toBe('Renderer@1')
+  })
+
+  it('treats the span end line as containing', () => {
+    expect(enclosingOutlineRowKey(nested, 20)).toBe('draw@11')
+  })
+
+  it('answers null outside every span', () => {
+    expect(enclosingOutlineRowKey(nested, 60)).toBeNull()
   })
 })
 

@@ -1,108 +1,104 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 import {
+  ArrowDownUp,
   Braces,
-  Box,
-  CircleDot,
+  CircleAlert,
   CircleOff,
-  Globe,
+  LayoutGrid,
+  ListFilter,
   ListTree,
   Loader2,
-  Package,
-  SquareFunction,
-  Type,
-  Variable,
   type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store'
-import type { OutlineSymbolRow } from './outline-model'
+import { cn } from '@/lib/utils'
+import {
+  enclosingOutlineRowKey,
+  filterOutlineRows,
+  sortOutlineRows,
+  type OutlineSortMode
+} from './outline-model'
 import { useOutlineSymbols } from './use-outline-symbols'
+import { OutlineTree } from './OutlineTree'
 import { translate } from '@/i18n/i18n'
-
-// LSP SymbolKind 1..26 → monochrome kind icons; unmapped kinds fall back.
-const KIND_ICONS: Record<number, LucideIcon> = {
-  2: Box, // Module
-  3: Globe, // Namespace
-  4: Package, // Package
-  5: Braces, // Class
-  6: SquareFunction, // Method
-  7: CircleDot, // Property
-  8: CircleDot, // Field
-  9: SquareFunction, // Constructor
-  10: Type, // Enum
-  11: Type, // Interface
-  12: SquareFunction, // Function
-  13: Variable, // Variable
-  14: Variable, // Constant
-  22: CircleDot, // EnumMember
-  23: Braces, // Struct
-  26: Type // TypeParameter
-}
-
-function KindIcon({ kind }: { kind: number }): React.JSX.Element {
-  const Icon = KIND_ICONS[kind] ?? Braces
-  return <Icon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-}
-
-/** Default-expanded nesting per prototype: 14px/level, 1px hairline. */
-function OutlineRows({
-  rows,
-  onReveal
-}: {
-  rows: readonly OutlineSymbolRow[]
-  onReveal: (row: OutlineSymbolRow) => void
-}): React.JSX.Element {
-  return (
-    <ul className="min-w-0">
-      {rows.map((row) => (
-        <li key={row.key}>
-          <button
-            type="button"
-            className="group flex h-6 w-full min-w-0 items-center gap-1.5 px-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            onClick={() => onReveal(row)}
-          >
-            <KindIcon kind={row.kind} />
-            <span className="min-w-0 truncate font-mono text-xs text-foreground">{row.name}</span>
-            <span className="ml-auto shrink-0 pl-3 font-mono text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100">
-              {row.line}
-            </span>
-          </button>
-          {row.children.length > 0 && (
-            <div className="ml-[13px] border-l border-border">
-              <OutlineRows rows={row.children} onReveal={onReveal} />
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 function OutlineEmptyState({
   icon: Icon,
   title,
   subtitle,
-  action
+  action,
+  tone
 }: {
   icon: LucideIcon
   title: string
   subtitle?: string
   action?: React.ReactNode
+  tone?: 'destructive'
 }): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-5 py-8 text-center">
       <Icon className="size-7 text-muted-foreground" aria-hidden />
-      <p className="text-xs text-foreground">{title}</p>
+      <p className={cn('text-xs text-foreground', tone === 'destructive' && 'text-destructive')}>
+        {title}
+      </p>
       {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   )
 }
 
-/** Right-sidebar Outline tab (#99): symbol tree of the active editor file. */
+/** Stable empty reference so the projection memo deps hold across non-ready renders. */
+const EMPTY_ROWS: readonly never[] = []
+
+/** Right-sidebar Outline tab (#99): symbol tree of the active editor file.
+ * #102 adds the interactions: filter, sort, cursor-follow, collapse memory,
+ * live refresh, and the server-error retry state. */
 export function OutlinePanel(): React.JSX.Element {
-  const { state, fileName, reveal } = useOutlineSymbols()
+  const { state, fileName, reveal, cursorLine, collapsedKeys, toggleCollapsed, retry } =
+    useOutlineSymbols()
   const openModal = useAppStore((s) => s.openModal)
+  const [sortMode, setSortMode] = useState<OutlineSortMode>('position')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filterQuery, setFilterQuery] = useState('')
+
+  const rows = state.status === 'ready' ? state.rows : EMPTY_ROWS
+  const visibleRows = useMemo(
+    () => filterOutlineRows(sortOutlineRows(rows, sortMode), filterQuery),
+    [rows, sortMode, filterQuery]
+  )
+  const cursorRowKey = cursorLine === null ? null : enclosingOutlineRowKey(visibleRows, cursorLine)
+
+  const filterLabel = translate(
+    'auto.components.right.sidebar.OutlinePanel.308cd32c19',
+    'Filter symbols'
+  )
+  const sortGlyphs: readonly {
+    mode: OutlineSortMode
+    label: string
+    glyph: React.ReactNode
+  }[] = [
+    {
+      mode: 'position',
+      label: translate('auto.components.right.sidebar.OutlinePanel.9b6b841787', 'Sort by position'),
+      glyph: <ArrowDownUp className="size-3" aria-hidden />
+    },
+    {
+      mode: 'name',
+      label: translate('auto.components.right.sidebar.OutlinePanel.20330722dc', 'Sort by name'),
+      glyph: (
+        <span className="font-mono text-[9px] leading-none" aria-hidden>
+          A–Z
+        </span>
+      )
+    },
+    {
+      mode: 'kind',
+      label: translate('auto.components.right.sidebar.OutlinePanel.d8fa5b0f7d', 'Sort by kind'),
+      glyph: <LayoutGrid className="size-3" aria-hidden />
+    }
+  ]
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col overflow-hidden bg-sidebar"
@@ -117,14 +113,96 @@ export function OutlinePanel(): React.JSX.Element {
             {fileName}
           </span>
         ) : null}
-      </div>
-      {state.status === 'loading' && (
-        <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          <span>
-            {translate('auto.components.right.sidebar.OutlinePanel.705b215356', 'Reading symbols…')}
-          </span>
+        <div className="ml-auto flex items-center gap-1.5">
+          {rows.length > 0 && (
+            <div className="flex overflow-hidden rounded-md border border-border">
+              {sortGlyphs.map(({ mode, label, glyph }, index) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={sortMode === mode}
+                  aria-label={label}
+                  title={label}
+                  className={cn(
+                    'grid h-[22px] w-[26px] place-items-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                    index > 0 && 'border-l border-border',
+                    sortMode === mode && 'bg-accent text-foreground'
+                  )}
+                  onClick={() => setSortMode(mode)}
+                >
+                  {glyph}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            aria-pressed={filterOpen}
+            aria-label={filterLabel}
+            title={filterLabel}
+            className={cn(
+              'grid size-[22px] place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+              filterOpen && 'bg-accent text-foreground'
+            )}
+            onClick={() => {
+              setFilterOpen((open) => !open)
+              // Closing the filter clears it — filtered rows must never stay hidden.
+              if (filterOpen) {
+                setFilterQuery('')
+              }
+            }}
+          >
+            <ListFilter className="size-3.5" aria-hidden />
+          </button>
         </div>
+      </div>
+      {filterOpen && (
+        <div className="border-b border-border px-2 py-1.5">
+          <input
+            type="text"
+            value={filterQuery}
+            onChange={(event) => setFilterQuery(event.target.value)}
+            placeholder={filterLabel}
+            aria-label={filterLabel}
+            className="h-6 w-full rounded-md border border-border bg-secondary px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
+          />
+        </div>
+      )}
+      {state.status === 'loading' && (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 px-5 py-8 text-center">
+          <Loader2 className="size-7 animate-spin text-muted-foreground" aria-hidden />
+          <p className="text-xs text-foreground">
+            {translate(
+              'auto.components.right.sidebar.OutlinePanel.7e3b1edb00',
+              'Connecting to language server…'
+            )}
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            {translate(
+              'auto.components.right.sidebar.OutlinePanel.1495dd1774',
+              'The first start can take a few seconds'
+            )}
+          </p>
+        </div>
+      )}
+      {state.status === 'error' && (
+        <OutlineEmptyState
+          icon={CircleAlert}
+          tone="destructive"
+          title={translate(
+            'auto.components.right.sidebar.OutlinePanel.0a50d43350',
+            'Language server connection failed'
+          )}
+          subtitle={translate(
+            'auto.components.right.sidebar.OutlinePanel.3626bb6a3a',
+            'The symbol query failed. Try again.'
+          )}
+          action={
+            <Button type="button" size="xs" variant="outline" onClick={retry}>
+              {translate('auto.components.right.sidebar.OutlinePanel.6987d54751', 'Retry')}
+            </Button>
+          }
+        />
       )}
       {state.status === 'no-file' && (
         <OutlineEmptyState
@@ -203,17 +281,31 @@ export function OutlinePanel(): React.JSX.Element {
         />
       )}
       {state.status === 'ready' &&
-        (state.rows.length === 0 ? (
+        (visibleRows.length === 0 ? (
           <OutlineEmptyState
             icon={ListTree}
-            title={translate(
-              'auto.components.right.sidebar.OutlinePanel.5c0a0b5e02',
-              'No symbols in this file'
-            )}
+            title={
+              filterQuery.trim()
+                ? translate(
+                    'auto.components.right.sidebar.OutlinePanel.093263f7bf',
+                    'No matching symbols'
+                  )
+                : translate(
+                    'auto.components.right.sidebar.OutlinePanel.5c0a0b5e02',
+                    'No symbols in this file'
+                  )
+            }
           />
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-sleek py-1">
-            <OutlineRows rows={state.rows} onReveal={reveal} />
+            <OutlineTree
+              rows={visibleRows}
+              onReveal={reveal}
+              query={filterQuery}
+              collapsedKeys={collapsedKeys}
+              onToggleCollapsed={toggleCollapsed}
+              cursorRowKey={cursorRowKey}
+            />
           </div>
         ))}
     </div>
