@@ -155,8 +155,9 @@ function byPosition(left: OutlineRange, right: OutlineRange): number {
   return left.start.line - right.start.line || left.start.character - right.start.character
 }
 
-/** Flat SymbolInformation[] nests by dotted containerName chains; a symbol whose
- * full chain is missing lands on its deepest resolvable ancestor. */
+/** Flat SymbolInformation[] nests by containerName chains ('.' for Python,
+ * '::' for clangd-qualified C++ containers); a symbol whose full chain is
+ * missing lands on its deepest resolvable ancestor. */
 function flatRows(symbols: readonly SymbolInformation[]): OutlineSymbolRow[] {
   const root: OutlineSymbolRow[] = []
   const ordered = [...symbols].sort((left, right) =>
@@ -172,15 +173,21 @@ function flatRows(symbols: readonly SymbolInformation[]): OutlineSymbolRow[] {
       span: symbol.location.range,
       children: []
     }
-    let searchIn = root
+    const segments = (symbol.containerName ?? '').split(/\.|::/).filter(Boolean)
+    // Suffix retries longest-first: container names are fully qualified while
+    // row names are not, so ns::MyClass must still match a MyClass sitting at
+    // the root because its own container row went missing.
     let host: OutlineSymbolRow | null = null
-    for (const segment of (symbol.containerName ?? '').split('.').filter(Boolean)) {
-      const match = searchIn.find((candidate) => candidate.name === segment)
-      if (!match) {
-        break
+    for (let skip = 0; skip < segments.length && !host; skip++) {
+      let searchIn = root
+      for (const segment of segments.slice(skip)) {
+        const match = searchIn.find((candidate) => candidate.name === segment)
+        if (!match) {
+          break
+        }
+        host = match
+        searchIn = match.children
       }
-      host = match
-      searchIn = match.children
     }
     ;(host ? host.children : root).push(row)
   }

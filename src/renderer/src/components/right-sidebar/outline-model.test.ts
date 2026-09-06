@@ -203,6 +203,89 @@ describe('outlineRowsFromDocumentSymbols', () => {
     expect(rows[0]?.children.map((child) => child.name)).toEqual(['helper'])
   })
 
+  it('nests flat C++ symbols under ::-qualified container chains (#105)', () => {
+    const symbols: SymbolInformation[] = [
+      { name: 'ns', kind: 3, location: { uri: 'file:///w/a.cpp', range: range(0) } },
+      {
+        name: 'MyClass',
+        kind: 5,
+        containerName: 'ns',
+        location: { uri: 'file:///w/a.cpp', range: range(1) }
+      },
+      {
+        name: 'method',
+        kind: 6,
+        containerName: 'ns::MyClass',
+        location: { uri: 'file:///w/a.cpp', range: range(2) }
+      }
+    ]
+    const rows = outlineRowsFromDocumentSymbols(symbols)
+    expect(rows.map((row) => row.name)).toEqual(['ns'])
+    expect(rows[0]?.children.map((row) => row.name)).toEqual(['MyClass'])
+    expect(rows[0]?.children[0]?.children.map((row) => row.name)).toEqual(['method'])
+  })
+
+  it('nests under a ::-container even when its own container row is missing (#105)', () => {
+    // clangd qualifies containers but not names; MyClass lands at the root when
+    // the ns row is unreported, and method must still find it there.
+    const symbols: SymbolInformation[] = [
+      {
+        name: 'MyClass',
+        kind: 5,
+        containerName: 'ns',
+        location: { uri: 'file:///w/a.cpp', range: range(0) }
+      },
+      {
+        name: 'method',
+        kind: 6,
+        containerName: 'ns::MyClass',
+        location: { uri: 'file:///w/a.cpp', range: range(1) }
+      },
+      {
+        name: 'field',
+        kind: 8,
+        containerName: 'MyClass',
+        location: { uri: 'file:///w/a.cpp', range: range(2) }
+      }
+    ]
+    const rows = outlineRowsFromDocumentSymbols(symbols)
+    expect(rows.map((row) => row.name)).toEqual(['MyClass'])
+    expect(rows[0]?.children.map((row) => row.name)).toEqual(['method', 'field'])
+  })
+
+  it('suffix-retries dotted containers the same as ::-chains (#105)', () => {
+    // Retry is separator-agnostic by design: container A.B with no A row still
+    // nests under a root-level B rather than dropping to the root.
+    const symbols: SymbolInformation[] = [
+      { name: 'B', kind: 5, location: { uri: 'file:///w/a.py', range: range(0) } },
+      {
+        name: 'run',
+        kind: 6,
+        containerName: 'A.B',
+        location: { uri: 'file:///w/a.py', range: range(1) }
+      }
+    ]
+    const rows = outlineRowsFromDocumentSymbols(symbols)
+    expect(rows.map((row) => row.name)).toEqual(['B'])
+    expect(rows[0]?.children.map((row) => row.name)).toEqual(['run'])
+  })
+
+  it('falls back to the deepest resolvable ::-chain ancestor (#105)', () => {
+    const symbols: SymbolInformation[] = [
+      { name: 'Outer', kind: 5, location: { uri: 'file:///w/a.cpp', range: range(0) } },
+      {
+        name: 'value',
+        kind: 13,
+        containerName: 'Outer::Inner',
+        location: { uri: 'file:///w/a.cpp', range: range(1) }
+      }
+    ]
+    const rows = outlineRowsFromDocumentSymbols(symbols)
+    // No Inner row exists, so value nests under Outer, not at the root.
+    expect(rows.map((row) => row.name)).toEqual(['Outer'])
+    expect(rows[0]?.children.map((row) => row.name)).toEqual(['value'])
+  })
+
   it('keeps a flat symbol without a resolvable container at the root', () => {
     const symbols: SymbolInformation[] = [
       {
