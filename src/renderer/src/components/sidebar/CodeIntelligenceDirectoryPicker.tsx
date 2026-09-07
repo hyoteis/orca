@@ -79,6 +79,9 @@ export function CodeIntelligenceDirectoryPicker({
     const next = new Set(selected)
     if (checked) {
       next.add(path)
+      if (!isRuntimePathAbsolute(path)) {
+        setExpanded((current) => new Set(current).add(path))
+      }
     } else {
       next.delete(path)
     }

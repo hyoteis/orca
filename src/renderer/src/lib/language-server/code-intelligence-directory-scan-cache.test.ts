@@ -3,19 +3,19 @@ import { getCachedCodeIntelligenceDirectories } from './code-intelligence-direct
 
 describe('code intelligence directory scan cache', () => {
   it('reuses fresh scans and supports forced refresh', async () => {
-    const loadFiles = vi.fn().mockResolvedValue(['src/render/file.cpp'])
+    const loadDirectories = vi.fn().mockResolvedValue(['.', 'src', 'src/render'])
 
     await expect(
-      getCachedCodeIntelligenceDirectories({ key: 'repo-a', loadFiles, now: 100 })
+      getCachedCodeIntelligenceDirectories({ key: 'repo-a', loadDirectories, now: 100 })
     ).resolves.toEqual(['.', 'src', 'src/render'])
-    await getCachedCodeIntelligenceDirectories({ key: 'repo-a', loadFiles, now: 200 })
+    await getCachedCodeIntelligenceDirectories({ key: 'repo-a', loadDirectories, now: 200 })
     await getCachedCodeIntelligenceDirectories({
       key: 'repo-a',
-      loadFiles,
+      loadDirectories,
       force: true,
       now: 300
     })
 
-    expect(loadFiles).toHaveBeenCalledTimes(2)
+    expect(loadDirectories).toHaveBeenCalledTimes(2)
   })
 })

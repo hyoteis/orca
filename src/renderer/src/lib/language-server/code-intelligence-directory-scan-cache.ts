@@ -1,19 +1,16 @@
-import { discoverCodeIntelligenceDirectories } from '@/components/sidebar/code-intelligence-directory-list'
-
-const DIRECTORY_CACHE_TTL_MS = 60_000
-
 type CacheEntry = {
   expiresAt: number
   directories: string[]
 }
 
+const DIRECTORY_CACHE_TTL_MS = 60_000
 const directoryCache = new Map<string, CacheEntry>()
 const pendingScans = new Map<string, Promise<string[]>>()
 
 export async function getCachedCodeIntelligenceDirectories(args: {
   key: string
   force?: boolean
-  loadFiles: () => Promise<readonly string[]>
+  loadDirectories: () => Promise<string[]>
   now?: number
 }): Promise<string[]> {
   const now = args.now ?? Date.now()
@@ -27,8 +24,7 @@ export async function getCachedCodeIntelligenceDirectories(args: {
       return [...(await pending)]
     }
   }
-  const scan = args.loadFiles().then((files) => {
-    const directories = discoverCodeIntelligenceDirectories(files)
+  const scan = args.loadDirectories().then((directories) => {
     directoryCache.set(args.key, {
       directories,
       expiresAt: now + DIRECTORY_CACHE_TTL_MS

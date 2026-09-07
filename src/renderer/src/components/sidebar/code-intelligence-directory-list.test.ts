@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCodeIntelligenceDirectoryTree,
   directoryAncestors,
-  discoverCodeIntelligenceDirectories,
   filterCodeIntelligenceDirectories,
   getCodeIntelligenceCustomPaths,
   getMinimalCodeIntelligenceDirectories,
@@ -30,27 +29,6 @@ describe('code intelligence directory list', () => {
         'core\\graph'
       )
     ).toEqual(['DiligentCore/Graphics'])
-  })
-
-  it('derives every real parent directory from the project file list', () => {
-    expect(
-      discoverCodeIntelligenceDirectories([
-        'lume/LumeBase/api/base/containers/array_view.h',
-        'lume/LumeBase/src/engine.cpp',
-        'kits\\ets\\BUILD.gn',
-        '.git/config'
-      ])
-    ).toEqual([
-      '.',
-      'kits',
-      'kits/ets',
-      'lume',
-      'lume/LumeBase',
-      'lume/LumeBase/api',
-      'lume/LumeBase/src',
-      'lume/LumeBase/api/base',
-      'lume/LumeBase/api/base/containers'
-    ])
   })
 
   it('compresses fully covered subtrees to their topmost selected directory', () => {

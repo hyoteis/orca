@@ -46,25 +46,6 @@ export function filterCodeIntelligenceDirectories(
   )
 }
 
-export function discoverCodeIntelligenceDirectories(relativeFiles: readonly string[]): string[] {
-  const directories = new Set<string>(['.'])
-  for (const file of relativeFiles) {
-    const directoryEntry = /[\\/]$/.test(file)
-    const segments = file.replace(/\\/g, '/').replace(/^\.\//, '').split('/').filter(Boolean)
-    const directorySegmentCount = directoryEntry
-      ? segments.length
-      : Math.max(0, segments.length - 1)
-    let path = ''
-    for (let index = 0; index < directorySegmentCount; index += 1) {
-      path = path ? `${path}/${segments[index]}` : segments[index]
-      if (!path.split('/').includes('.git')) {
-        directories.add(path)
-      }
-    }
-  }
-  return sortCodeIntelligenceDirectories([...directories])
-}
-
 function directoryAncestors(path: string): string[] {
   if (path === '.') {
     return []
