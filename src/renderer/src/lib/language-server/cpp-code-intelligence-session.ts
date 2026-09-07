@@ -197,6 +197,9 @@ export class CppCodeIntelligenceSession {
         },
         textDocument: {
           definition: { linkSupport: true },
+          // Flat SymbolInformation names arrive ::-qualified, which flattens the
+          // outline; hierarchical keeps classes as tree nodes (as the Python session does).
+          documentSymbol: { hierarchicalDocumentSymbolSupport: true },
           hover: { contentFormat: [MarkupKind.Markdown, MarkupKind.PlainText] },
           ...semanticEditingClientCapabilities(),
           semanticTokens: {

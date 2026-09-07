@@ -95,6 +95,15 @@ describe('cpp definition navigation sessions', () => {
 })
 
 describe('cpp document symbols', () => {
+  it('declares hierarchical documentSymbol support so clangd nests instead of ::-qualifying', async () => {
+    await resolveCppDefinition(request(1))
+    expect(scripted.initializeParams).toMatchObject({
+      capabilities: {
+        textDocument: { documentSymbol: { hierarchicalDocumentSymbolSupport: true } }
+      }
+    })
+  })
+
   it('requests by textDocument uri and returns hierarchical symbols', async () => {
     const symbols = [
       {
@@ -136,6 +145,32 @@ describe('cpp document symbols', () => {
     expect(
       scripted.requestCalls.filter((call) => call === 'textDocument/documentSymbol')
     ).toHaveLength(1)
+  })
+
+  it('re-queries after a session restart instead of serving the stale cache', async () => {
+    let generation = 0
+    scripted.requestHandlers['textDocument/documentSymbol'] = () => {
+      generation += 1
+      return [
+        {
+          name: `sym-${generation}`,
+          kind: 12,
+          range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } },
+          selectionRange: { start: { line: 0, character: 0 }, end: { line: 0, character: 4 } }
+        }
+      ]
+    }
+    expect(await getCppDocumentSymbols(request(3))).toEqual([
+      expect.objectContaining({ name: 'sym-1' })
+    ])
+    // Re-run setup path: the revision bump restarts the session (drop client).
+    scripted.instance!.restartScope('local:worktree:demo:cpp', 2)
+    expect(await getCppDocumentSymbols(request(3))).toEqual([
+      expect.objectContaining({ name: 'sym-2' })
+    ])
+    expect(
+      scripted.requestCalls.filter((call) => call === 'textDocument/documentSymbol')
+    ).toHaveLength(2)
   })
 
   it('does not cache a cancelled result', async () => {

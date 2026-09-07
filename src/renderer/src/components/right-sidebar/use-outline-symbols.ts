@@ -24,6 +24,7 @@ import {
   type OutlineSymbolRow
 } from './outline-model'
 import { extractHeuristicOutlineRows } from './outline-heuristics'
+import { regroupQualifiedRows } from './outline-qualified-regroup'
 import { revealOutlineRow } from './outline-row-reveal'
 
 export type OutlineSymbolsState =
@@ -44,11 +45,14 @@ const collapsedRowsByFile = new Map<string, Set<string>>()
 const EMPTY_COLLAPSED: ReadonlySet<string> = new Set()
 
 /** Heuristic tier rows (ADR 0003 tier 3) from the live editor text; undefined
- * while the document is not mounted (no badge, plain status). */
+ * while the document is not mounted (no badge, plain status). Qualified
+ * out-of-line definitions re-nest under their class (#105 follow-up). */
 function heuristicRowsFor(activeFile: OpenFile | null): OutlineSymbolRow[] | undefined {
   const document = activeFile && semanticDocumentEditorFor(activeFile.id)
   return document && activeFile
-    ? extractHeuristicOutlineRows(document.model.getValue(), activeFile.language)
+    ? regroupQualifiedRows(
+        extractHeuristicOutlineRows(document.model.getValue(), activeFile.language)
+      )
     : undefined
 }
 

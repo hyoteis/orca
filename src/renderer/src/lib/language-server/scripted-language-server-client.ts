@@ -12,6 +12,7 @@ export const scripted = {
   serverRequestRoutes: {} as Record<string, (params: unknown) => unknown>,
   notificationRoutes: {} as Record<string, (params: unknown) => void>,
   requestCalls: [] as string[],
+  initializeParams: null as unknown | null,
   opens: [] as LanguageServerClientKey[],
   closes: [] as LanguageServerClientKey[],
   sessionOverrides: [] as Record<string, RequestHandler>[],
@@ -25,6 +26,7 @@ export function resetScriptedLanguageServerClient(): void {
   scripted.serverRequestRoutes = {}
   scripted.notificationRoutes = {}
   scripted.requestCalls = []
+  scripted.initializeParams = null
   scripted.opens = []
   scripted.closes = []
   scripted.sessionOverrides = []
@@ -54,7 +56,7 @@ export class ScriptedLanguageServerClient {
       sendRequest: (type: { method: string }, params: unknown, token?: unknown) => Promise<unknown>
     }
     sync: { reconcile: () => void }
-    initialize: () => Promise<{ capabilities: Record<string, unknown> }>
+    initialize: (params: unknown) => Promise<{ capabilities: Record<string, unknown> }>
   }> {
     const sessionIndex = scripted.sessionOverrides.length
     scripted.sessionOverrides.push({})
@@ -83,7 +85,10 @@ export class ScriptedLanguageServerClient {
         }
       },
       sync: { reconcile: () => {} },
-      initialize: async () => ({ capabilities: scripted.capabilities })
+      initialize: async (params: unknown) => {
+        scripted.initializeParams = params
+        return { capabilities: scripted.capabilities }
+      }
     }
   }
   restartScope(scopeId: string, revision = 0): void {

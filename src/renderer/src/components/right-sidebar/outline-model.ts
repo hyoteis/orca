@@ -10,6 +10,7 @@ import {
   isCodeIntelligenceConsentStale
 } from '../../../../shared/code-intelligence-scope'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
+import { regroupQualifiedRows } from './outline-qualified-regroup'
 
 // Mirrors CPP_LANGUAGES without importing it: this module stays pure (no store
 // import chain) so node-side tests load it alone.
@@ -194,16 +195,19 @@ function flatRows(symbols: readonly SymbolInformation[]): OutlineSymbolRow[] {
   return root
 }
 
-/** Normalizes both LSP documentSymbol result shapes into the outline row tree. */
+/** Normalizes both LSP documentSymbol result shapes into the outline row tree;
+ * ::-qualified names re-nest so flat results still render as a tree. */
 export function outlineRowsFromDocumentSymbols(
   symbols: DocumentSymbol[] | SymbolInformation[] | null
 ): OutlineSymbolRow[] {
   if (!symbols || symbols.length === 0) {
     return []
   }
-  return 'location' in symbols[0]
-    ? flatRows(symbols as SymbolInformation[])
-    : treeRows(symbols as DocumentSymbol[])
+  return regroupQualifiedRows(
+    'location' in symbols[0]
+      ? flatRows(symbols as SymbolInformation[])
+      : treeRows(symbols as DocumentSymbol[])
+  )
 }
 
 export type OutlineSortMode = 'position' | 'name' | 'kind'
