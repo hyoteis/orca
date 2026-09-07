@@ -287,6 +287,51 @@ describe('CodeIntelligenceCppSetup', () => {
     )
   })
 
+  it('degrades a failing GN member to basic indexing instead of failing the whole run', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'orca-gn-fail-'))
+    const cache = await mkdtemp(join(tmpdir(), 'orca-gn-fail-cache-'))
+    const tools = await createToolDirectory(['clangd', 'gn'])
+    tempDirs.push(workspace, cache)
+    await writeFile(join(workspace, '.gn'), 'buildconfig = "//build/config/BUILDCONFIG.gn"')
+    await mkdir(join(workspace, 'LumeGS', 'src'), { recursive: true })
+    await writeFile(join(workspace, 'LumeGS', 'BUILD.gn'), 'import("//build/ohos.gni")')
+    await writeFile(join(workspace, 'LumeGS', 'src', 'engine.cpp'), 'int engine = 1;')
+    const run = vi.fn(
+      async () => ({ code: 1, output: 'ERROR at //.gn:16:27: Assignment had no effect.' }) as const
+    )
+    const setup = new CodeIntelligenceCppSetup(fakeStore(workspace), cache, {
+      platform: process.platform,
+      env: { ...process.env, PATH: [tools, process.env.PATH ?? ''].join(delimiter) },
+      run
+    })
+
+    const result = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['LumeGS'],
+      installMissingTools: true
+    })
+
+    expect(run).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({
+      ok: true,
+      configurationMode: 'basic',
+      healthState: 'limited',
+      compileCommandCount: 1,
+      warnings: [
+        expect.stringContaining('inferred include directories'),
+        expect.stringContaining('GN generation failed for LumeGS')
+      ]
+    })
+    expect(result.warnings![1]).toContain('args.gn')
+    expect(result.log).toContain('Assignment had no effect')
+    const database = JSON.parse(
+      await readFile(join(result.compileCommandsDir!, 'compile_commands.json'), 'utf8')
+    )
+    expect(database).toEqual([
+      expect.objectContaining({ file: join(workspace, 'LumeGS', 'src', 'engine.cpp') })
+    ])
+  })
+
   it('keeps one stable scope directory when members change', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'orca-stable-scope-'))
     const cache = await mkdtemp(join(tmpdir(), 'orca-stable-cache-'))

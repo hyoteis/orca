@@ -8,74 +8,37 @@ import {
 } from './code-intelligence-compilation-database'
 import type { CppSetupHost } from './code-intelligence-cpp-setup-host'
 
+type CppShardGenerationArgs = {
+  workspaceRoot: string
+  scopeDirectory: string
+  request: CodeIntelligenceCppSetupRequest
+  buildRoots: readonly CppBuildRoot[]
+  gnRootBySource: ReadonlyMap<string, string | null>
+  basicSourceRoots: readonly string[]
+  tools: Partial<Record<CppSetupToolName, string>>
+  commandEnvironment: NodeJS.ProcessEnv | undefined
+  logs: string[]
+}
+
 /** Private seam of the setup pipeline (max-lines split, not a public interface):
  * shard generation over Host primitives. Configure failures throw and bubble
- * to the pipeline's atomic run-level failure. */
+ * to the pipeline's atomic run-level failure — except GN members, which degrade
+ * to inferred commands so one unbuildable member cannot blank the whole setup. */
 export async function generateCppShards(
   host: CppSetupHost,
-  args: {
-    workspaceRoot: string
-    scopeDirectory: string
-    request: CodeIntelligenceCppSetupRequest
-    buildRoots: readonly CppBuildRoot[]
-    gnRootBySource: ReadonlyMap<string, string | null>
-    basicSourceRoots: readonly string[]
-    tools: Partial<Record<CppSetupToolName, string>>
-    commandEnvironment: NodeJS.ProcessEnv | undefined
-    logs: string[]
-  }
-): Promise<{ shards: unknown[][]; generationModes: Set<string> }> {
+  args: CppShardGenerationArgs
+): Promise<{ shards: unknown[][]; generationModes: Set<string>; warnings: string[] }> {
   const detection = host.detection
   const shards: unknown[][] = []
   const generationModes = new Set<string>()
+  const warnings: string[] = []
 
   if (args.basicSourceRoots.length > 0) {
     // Zero-source members keep the BASIC mode (empty shard semantics) even
     // when they contribute no commands of their own.
     generationModes.add('BASIC')
-    const sourceFiles: string[] = []
-    for (const sourceRoot of args.basicSourceRoots) {
-      sourceFiles.push(...(await host.findSourceFiles(sourceRoot)))
-    }
-    if (sourceFiles.length > MAX_SOURCE_FILES) {
-      throw new Error(`Basic C++ indexing exceeds ${MAX_SOURCE_FILES} source files`)
-    }
-    if (sourceFiles.length > 0) {
-      const discoveredIncludes: string[] = []
-      for (const discoveryRoot of new Set([
-        args.workspaceRoot,
-        ...args.buildRoots.map((root) => root.sourceDir)
-      ])) {
-        discoveredIncludes.push(...(await host.findIncludeDirectories(discoveryRoot)))
-      }
-      const additionalIncludes = (args.request.additionalIncludeDirectories ?? []).map((path) =>
-        detection.isAbsolute(path)
-          ? detection.resolve(path)
-          : detection.resolve(args.workspaceRoot, path)
-      )
-      const includeCandidates = [
-        args.workspaceRoot,
-        ...additionalIncludes,
-        ...discoveredIncludes,
-        ...args.buildRoots.flatMap((root) => [
-          root.sourceDir,
-          detection.join(root.sourceDir, 'api'),
-          detection.join(root.sourceDir, 'include'),
-          detection.join(root.sourceDir, 'src')
-        ])
-      ]
-      const includeDirectories = await host.readableDirectories([...new Set(includeCandidates)])
-      const defines = (args.request.defines ?? []).map((define) => define.trim()).filter(Boolean)
-      const database = sourceFiles.map((file) => ({
-        directory: args.workspaceRoot,
-        file,
-        arguments: compilerArguments(
-          file,
-          includeDirectories,
-          defines,
-          args.request.cppStandard ?? 'c++17'
-        )
-      }))
+    const database = await inferredCompileCommands(host, args, args.basicSourceRoots)
+    if (database.length > 0) {
       const basicDirectory = detection.join(args.scopeDirectory, 'basic')
       await host.ensureDirectory(basicDirectory)
       await host.writeTextFile(
@@ -173,9 +136,31 @@ export async function generateCppShards(
       result
     )
     if (result.code !== 0) {
-      throw new Error(
-        `GN generation failed for ${root.memberLabel}. Generate a GN output directory with the project's required args.gn, then retry.`
+      // Root .gn files that need the project's real args.gn (e.g. OHOS) can
+      // never be configured standalone; degrade, don't fail the whole run.
+      const database = await inferredCompileCommands(host, args, [root.sourceDir])
+      generationModes.add('BASIC')
+      warnings.push(
+        `GN generation failed for ${root.memberLabel}; indexed with inferred include directories. Generate a GN output directory with the project's required args.gn, then re-run setup.`
       )
+      if (database.length > 0) {
+        const fallbackDirectory = detection.join(args.scopeDirectory, `basic-${index + 1}`)
+        await host.ensureDirectory(fallbackDirectory)
+        await host.writeTextFile(
+          fallbackDirectory,
+          'compile_commands.json',
+          JSON.stringify(database, null, 2)
+        )
+        args.logs.push(
+          `\n## Basic C++ indexing\nGN generation failed for ${root.memberLabel}; generated minimal commands for ${database.length} source files across: ${root.sourceDir}`
+        )
+        shards.push(
+          JSON.parse(
+            await host.readTextFile(detection.join(fallbackDirectory, 'compile_commands.json'))
+          )
+        )
+      }
+      continue
     }
     shards.push(
       JSON.parse(
@@ -185,5 +170,58 @@ export async function generateCppShards(
     generationModes.add('GN')
   }
 
-  return { shards, generationModes }
+  return { shards, generationModes, warnings }
+}
+
+async function inferredCompileCommands(
+  host: CppSetupHost,
+  args: CppShardGenerationArgs,
+  sourceRoots: readonly string[]
+): Promise<{ directory: string; file: string; arguments: string[] }[]> {
+  const detection = host.detection
+  const sourceFiles: string[] = []
+  for (const sourceRoot of sourceRoots) {
+    sourceFiles.push(...(await host.findSourceFiles(sourceRoot)))
+  }
+  if (sourceFiles.length > MAX_SOURCE_FILES) {
+    throw new Error(`Basic C++ indexing exceeds ${MAX_SOURCE_FILES} source files`)
+  }
+  if (sourceFiles.length === 0) {
+    return []
+  }
+  const discoveredIncludes: string[] = []
+  for (const discoveryRoot of new Set([
+    args.workspaceRoot,
+    ...args.buildRoots.map((root) => root.sourceDir)
+  ])) {
+    discoveredIncludes.push(...(await host.findIncludeDirectories(discoveryRoot)))
+  }
+  const additionalIncludes = (args.request.additionalIncludeDirectories ?? []).map((path) =>
+    detection.isAbsolute(path)
+      ? detection.resolve(path)
+      : detection.resolve(args.workspaceRoot, path)
+  )
+  const includeCandidates = [
+    args.workspaceRoot,
+    ...additionalIncludes,
+    ...discoveredIncludes,
+    ...args.buildRoots.flatMap((root) => [
+      root.sourceDir,
+      detection.join(root.sourceDir, 'api'),
+      detection.join(root.sourceDir, 'include'),
+      detection.join(root.sourceDir, 'src')
+    ])
+  ]
+  const includeDirectories = await host.readableDirectories([...new Set(includeCandidates)])
+  const defines = (args.request.defines ?? []).map((define) => define.trim()).filter(Boolean)
+  return sourceFiles.map((file) => ({
+    directory: args.workspaceRoot,
+    file,
+    arguments: compilerArguments(
+      file,
+      includeDirectories,
+      defines,
+      args.request.cppStandard ?? 'c++17'
+    )
+  }))
 }

@@ -120,17 +120,20 @@ export async function runCppSetupPipeline(
       logs
     )
     await host.ensureDirectory(scopeDirectory)
-    const { shards, generationModes } = await generateCppShards(host, {
-      workspaceRoot,
-      scopeDirectory,
-      request,
-      buildRoots,
-      gnRootBySource,
-      basicSourceRoots,
-      tools,
-      commandEnvironment,
-      logs
-    })
+    const { shards, generationModes, warnings: degradedMemberWarnings } = await generateCppShards(
+      host,
+      {
+        workspaceRoot,
+        scopeDirectory,
+        request,
+        buildRoots,
+        gnRootBySource,
+        basicSourceRoots,
+        tools,
+        commandEnvironment,
+        logs
+      }
+    )
     // Shards are read back from the Host before this single-source merge;
     // an empty merge fails all-zero and never clobbers the live merged CDB.
     const merged = mergeCompilationDatabaseShards(shards)
@@ -148,7 +151,10 @@ export async function runCppSetupPipeline(
       generationModes.size === 1
         ? ([...generationModes][0]!.toLowerCase() as 'cmake' | 'gn' | 'basic')
         : 'mixed'
-    const warnings = generationModes.has('BASIC') ? [BASIC_WARNING] : []
+    const warnings = [
+      ...(generationModes.has('BASIC') ? [BASIC_WARNING] : []),
+      ...degradedMemberWarnings
+    ]
     const result: CodeIntelligenceCppSetupResult = {
       ok: true,
       message: `Generated compile commands with ${systems}`,
