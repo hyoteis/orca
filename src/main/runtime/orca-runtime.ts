@@ -8809,6 +8809,8 @@ export class OrcaRuntimeService {
     this.fileCommands.revokeTerminalFileGrantsForClient.bind(this.fileCommands)
   readFileExplorerDir: RuntimeFileCommands['readFileExplorerDir'] =
     this.fileCommands.readFileExplorerDir.bind(this.fileCommands)
+  readFileExplorerDirTree: RuntimeFileCommands['readFileExplorerDirTree'] =
+    this.fileCommands.readFileExplorerDirTree.bind(this.fileCommands)
   watchFileExplorer: RuntimeFileCommands['watchFileExplorer'] =
     this.fileCommands.watchFileExplorer.bind(this.fileCommands)
   closeFileWatchersForRemoval = async (

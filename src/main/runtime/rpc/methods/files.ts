@@ -109,6 +109,10 @@ const FileTreePath = WorktreeSelector.extend({
     .pipe(z.string())
 })
 
+const FileDirTree = FileTreePath.extend({
+  maxDepth: z.number().int().positive().max(16).default(5)
+})
+
 const ServerDirectoryBrowse = z.object({
   path: z
     .unknown()
@@ -319,6 +323,12 @@ export const FILE_METHODS: RpcAnyMethod[] = [
     params: FileTreePath,
     handler: async (params, { runtime }) =>
       runtime.readFileExplorerDir(params.worktree, params.relativePath)
+  }),
+  defineMethod({
+    name: 'files.readDirTree',
+    params: FileDirTree,
+    handler: async (params, { runtime }) =>
+      runtime.readFileExplorerDirTree(params.worktree, params.relativePath, params.maxDepth)
   }),
   defineMethod({
     name: 'files.browseServerDir',

@@ -388,6 +388,40 @@ describe('RuntimeFileCommands', () => {
     expect(statMock).not.toHaveBeenCalledWith('/repo/linked-docs')
   })
 
+  it('reads a depth-bounded directory tree, pruning output and VCS directories', async () => {
+    const { commands } = createRuntimeFileCommands()
+    resolveAuthorizedPathMock.mockImplementation(async (p: string) => p)
+    readdirMock.mockImplementation(async (dirPath: string) => {
+      if (dirPath === '/repo') {
+        return [
+          dirEntry({ name: '.git', directory: true }),
+          dirEntry({ name: 'out', directory: true }),
+          dirEntry({ name: 'src', directory: true })
+        ]
+      }
+      if (dirPath === '/repo/src') {
+        return [dirEntry({ name: 'engine', directory: true })]
+      }
+      return []
+    })
+
+    const tree = await commands.readFileExplorerDirTree('id:wt-1', '', 1)
+
+    expect(tree).toEqual(['', 'out', 'src'])
+    expect(readdirMock).not.toHaveBeenCalledWith('/repo/out', expect.anything())
+    expect(readdirMock).not.toHaveBeenCalledWith('/repo/src', expect.anything())
+  })
+
+  it('fails the directory tree read when the start directory is unreadable', async () => {
+    const { commands } = createRuntimeFileCommands()
+    resolveAuthorizedPathMock.mockImplementation(async (p: string) => p)
+    readdirMock.mockImplementation(async () => {
+      throw new Error('EACCES: permission denied')
+    })
+
+    await expect(commands.readFileExplorerDirTree('id:wt-1', '', 2)).rejects.toThrow('EACCES')
+  })
+
   it('renames a runtime-local file when destination does not exist', async () => {
     const { commands } = createRuntimeFileCommands()
     resolveAuthorizedPathMock.mockImplementation(async (p: string) => p)

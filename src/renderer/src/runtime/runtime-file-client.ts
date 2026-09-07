@@ -449,12 +449,16 @@ async function downloadRemoteFileViaPreview(
   }
 }
 
+function isRuntimeMethodNotSupported(error: unknown): boolean {
+  return error instanceof RuntimeRpcCallError && error.code === 'method_not_found'
+}
+
 function isUnsupportedRemotePreviewDownload(error: unknown): boolean {
   if (!(error instanceof RuntimeRpcCallError)) {
     return false
   }
   return (
-    error.code === 'method_not_found' ||
+    isRuntimeMethodNotSupported(error) ||
     (error.code === 'runtime_error' &&
       (error.message === 'file_too_large' || error.message === 'binary_file'))
   )
@@ -475,6 +479,33 @@ export async function readRuntimeDirectory(
     { worktree: remoteArgs.worktreeSelector, relativePath: remoteArgs.relativePath },
     { timeoutMs: 15_000 }
   )
+}
+
+/** One-shot depth-bounded directory listing; null when the serving runtime is
+ * older than files.readDirTree (or the path is local) so callers fall back to
+ * the per-directory BFS. */
+export async function readRuntimeDirectoryTree(
+  context: RuntimeFileOperationArgs,
+  dirPath: string,
+  maxDepth: number
+): Promise<string[] | null> {
+  const remoteArgs = getRemoteFileArgs(context, dirPath)
+  if (!remoteArgs) {
+    return null
+  }
+  try {
+    return await callRuntimeRpc<string[]>(
+      remoteArgs.target,
+      'files.readDirTree',
+      { worktree: remoteArgs.worktreeSelector, relativePath: remoteArgs.relativePath, maxDepth },
+      { timeoutMs: 60_000 }
+    )
+  } catch (error) {
+    if (isRuntimeMethodNotSupported(error)) {
+      return null
+    }
+    throw error
+  }
 }
 
 export async function writeRuntimeFile(

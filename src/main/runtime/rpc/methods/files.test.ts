@@ -448,6 +448,25 @@ describe('file RPC methods', () => {
     })
   })
 
+  it('reads a depth-bounded file explorer directory tree', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      readFileExplorerDirTree: vi.fn().mockResolvedValue(['', 'src'])
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('files.readDirTree', {
+        worktree: 'id:wt-1',
+        relativePath: '',
+        maxDepth: 5
+      })
+    )
+
+    expect(runtime.readFileExplorerDirTree).toHaveBeenCalledWith('id:wt-1', '', 5)
+    expect(response).toMatchObject({ ok: true, result: ['', 'src'] })
+  })
+
   it('writes file explorer content for a selected worktree', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',

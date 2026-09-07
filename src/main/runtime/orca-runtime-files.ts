@@ -38,6 +38,7 @@ import {
   resolveRuntimePath
 } from '../../shared/cross-platform-path'
 import { PhysicalExitTracker } from '../../shared/physical-exit-tracker'
+import { CODE_INTELLIGENCE_SCAN_PRUNE_NAMES } from '../../shared/code-intelligence-directory-scan'
 import { sortDirEntries } from '../../shared/file-name-sort'
 import type {
   RuntimeFileListResult,
@@ -1318,6 +1319,54 @@ export class RuntimeFileCommands {
     return sortDirEntries(mapped)
   }
 
+  /** One-shot depth-bounded directory listing for the cpp setup dialog scan:
+   * worktree-relative posix paths, starting with the requested directory. One
+   * RPC replaces one round trip per directory on SSH workspaces. */
+  async readFileExplorerDirTree(
+    worktreeSelector: string,
+    relativePath: string,
+    maxDepth: number
+  ): Promise<string[]> {
+    const directories = new Set<string>([relativePath])
+    let frontier = [relativePath]
+    for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
+      // Why: reuse readFileExplorerDir so SSH-provider and local authorization
+      // stay identical to the per-directory path; only the start dir is fatal.
+      const listings = await Promise.all(
+        frontier.map((directory, index) =>
+          this.readFileExplorerDir(worktreeSelector, directory).catch((error: unknown) => {
+            if (depth === 0 && index === 0) {
+              throw error
+            }
+            return [] as DirEntry[]
+          })
+        )
+      )
+      const next: string[] = []
+      for (const [index, entries] of listings.entries()) {
+        for (const entry of entries) {
+          if (!isDirTreeTraversableName(entry.name) || !entry.isDirectory) {
+            continue
+          }
+          const child =
+            frontier[index] === '' ? entry.name : `${frontier[index]}/${entry.name}`
+          directories.add(child)
+          if (
+            !entry.isSymlink &&
+            !CODE_INTELLIGENCE_SCAN_PRUNE_NAMES.has(entry.name)
+          ) {
+            next.push(child)
+          }
+        }
+      }
+      frontier = next
+      if (directories.size > 100_000) {
+        break
+      }
+    }
+    return [...directories].sort()
+  }
+
   async watchFileExplorer(
     worktreeSelector: string,
     callback: (events: FsChangeEvent[]) => void,
@@ -2226,6 +2275,20 @@ function isMobileBinaryPath(relativePath: string): boolean {
 function basenameFromRelativePath(relativePath: string): string {
   const normalized = relativePath.replace(/\\/g, '/')
   return normalized.slice(normalized.lastIndexOf('/') + 1)
+}
+
+/** Mirrors the renderer discovery's isTraversableDirectoryName — VCS dirs are
+ * never listed, separator-carrying names are impossible children. */
+function isDirTreeTraversableName(name: string): boolean {
+  return (
+    name !== '.git' &&
+    name !== '.hg' &&
+    name !== '.svn' &&
+    name !== '.' &&
+    name !== '..' &&
+    !name.includes('/') &&
+    !name.includes('\\')
+  )
 }
 
 async function isRuntimeDirectoryEntry(

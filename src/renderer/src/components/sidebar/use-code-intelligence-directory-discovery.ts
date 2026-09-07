@@ -4,9 +4,9 @@ import type { GlobalSettings, Repo } from '../../../../shared/types'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { isRuntimePathAbsolute } from '../../../../shared/cross-platform-path'
 import type { CodeIntelligenceCppSetupResult } from '../../../../shared/code-intelligence-cpp-setup'
-import { readRuntimeDirectory } from '../../runtime/runtime-file-client'
+import { readRuntimeDirectory, readRuntimeDirectoryTree } from '../../runtime/runtime-file-client'
 import { getCachedCodeIntelligenceDirectories } from '../../lib/language-server/code-intelligence-directory-scan-cache'
-import { discoverCodeIntelligenceDirectoryBatch } from './code-intelligence-directory-discovery'
+import { discoverCodeIntelligenceDirectories } from './code-intelligence-directory-discovery'
 import { sortCodeIntelligenceDirectories } from './code-intelligence-directory-list'
 
 type Result = {
@@ -68,10 +68,12 @@ export function useCodeIntelligenceDirectoryDiscovery(args: {
             key: `${executionHostId}:${repo.id}:${repo.path}:${startDirectory}`,
             force,
             loadDirectories: () =>
-              discoverCodeIntelligenceDirectoryBatch({
+              discoverCodeIntelligenceDirectories({
                 workspaceRoot: repo.path,
                 startDirectory,
-                readDirectory: (directoryPath) => readRuntimeDirectory(context, directoryPath)
+                readDirectory: (directoryPath) => readRuntimeDirectory(context, directoryPath),
+                readDirectoryTree: (directoryPath, maxDepth) =>
+                  readRuntimeDirectoryTree(context, directoryPath, maxDepth)
               })
           })
         )

@@ -8,7 +8,8 @@ import type { DirEntry, Repo } from '../../../../shared/types'
 const mockState = vi.hoisted(() => ({ settings: null as unknown }))
 const runtimeFiles = vi.hoisted(() => ({
   listRuntimeFiles: vi.fn(),
-  readRuntimeDirectory: vi.fn()
+  readRuntimeDirectory: vi.fn(),
+  readRuntimeDirectoryTree: vi.fn()
 }))
 const directoryCache = vi.hoisted(() => ({
   getCachedCodeIntelligenceDirectories: vi.fn()
@@ -34,6 +35,7 @@ const REPO = {
 
 beforeEach(() => {
   runtimeFiles.listRuntimeFiles.mockResolvedValue(['src/file.cpp', 'tools/build.ts'])
+  runtimeFiles.readRuntimeDirectoryTree.mockResolvedValue(null)
   runtimeFiles.readRuntimeDirectory.mockImplementation(
     async (_context: unknown, directoryPath: string): Promise<DirEntry[]> =>
       directoryPath === '/ws/repo-1'
