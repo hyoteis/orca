@@ -1,5 +1,5 @@
 import type * as Monaco from 'monaco-editor'
-import { getCppSemanticTokens, type CppCodeIntelligenceRequest } from './cpp-definition-navigation'
+import { getCppSemanticTokens, subscribeCppClientDropped, type CppCodeIntelligenceRequest } from './cpp-definition-navigation'
 import { CPP_SEMANTIC_TOKEN_TYPES } from './cpp-semantic-token-mapping'
 
 type MonacoApi = typeof Monaco
@@ -114,6 +114,9 @@ export function installCppSemanticHighlightDecorations(
       void refresh()
     }, 200)
   })
+  // A dropped/restarted session (e.g. re-run C++ setup) invalidates what the
+  // editor is showing — re-pull once the client can reopen.
+  const unsubscribeDropped = subscribeCppClientDropped(() => void refresh())
   void refresh()
 
   return () => {
@@ -122,6 +125,7 @@ export function installCppSemanticHighlightDecorations(
       window.clearTimeout(refreshTimer)
     }
     contentChange.dispose()
+    unsubscribeDropped()
     decorations.clear()
   }
 }

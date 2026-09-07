@@ -3,9 +3,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CPP_SEMANTIC_TOKEN_TYPES } from './cpp-semantic-token-mapping'
 
-vi.mock('./cpp-definition-navigation', () => ({ getCppSemanticTokens: vi.fn() }))
+vi.mock('./cpp-definition-navigation', () => ({
+  getCppSemanticTokens: vi.fn(),
+  subscribeCppClientDropped: vi.fn(() => () => {})
+}))
 
-import { getCppSemanticTokens } from './cpp-definition-navigation'
+import { getCppSemanticTokens, subscribeCppClientDropped } from './cpp-definition-navigation'
 import {
   decodeCppSemanticTokenDecorations,
   installCppSemanticHighlightDecorations
@@ -82,5 +85,30 @@ describe('C++ semantic highlight decorations', () => {
     expect(warn.mock.calls[0][0]).toContain('Semantic highlighting failed')
     dispose()
     warn.mockRestore()
+  })
+
+  it('re-pulls tokens when the session drops (re-run C++ setup restarts it)', async () => {
+    const drops: (() => void)[] = []
+    vi.mocked(subscribeCppClientDropped).mockImplementation((listener) => {
+      drops.push(listener)
+      return () => {}
+    })
+    vi.mocked(getCppSemanticTokens).mockResolvedValue(Uint32Array.from([]))
+    vi.mocked(getCppSemanticTokens).mockClear()
+    const callsBefore = () => vi.mocked(getCppSemanticTokens).mock.calls.length
+    const fakeEditor = {
+      createDecorationsCollection: () => ({ set: vi.fn(), clear: vi.fn() }),
+      onDidChangeModelContent: () => ({ dispose: vi.fn() })
+    }
+    const dispose = installCppSemanticHighlightDecorations(
+      {} as never,
+      fakeEditor as never,
+      () => ({}) as never
+    )
+
+    await vi.waitFor(() => expect(callsBefore()).toBe(1))
+    drops.at(-1)?.()
+    await vi.waitFor(() => expect(callsBefore()).toBe(2))
+    dispose()
   })
 })

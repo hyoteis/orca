@@ -38,9 +38,11 @@ export function CodeScopesSection({
   const { pendingDirs, expandedDirs, toggleDir } = listing
   const openModal = useAppStore((s) => s.openModal)
 
-  // Hidden when nothing can render — OpenEditorsSection's precedent for empty sections.
+  // Hidden only when nothing can render AND no configure target exists — a
+  // scope-less session keeps the section as the cold-start entry (#76: the
+  // setup dialog owns folder add/remove, so the gear must stay reachable).
   const folderGap = folderWorkspace !== null && linkedFolderRepo === null
-  const sectionHidden = scopes.length === 0 && !bridged && !folderGap
+  const sectionHidden = scopes.length === 0 && !bridged && !folderGap && configureRepoId === null
 
   // Whole-folder scopes ('.') drop their root-name row: children render directly
   // at indent level 1, so the root expands itself instead of showing its name.

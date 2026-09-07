@@ -56,6 +56,22 @@ function service(): CppCodeIntelligence {
 class CppCodeIntelligence {
   private readonly session = getCppSession()
 
+  constructor() {
+    // A dropped/restarted client invalidates the caches' answers (e.g. re-run
+    // C++ setup regenerated the compile database the answers came from).
+    this.session.onClientDropped(() => {
+      definitionCache.clear()
+      hoverCache.clear()
+      semanticTokenCache.clear()
+      documentSymbolCache.clear()
+    })
+  }
+
+  /** Decorations subscribe here to re-pull after a client drop/restart. */
+  onClientDropped(listener: () => void): () => void {
+    return this.session.onClientDropped(listener)
+  }
+
   async resolveDefinition(
     request: CppCodeIntelligenceRequest
   ): Promise<CppDefinitionTarget | null> {
@@ -248,6 +264,11 @@ export function getCppSemanticTokens(
     () => service().semanticTokens(request),
     32
   )
+}
+
+/** Decorations re-pull after the client drops/restarts (e.g. re-run setup). */
+export function subscribeCppClientDropped(listener: () => void): () => void {
+  return service().onClientDropped(listener)
 }
 
 export function getCppDocumentSymbols(

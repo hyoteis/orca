@@ -53,8 +53,20 @@ export type {
   PythonWorkspaceSymbols
 } from './python-code-intelligence-session'
 
+let dropSubscribedSession: PythonCodeIntelligenceSession | null = null
 function service(): PythonCodeIntelligenceSession {
-  return getPythonCodeIntelligenceSession()
+  const session = getPythonCodeIntelligenceSession()
+  // Reset swaps the singleton; the guard keeps exactly one drop subscription.
+  if (dropSubscribedSession !== session) {
+    dropSubscribedSession = session
+    session.onClientDropped(() => {
+      definitionCache.clear()
+      hoverCache.clear()
+      referencesCache.clear()
+      documentSymbolCache.clear()
+    })
+  }
+  return session
 }
 
 /** Drops sessions and caches; used by tests and hot reloads. */

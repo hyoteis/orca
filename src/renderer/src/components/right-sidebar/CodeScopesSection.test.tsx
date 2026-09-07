@@ -127,12 +127,13 @@ function setupState({
   scopes?: CodeIntelligenceScope[]
   worktreeHostId?: string
   repos?: Repo[]
-  activeWorktreeId?: string
+  activeWorktreeId?: string | null
   folderWorkspaces?: unknown[]
 } = {}): void {
   mockState.settings = { codeIntelligenceScopes: scopes } as unknown as GlobalSettings
   mockState.repos = repos
-  mockState.activeWorktreeId = activeWorktreeId ?? 'repo-1::/ws/repo-1'
+  mockState.activeWorktreeId =
+    activeWorktreeId !== undefined ? activeWorktreeId : 'repo-1::/ws/repo-1'
   mockState.folderWorkspaces = folderWorkspaces
   mockState.worktreesByRepo = activeWorktreeId?.startsWith('folder:')
     ? {}
@@ -166,10 +167,22 @@ describe('CodeScopesSection shell', () => {
     expect(screen.getByRole('button', { name: /src/ })).toBeTruthy()
   })
 
-  it('hides the section when the workspace has no scopes (OpenEditorsSection precedent)', () => {
-    setupState({ scopes: [] })
+  it('hides the section when no session owns a configure target', () => {
+    setupState({ scopes: [], activeWorktreeId: null })
     render(<CodeScopesHarness listDirectory={vi.fn()} />)
     expect(screen.queryByText('Workspace')).toBeNull()
+  })
+
+  it('renders an empty-state section with a usable gear for a scope-less session (cold-start entry)', () => {
+    setupState({ scopes: [] })
+    render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.getByText('Workspace')).toBeTruthy()
+    const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
+    expect(gear.disabled).toBe(false)
+    fireEvent.click(gear)
+    expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1'
+    })
   })
 
   it('fills the freed panel height when the worktree section is collapsed', () => {
@@ -203,7 +216,7 @@ describe('CodeScopesSection shell', () => {
     })
   })
 
-  it('disables the gear when no cpp scope backs a configure target', () => {
+  it('keeps the gear usable for a python-only scope by falling back to the session repo', () => {
     setupState({
       scopes: [
         scope({
@@ -215,7 +228,11 @@ describe('CodeScopesSection shell', () => {
     })
     render(<CodeScopesHarness listDirectory={vi.fn()} />)
     const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
-    expect(gear.disabled).toBe(true)
+    expect(gear.disabled).toBe(false)
+    fireEvent.click(gear)
+    expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
+      repoId: 'repo-1'
+    })
   })
 })
 

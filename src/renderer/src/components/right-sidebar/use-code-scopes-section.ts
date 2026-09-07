@@ -12,6 +12,7 @@ import {
 import { getFolderWorkspaceExecutionHostId } from '../../../../shared/folder-workspace-repo-link'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
 import {
   getStatusBarCodeIntelligenceScopes,
   findSessionLinkedFolderRepo
@@ -94,8 +95,20 @@ export function useCodeScopesSection({
   const configureRepoId = useMemo(() => {
     const cppScope = scopes.find((scope) => scope.language === 'cpp')
     const parsed = cppScope ? parseWorkspaceKey(cppScope.workspaceKey) : null
-    return parsed ? (parsed.type === 'folder' ? parsed.folderWorkspaceId : parsed.worktreeId) : null
-  }, [scopes])
+    if (parsed) {
+      return parsed.type === 'folder' ? parsed.folderWorkspaceId : parsed.worktreeId
+    }
+    // Cold start: with no cpp scope yet, fall back to the session's repo so the
+    // gear can seed the first scope. Folder sessions bridge to the linked
+    // folder repo; folderGap keeps its own add-as-project affordance instead.
+    if (linkedFolderRepo) {
+      return linkedFolderRepo.id
+    }
+    if (folderWorkspace) {
+      return null
+    }
+    return activeWorktreeId ? getRepoIdFromWorktreeId(activeWorktreeId) : null
+  }, [scopes, linkedFolderRepo, folderWorkspace, activeWorktreeId])
 
   const seedSourceRepo = activeRepo ?? linkedFolderRepo
 

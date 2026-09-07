@@ -87,6 +87,14 @@ export class PythonCodeIntelligenceSession {
     this.dropClient(key.scopeId)
   )
   private readonly clients = new Map<string, PythonActiveClient>()
+  private readonly opening = new Map<string, Promise<PythonActiveClient>>()
+  private readonly dropListeners = new Set<() => void>()
+
+  /** Cache owners subscribe: a dropped client's results must not be reused. */
+  onClientDropped(listener: () => void): () => void {
+    this.dropListeners.add(listener)
+    return () => this.dropListeners.delete(listener)
+  }
   private workspaceApplyEditHandler:
     | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
     | null = null
@@ -175,6 +183,9 @@ export class PythonCodeIntelligenceSession {
   private dropClient(scopeId: string): void {
     const dropped = this.clients.get(scopeId)
     this.clients.delete(scopeId)
+    for (const listener of this.dropListeners) {
+      listener()
+    }
     if (!dropped) {
       return
     }
@@ -192,6 +203,18 @@ export class PythonCodeIntelligenceSession {
     if (current) {
       return current
     }
+    // Single-flight: outline and decorations query the same tick; a second
+    // open of the live sessionId is rejected by the Host as a duplicate.
+    const inFlight = this.opening.get(scope.id)
+    if (inFlight) {
+      return inFlight
+    }
+    const opening = this.openClient(scope).finally(() => this.opening.delete(scope.id))
+    this.opening.set(scope.id, opening)
+    return opening
+  }
+
+  private async openClient(scope: CodeIntelligenceScope): Promise<PythonActiveClient> {
     const key: LanguageServerClientKey = {
       executionHostId: scope.executionHostId,
       scopeId: scope.id,

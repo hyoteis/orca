@@ -94,6 +94,23 @@ describe('CodeIntelligenceCppSetup', () => {
     })
     expect(cached.message).toContain('Reused cached CMAKE')
     expect(run).toHaveBeenCalledOnce()
+
+    // Dialog re-run: force regenerates even on a cache hit — nested CMakeLists
+    // changes are invisible to the fingerprint. cmakeDefines ride the configure
+    // as -D args (cross-compile toolchain passthrough).
+    const forced = await setup.run({
+      repoId: 'repo-1',
+      relativeRoots: ['.', 'engine'],
+      installMissingTools: true,
+      force: true,
+      cmakeDefines: ['CMAKE_TOOLCHAIN_FILE=C:/x/ohos.toolchain.cmake', 'OHOS_ARCH=arm64-v8a']
+    })
+    expect(forced.ok).toBe(true)
+    expect(forced.message).not.toContain('Reused cached')
+    expect(run).toHaveBeenCalledTimes(2)
+    const configureArgs = (run.mock.calls.at(-1) as unknown[])[1] as readonly string[]
+    expect(configureArgs).toContain('-DCMAKE_TOOLCHAIN_FILE=C:/x/ohos.toolchain.cmake')
+    expect(configureArgs).toContain('-DOHOS_ARCH=arm64-v8a')
   })
 
   it('configures sibling CMake modules through their common parent project', async () => {

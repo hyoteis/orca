@@ -14,8 +14,15 @@ export type CodeIntelligenceCppSetupRequest = {
   repoId: string
   relativeRoots: string[]
   installMissingTools: boolean
+  /** Dialog re-run: regenerate even on a fingerprint cache hit — nested
+   * CMakeLists changes (e.g. a new subdirectory) are invisible to the
+   * fingerprint, which only stats build-root manifests. */
+  force?: boolean
   additionalIncludeDirectories?: string[]
   defines?: string[]
+  /** KEY=VALUE lines passed as -D args to every CMake configure — the escape
+   * hatch for cross compiles (e.g. CMAKE_TOOLCHAIN_FILE=…ohos.toolchain.cmake). */
+  cmakeDefines?: string[]
   cppStandard?: 'c++17' | 'c++20' | 'c++23'
 }
 

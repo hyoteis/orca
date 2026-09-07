@@ -105,7 +105,11 @@ export async function generateCppShards(
         'Ninja',
         `-DCMAKE_MAKE_PROGRAM=${args.tools.ninja}`,
         '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
-        '-DCMAKE_BUILD_TYPE=Debug'
+        '-DCMAKE_BUILD_TYPE=Debug',
+        ...(args.request.cmakeDefines ?? [])
+          .map((define) => define.trim())
+          .filter(Boolean)
+          .map((define) => `-D${define}`)
       ]
       const result = await host.runCommand(
         args.tools.cmake!,

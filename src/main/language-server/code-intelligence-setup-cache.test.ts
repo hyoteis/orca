@@ -96,6 +96,15 @@ describe('setup manifest', () => {
         request: { ...digestArgs.request, defines: ['FEATURE=1'] }
       })
     ).not.toBe(base)
+    expect(
+      codeIntelligenceSetupFingerprintDigest({
+        ...digestArgs,
+        request: {
+          ...digestArgs.request,
+          cmakeDefines: ['CMAKE_TOOLCHAIN_FILE=C:/x/ohos.toolchain.cmake']
+        }
+      })
+    ).not.toBe(base)
     expect(codeIntelligenceSetupFingerprintDigest(digestArgs)).toBe(base)
   })
 
@@ -125,7 +134,7 @@ describe('setup manifest', () => {
           }
         ]
       })
-    ).toBe('9ca0611531ea76f926d75f106258f1ef51c41cf84c83065fb23aa808664ac6da')
+    ).toBe('51ab097fbf2eb448dba4f8014be6fb2f7496346616e2311f1ffdb5c9cb5bef95')
   })
 })
 

@@ -53,6 +53,7 @@ export function codeIntelligenceSetupFingerprintDigest(args: {
         roots: args.roots,
         additionalIncludeDirectories: args.request.additionalIncludeDirectories ?? [],
         defines: args.request.defines ?? [],
+        cmakeDefines: args.request.cmakeDefines ?? [],
         cppStandard: args.request.cppStandard ?? 'c++17',
         buildInputs: args.buildInputs
       })

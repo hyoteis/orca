@@ -89,7 +89,7 @@ export async function runCppSetupPipeline(
       host.detection
     )
     const fingerprint = await setupFingerprint(host, repo.id, roots, request, buildRoots)
-    if (fingerprint) {
+    if (fingerprint && request.force !== true) {
       const cached = await host.readCachedResult(scopeDirectory, fingerprint)
       if (cached) {
         return { ...cached, relativeRoots: roots }

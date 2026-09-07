@@ -41,6 +41,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
   const repo = repos.find((candidate) => candidate.id === modalData.repoId) ?? null
   const [additionalIncludes, setAdditionalIncludes] = useState('')
   const [defines, setDefines] = useState('')
+  const [cmakeDefines, setCmakeDefines] = useState('')
   const [cppStandard, setCppStandard] = useState<'c++17' | 'c++20' | 'c++23'>('c++17')
   const [stage, setStage] = useState<'idle' | 'running' | 'success'>('idle')
   const [result, setResult] = useState<CodeIntelligenceCppSetupResult | null>(null)
@@ -92,11 +93,18 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
         // Dual-form members: workspace-relative and host-absolute selections alike.
         relativeRoots: selectedRoots,
         installMissingTools: true,
+        // The button says "generate": an explicit run regenerates even when the
+        // fingerprint cache hits (nested CMakeLists changes are invisible to it).
+        force: true,
         additionalIncludeDirectories: additionalIncludes
           .split(/\r?\n/)
           .map((path) => path.trim())
           .filter(Boolean),
         defines: defines
+          .split(/\r?\n/)
+          .map((define) => define.trim())
+          .filter(Boolean),
+        cmakeDefines: cmakeDefines
           .split(/\r?\n/)
           .map((define) => define.trim())
           .filter(Boolean),
@@ -290,9 +298,11 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
               <CodeIntelligenceBasicOptions
                 additionalIncludes={additionalIncludes}
                 defines={defines}
+                cmakeDefines={cmakeDefines}
                 cppStandard={cppStandard}
                 onAdditionalIncludesChange={setAdditionalIncludes}
                 onDefinesChange={setDefines}
+                onCmakeDefinesChange={setCmakeDefines}
                 onCppStandardChange={setCppStandard}
               />
             ) : null}

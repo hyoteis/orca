@@ -51,6 +51,8 @@ export class CppCodeIntelligenceSession {
     this.dropClient(key.scopeId)
   )
   private readonly clients = new Map<string, CppActiveClient>()
+  private readonly opening = new Map<string, Promise<CppActiveClient>>()
+  private readonly dropListeners = new Set<() => void>()
   private workspaceApplyEditHandler:
     | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
     | null = null
@@ -65,8 +67,18 @@ export class CppCodeIntelligenceSession {
     return this.workspaceApplyEditHandler(scope, edit)
   }
 
+  /** Cache owners subscribe: a dropped client's results must not be reused
+   * (restart after re-run setup serves a regenerated compile database). */
+  onClientDropped(listener: () => void): () => void {
+    this.dropListeners.add(listener)
+    return () => this.dropListeners.delete(listener)
+  }
+
   private dropClient(scopeId: string): void {
     this.clients.delete(scopeId)
+    for (const listener of this.dropListeners) {
+      listener()
+    }
   }
 
   setWorkspaceApplyEditHandler(
@@ -148,6 +160,18 @@ export class CppCodeIntelligenceSession {
       // change restarts, and that arrives via the registry's restart broadcast.
       return current
     }
+    // Single-flight: outline and decorations query the same tick; a second
+    // open of the live sessionId is rejected by the Host as a duplicate.
+    const inFlight = this.opening.get(scope.id)
+    if (inFlight) {
+      return inFlight
+    }
+    const opening = this.openClient(scope).finally(() => this.opening.delete(scope.id))
+    this.opening.set(scope.id, opening)
+    return opening
+  }
+
+  private async openClient(scope: CodeIntelligenceScope): Promise<CppActiveClient> {
     const key: LanguageServerClientKey = {
       executionHostId: scope.executionHostId,
       scopeId: scope.id,

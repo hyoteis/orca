@@ -9,18 +9,22 @@ type CppStandard = 'c++17' | 'c++20' | 'c++23'
 type Props = {
   additionalIncludes: string
   defines: string
+  cmakeDefines: string
   cppStandard: CppStandard
   onAdditionalIncludesChange: (value: string) => void
   onDefinesChange: (value: string) => void
+  onCmakeDefinesChange: (value: string) => void
   onCppStandardChange: (value: CppStandard) => void
 }
 
 export function CodeIntelligenceBasicOptions({
   additionalIncludes,
   defines,
+  cmakeDefines,
   cppStandard,
   onAdditionalIncludesChange,
   onDefinesChange,
+  onCmakeDefinesChange,
   onCppStandardChange
 }: Props): React.JSX.Element {
   return (
@@ -63,6 +67,21 @@ export function CodeIntelligenceBasicOptions({
               'One definition per line, for example FEATURE_ENABLED=1'
             )}
             onChange={(event) => onDefinesChange(event.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="code-intelligence-cmake-defines" className="text-xs">
+            {translate('settings.codeIntelligence.cmakeDefines', 'CMake configure definitions (-D)')}
+          </Label>
+          <Textarea
+            id="code-intelligence-cmake-defines"
+            value={cmakeDefines}
+            className="min-h-16 font-mono text-xs"
+            placeholder={translate(
+              'settings.codeIntelligence.cmakeDefinesExample',
+              'One definition per line, e.g. CMAKE_TOOLCHAIN_FILE=C:/sdk/ohos.toolchain.cmake'
+            )}
+            onChange={(event) => onCmakeDefinesChange(event.target.value)}
           />
         </div>
         <SettingsSegmentedControl

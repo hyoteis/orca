@@ -122,10 +122,14 @@ export function OutlinePanel(): React.JSX.Element {
           'auto.components.right.sidebar.OutlinePanel.0a50d43350',
           'Language server connection failed'
         ),
-        subtitle: translate(
-          'auto.components.right.sidebar.OutlinePanel.3626bb6a3a',
-          'The symbol query failed. Try again.'
-        ),
+        // The rejection message (session-open failure reason) outranks the
+        // generic copy — it usually names the remedy.
+        subtitle:
+          state.message ??
+          translate(
+            'auto.components.right.sidebar.OutlinePanel.3626bb6a3a',
+            'The symbol query failed. Try again.'
+          ),
         action: (
           <Button type="button" size="xs" variant="outline" onClick={retry}>
             {translate('auto.components.right.sidebar.OutlinePanel.6987d54751', 'Retry')}

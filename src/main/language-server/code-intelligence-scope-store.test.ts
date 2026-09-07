@@ -103,6 +103,24 @@ describe('CodeIntelligenceScopeStore', () => {
     ).toBe(false)
   })
 
+  it('restarts on a re-run setup without burning a revision or consent', () => {
+    // Identical configuration, but the setup regenerated the compile database
+    // the launch consumes — the session must restart; the consent chain must not.
+    const result = new CodeIntelligenceScopeStore(createStore([scope()])).upsert({
+      ...scope(),
+      setupStatus: {
+        state: 'ready',
+        mode: 'cmake',
+        generatedAt: 1234,
+        compileCommandCount: 561,
+        warningCount: 0,
+        compileCommandsDir: 'C:/cache/scope'
+      }
+    })
+    expect(result.restartRequired).toBe(true)
+    expect(result.scope.revision).toBe(1)
+  })
+
   it('keeps a member-emptied scope alive without a session restart', async () => {
     const store = createStore([scope()])
     const result = new CodeIntelligenceScopeStore(store).upsert({ ...scope(), members: [] })

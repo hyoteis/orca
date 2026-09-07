@@ -57,7 +57,9 @@ function launchConfigurationPayload(scope: CodeIntelligenceScope): Record<string
   const { members: _members, ...payload } = scopeConfigurationPayload(
     scope
   ) as Record<string, unknown>
-  return payload
+  // A setup regeneration rewrote the compile database this launch consumes:
+  // identical everything else still restarts the server (dialog re-run).
+  return { ...payload, setupGeneratedAt: scope.setupStatus?.generatedAt ?? null }
 }
 
 function sameLaunchConfiguration(
@@ -119,11 +121,11 @@ export class CodeIntelligenceScopeStore {
     const index = scopes.findIndex((scope) => scope.id === next.id)
     const prior = index !== -1 ? scopes[index] : null
     const configurationChanged = prior ? !sameConfiguration(prior, next) : false
-    // Restart only when the launch itself changed; member-only changes bump the
+    // Restart when the launch itself changed; member-only changes bump the
     // revision (consent chain) while the running clangd session stays up.
-    const restartRequired = prior
-      ? configurationChanged && !sameLaunchConfiguration(prior, next)
-      : false
+    // setupGeneratedAt rides in the launch payload, so a re-run setup
+    // restarts without touching the consent chain.
+    const restartRequired = prior ? !sameLaunchConfiguration(prior, next) : false
     next = prior
       ? {
           ...next,

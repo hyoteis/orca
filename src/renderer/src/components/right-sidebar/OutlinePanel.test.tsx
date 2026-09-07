@@ -524,6 +524,8 @@ describe('OutlinePanel', () => {
     mocks.getPythonDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
     renderPanel()
     expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
+    // The rejection message replaces the generic subtitle — it names the remedy.
+    expect(screen.getByText('server exited')).toBeInTheDocument()
     mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('button', { name: /Renderer/ })).toBeInTheDocument()

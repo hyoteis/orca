@@ -32,7 +32,7 @@ export type OutlineSymbolsState =
   | { status: 'unavailable'; reason: 'no-scope' | 'consent'; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'loading' }
   | { status: 'enable'; repoId: string; language: CodeIntelligenceLanguage; heuristicRows?: OutlineSymbolRow[] }
-  | { status: 'error'; heuristicRows?: OutlineSymbolRow[] }
+  | { status: 'error'; message?: string; heuristicRows?: OutlineSymbolRow[] }
   | { status: 'ready'; rows: OutlineSymbolRow[] }
 
 /** Document-change → symbol re-query delay (#102). */
@@ -316,11 +316,17 @@ export function useOutlineSymbols(): {
         }
         setState({ status: 'ready', rows: outlineRowsFromDocumentSymbols(symbols) })
       })
-      .catch(() => {
+      .catch((error) => {
         // #103: a failed query keeps the user functional — heuristic rows ride
-        // along with the honest error state and its retry (#102).
+        // along with the honest error state and its retry (#102). The rejection
+        // message is the only actionable signal (e.g. "Re-run C++ setup"), so
+        // it rides along instead of the generic copy.
         if (generationRef.current === generation) {
-          setState({ status: 'error', heuristicRows: heuristicRowsFor(activeFile) })
+          setState({
+            status: 'error',
+            message: error instanceof Error ? error.message : undefined,
+            heuristicRows: heuristicRowsFor(activeFile)
+          })
         }
       })
   }, [activeFile, autoDecision, contentTick, documentsTick, family, retryTick, tier])
