@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   configureAggregate: vi.fn(),
   revalidateAggregate: vi.fn(),
   pickCompileDatabase: vi.fn(),
+  browseDir: vi.fn(),
   fetchSettings: vi.fn(async () => {}),
   toastSuccess: vi.fn(),
   toastError: vi.fn()
@@ -45,7 +46,8 @@ beforeEach(() => {
       configureAggregate: mocks.configureAggregate,
       revalidateAggregate: mocks.revalidateAggregate
     },
-    shell: { pickCompileDatabase: mocks.pickCompileDatabase }
+    shell: { pickCompileDatabase: mocks.pickCompileDatabase },
+    ssh: { browseDir: mocks.browseDir }
   } as unknown as typeof window.api
   useAppStore.setState({
     activeModal: 'code-intelligence-cpp-setup',
@@ -154,5 +156,33 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
         'D:/build/vulkan/compile_commands.json'
       )
     )
+  })
+
+  it('browses the remote host for SSH workspaces and fills the picked path', async () => {
+    mocks.browseDir.mockResolvedValue({
+      resolvedPath: '/home/dev/build',
+      pathFlavor: 'posix',
+      entries: [{ name: 'compile_commands.json', isDirectory: false }]
+    })
+    useAppStore.setState({
+      modalData: { repoId: 'repo-2' },
+      repos: [
+        { id: 'repo-2', path: '/home/dev/ws', displayName: 'ws', connectionId: 'tgt-9', executionHostId: null, kind: 'git' }
+      ],
+      settings: { codeIntelligenceScopes: [] },
+      sshTargetLabels: new Map([['tgt-9', 'buildbox']])
+    } as never)
+    renderDialog()
+    fireEvent.click(screen.getByRole('radio', { name: 'Compile database' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Browse…' }))
+    await waitFor(() => expect(screen.getByText('compile_commands.json')).toBeInTheDocument())
+    expect(mocks.browseDir).toHaveBeenCalledWith({ targetId: 'tgt-9', dirPath: '~' })
+    fireEvent.click(screen.getByText('compile_commands.json'))
+    await waitFor(() =>
+      expect((screen.getByLabelText('Database path') as HTMLInputElement).value).toBe(
+        '/home/dev/build/compile_commands.json'
+      )
+    )
+    expect(mocks.pickCompileDatabase).not.toHaveBeenCalled()
   })
 })

@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { SettingsSegmentedControl } from '../settings/SettingsFormControls'
+import { SshCompileDatabasePicker } from './SshCompileDatabasePicker'
+import { parentPath } from './remote-file-browser-helpers'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
@@ -64,6 +66,7 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
   const [mappings, setMappings] = useState<readonly AggregateMappingHealthSnapshot[] | null>(null)
   const [entryCount, setEntryCount] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  const [sshBrowsing, setSshBrowsing] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -135,6 +138,11 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
   }
 
   const browse = async (): Promise<void> => {
+    // SSH browses the remote host (spec §2 Step 5); local keeps the native pick.
+    if (isSsh) {
+      setSshBrowsing(true)
+      return
+    }
     const picked = await window.api.shell.pickCompileDatabase()
     if (picked) {
       setCdbPath(picked)
@@ -220,11 +228,26 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
                   aria-label={translate('settings.codeIntelligence.cdbPathLabel', 'Database path')}
                   onChange={(event) => setCdbPath(event.target.value)}
                 />
-                <Button type="button" variant="outline" size="sm" onClick={() => void browse()} disabled={isSsh}>
+                <Button type="button" variant="outline" size="sm" onClick={() => void browse()}>
                   <FolderSearch className="size-3.5" aria-hidden />
                   {translate('settings.codeIntelligence.cdbBrowse', 'Browse…')}
                 </Button>
               </div>
+              {sshBrowsing && isSsh && setupHost ? (
+                <SshCompileDatabasePicker
+                  targetId={setupHost.targetId}
+                  initialPath={
+                    existingScope?.members[0]?.compileDatabase
+                      ? parentPath(existingScope.members[0].compileDatabase)
+                      : '~'
+                  }
+                  onPick={(path) => {
+                    setCdbPath(path)
+                    setSshBrowsing(false)
+                  }}
+                  onCancel={() => setSshBrowsing(false)}
+                />
+              ) : null}
               {mappings?.length ? (
                 <div
                   className={`flex items-start gap-1.5 text-[11px] leading-snug ${
