@@ -274,7 +274,7 @@ export async function undoLatestSemanticEditForRequest(
       return 'committed'
     case 'blocked':
       return 'blocked'
-    default:
+    case 'failed':
       return 'failed'
   }
 }
