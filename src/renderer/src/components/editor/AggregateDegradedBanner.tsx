@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { Database, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
@@ -36,13 +36,15 @@ export function AggregateDegradedBanner({
   const health = useAggregateMappingHealth(scopeId)
   const degraded = health?.some((mapping) => mapping.state === 'degraded') ?? false
   const [dismissed, setDismissed] = useState(false)
-  useEffect(() => {
-    // Auto-clears: recovery resets the dismissal so a later degradation can
-    // surface again.
+  // Auto-clears during render (no effect, no stale frame): recovery resets
+  // the dismissal so a later degradation can surface again.
+  const [wasDegraded, setWasDegraded] = useState(degraded)
+  if (degraded !== wasDegraded) {
+    setWasDegraded(degraded)
     if (!degraded) {
       setDismissed(false)
     }
-  }, [degraded])
+  }
   if (!degraded || dismissed) {
     return null
   }
