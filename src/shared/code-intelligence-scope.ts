@@ -82,18 +82,7 @@ export function codeIntelligenceScopeConfigurationMode(
   }
   return scope.members.some((member) => member.compileDatabase === undefined) ? 'mixed' : 'mapped'
 }
-/** What produced the current CDB on disk — the setup pipeline's systems, not
- * the member-derived scope mode. */
-export type CodeIntelligenceSetupSystemMode = 'cmake' | 'gn' | 'basic' | 'mixed'
-export type CodeIntelligenceSetupStatus = {
-  state: 'ready' | 'limited' | 'error'
-  mode: CodeIntelligenceSetupSystemMode
-  generatedAt: number
-  compileCommandCount?: number
-  warningCount?: number
-  message?: string
-  compileCommandsDir?: string
-}
+/** Ephemeral scope-snapshot change events; see CodeIntelligenceScopeStore. */
 export type CodeIntelligenceScopeChange = {
   scopeId: string
   revision: number | null
@@ -143,7 +132,6 @@ export type CodeIntelligenceScope = {
   basicOptions?: CodeIntelligenceBasicOptions
   serverSource: CodeIntelligenceServerSource
   consent?: CodeIntelligenceScopeConsent
-  setupStatus?: CodeIntelligenceSetupStatus
   /** Provenance: scopes born from the Outline's zero-config default (ADR 0003).
    * Metadata only — deliberately outside scopeConfigurationPayload so flipping
    * it never touches consent staleness. */

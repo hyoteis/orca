@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings, Repo } from '../../shared/types'
 import type { CodeIntelligenceScope } from '../../shared/code-intelligence-scope'
-import { clangdCompileCommandsDirArg } from '../../shared/code-intelligence-cpp-setup'
+import { clangdCompileCommandsDirArg } from '../language-server/clangd-compile-commands-dir'
 import type { SshConnection } from '../ssh/ssh-connection'
 import { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 

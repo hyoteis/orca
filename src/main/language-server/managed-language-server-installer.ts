@@ -20,8 +20,7 @@ import type {
   ManagedLanguageServerToolId
 } from '../../shared/managed-language-server'
 import type { LanguageServerKind } from '../../shared/language-server-session'
-import type { CppSetupCommandRunner } from './code-intelligence-cpp-setup-tools'
-import { runCppSetupCommand } from './code-intelligence-cpp-setup-tools'
+import { runCppSetupCommand, type CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
 import {
   acquireManagedVersion,
   resolveLocalManagedHostTarget,

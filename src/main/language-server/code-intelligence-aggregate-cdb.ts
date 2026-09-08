@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
-import type { CppSetupHost } from './code-intelligence-cpp-setup-host'
+import type { CppSetupHost, CppSetupPathDetection } from './code-intelligence-cpp-setup-host'
 import {
   compilerArguments,
   MAX_SOURCE_FILES
@@ -65,7 +64,7 @@ export function isValidSuppliedCdbShape(value: unknown): value is unknown[] {
  * host-absolute native path against its entry directory when relative. */
 export function normalizeSuppliedCdbEntries(
   entries: readonly unknown[],
-  detection: CppBuildRootDetection
+  detection: CppSetupPathDetection
 ): AggregateCdbEntry[] {
   return entries.map((entry) => {
     const candidate = entry as {

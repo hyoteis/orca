@@ -52,11 +52,11 @@ function sameConfiguration(left: CodeIntelligenceScope, right: CodeIntelligenceS
 
 /** Config payload without members — member-only edits keep the clangd session
  * alive (spec §5), while any other change alters the launch and must restart
- * it. setupStatus/generatedAt and basicOptions stay out too (#134): they shape
- * the aggregate's *content*, which the running session re-reads lazily; only a
- * real launch-config change restarts. */
+ * it. basicOptions stays out too (#134): it shapes the aggregate's *content*,
+ * which the running session re-reads lazily; only a real launch-config change
+ * restarts. */
 function launchConfigurationPayload(scope: CodeIntelligenceScope): Record<string, unknown> {
-  const { members: _members, setupStatus: _setupStatus, basicOptions: _basicOptions, ...payload } =
+  const { members: _members, basicOptions: _basicOptions, ...payload } =
     scopeConfigurationPayload(scope) as Record<string, unknown>
   return payload
 }
@@ -71,10 +71,15 @@ function sameLaunchConfiguration(
   )
 }
 
-/** Pre-#131 persisted scopes may still say python — the type no longer
- * carries it, so raw comparisons read through this widened view. */
+/** Pre-#131 persisted scopes may still say python and pre-#139 ones may carry
+ * a setup pipeline result — the type no longer carries either, so raw
+ * comparisons read through these widened views. */
 function isPersistedPythonScope(scope: CodeIntelligenceScope): boolean {
   return (scope as { language?: string }).language === 'python'
+}
+
+function hasPersistedSetupStatus(scope: CodeIntelligenceScope): boolean {
+  return (scope as { setupStatus?: unknown }).setupStatus !== undefined
 }
 
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {
@@ -114,14 +119,18 @@ export class CodeIntelligenceScopeStore {
     // notice. The notice flag doubles as the ran-once guard (undefined = never).
     const needsModelMigration =
       settings.codeIntelligenceModelUpgradeNoticePending === undefined &&
-      raw.some((scope) => isPersistedPythonScope(scope) || scope.setupStatus !== undefined)
+      raw.some((scope) => isPersistedPythonScope(scope) || hasPersistedSetupStatus(scope))
     const scopes = raw
       .filter((scope) => !isPersistedPythonScope(scope))
-      .map((scope) =>
-        hasLegacyCodeIntelligenceMembers(scope) || (needsModelMigration && scope.setupStatus)
-          ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
-          : normalizeCodeIntelligenceScope(scope)
-      )
+      .map((scope) => {
+        if (!hasLegacyCodeIntelligenceMembers(scope) && !hasPersistedSetupStatus(scope)) {
+          return normalizeCodeIntelligenceScope(scope)
+        }
+        const { setupStatus: _legacy, ...rest } = scope as CodeIntelligenceScope & {
+          setupStatus?: unknown
+        }
+        return normalizeCodeIntelligenceScope(rest)
+      })
     // Scope ids end with their language segment (#128), so python declisions
     // prune by suffix; cpp declisions keep blocking Outline auto-recreation.
     const declined = settings.codeIntelligenceDeclinedAutoScopes?.filter(

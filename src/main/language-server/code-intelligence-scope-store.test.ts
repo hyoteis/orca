@@ -108,21 +108,16 @@ describe('CodeIntelligenceScopeStore', () => {
   })
 
   it('keeps the session alive across an aggregate re-merge (#134)', () => {
-    // The setup regenerated the compile database behind the launch — the
-    // running clangd re-reads it lazily; the session must not restart.
+    // The re-merge rewrote the compile database behind the launch — the
+    // running clangd re-reads it lazily; the session must not restart. A
+    // basicOptions content edit stands in: it reshapes aggregate *content*
+    // (revision bumps, consent goes stale) yet never restarts the launch.
     const result = new CodeIntelligenceScopeStore(createStore([scope()])).upsert({
       ...scope(),
-      setupStatus: {
-        state: 'ready',
-        mode: 'cmake',
-        generatedAt: 1234,
-        compileCommandCount: 561,
-        warningCount: 0,
-        compileCommandsDir: 'C:/cache/scope'
-      }
+      basicOptions: { includeDirectories: ['/other/include'], defines: [] }
     })
     expect(result.restartRequired).toBe(false)
-    expect(result.scope.revision).toBe(1)
+    expect(result.scope.revision).toBe(2)
   })
 
   it('keeps a member-emptied scope alive without a session restart', async () => {
@@ -171,27 +166,24 @@ describe('CodeIntelligenceScopeStore', () => {
       ).rejects.toThrow('disabled')
   })
 
-  it('lazily migrates legacy {relativePath} members on read and drops setupStatus', async () => {
-    const setupStatus: CodeIntelligenceScope['setupStatus'] = {
-      state: 'ready',
-      mode: 'cmake',
-      generatedAt: 1
-    }
+  it('lazily migrates legacy {relativePath} members on read and strips setupStatus', async () => {
     const legacy = {
       ...scope(),
       members: [
         { relativePath: 'engine', visibleResults: true }
       ] as unknown as CodeIntelligenceScope['members'],
-      setupStatus,
+      // Pre-#139 persisted scopes carried the setup pipeline result; the type
+      // no longer has it, so the fixture spells the raw disk shape.
+      setupStatus: { state: 'ready', mode: 'cmake', generatedAt: 1 },
       consent: { configurationFingerprint: 'stale', grantedAt: 1 }
-    } as CodeIntelligenceScope
+    } as unknown as CodeIntelligenceScope
     const store = createStore([legacy])
     const catalog = new CodeIntelligenceScopeStore(store)
 
     const scopes = catalog.list()
 
     expect(scopes[0].members).toEqual([{ path: 'engine', visibleResults: true }])
-    expect(scopes[0].setupStatus).toBeUndefined()
+    expect((scopes[0] as { setupStatus?: unknown }).setupStatus).toBeUndefined()
     // Migration persists the new shape so later reads never re-migrate.
     const persisted = store.getSettings().codeIntelligenceScopes
     expect(persisted?.[0].members).toEqual([{ path: 'engine', visibleResults: true }])
@@ -202,28 +194,15 @@ describe('CodeIntelligenceScopeStore', () => {
       ).rejects.toThrow('consent')
   })
 
-  it('blanks setupStatus on the one-shot model migration, then keeps new ones', async () => {
-    const setupStatus: CodeIntelligenceScope['setupStatus'] = {
-      state: 'ready',
-      mode: 'cmake',
-      generatedAt: 1
-    }
-    const store = createStore([scope({ setupStatus })])
+  it('strips setupStatus on the one-shot model migration', async () => {
+    const persisted = { ...scope(), setupStatus: { state: 'ready', mode: 'cmake', generatedAt: 1 } }
+    const store = createStore([persisted as unknown as CodeIntelligenceScope])
     const catalog = new CodeIntelligenceScopeStore(store)
 
     // #128 spec §2 Step 1: the first read blanks legacy setupStatus and arms the
     // one-time upgrade notice.
-    expect(catalog.list()[0].setupStatus).toBeUndefined()
+    expect((catalog.list()[0] as { setupStatus?: unknown }).setupStatus).toBeUndefined()
     expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBe(true)
-
-    // After the migration ran, a freshly generated setupStatus survives reads.
-    store.updateSettings({
-      codeIntelligenceScopes: [scope({ setupStatus })],
-      codeIntelligenceModelUpgradeNoticePending: false
-    })
-    store.updateSettings.mockClear()
-    expect(catalog.list()[0].setupStatus).toEqual(setupStatus)
-    expect(store.updateSettings).not.toHaveBeenCalled()
   })
 
   it('round-trips a scope with mixed relative and absolute members', async () => {
@@ -460,13 +439,6 @@ describe('single aggregate session (#134 spec §2 Step 3)', () => {
       upsert({
         ...scope(),
         basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [] }
-      })
-    ).toBe(false)
-    // A later re-merge touching only setupStatus freshness: no restart.
-    expect(
-      upsert({
-        ...scope(),
-        setupStatus: { state: 'ready', mode: 'basic', generatedAt: 99 }
       })
     ).toBe(false)
   })

@@ -8,8 +8,6 @@ import type {
 import type { LanguageServerSessionOpenRequest } from '../../shared/language-server-session'
 import type { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 import type { Store } from '../persistence'
-import { CodeIntelligenceCppSetup } from '../language-server/code-intelligence-cpp-setup'
-import { CodeIntelligenceSshCppSetup } from '../language-server/code-intelligence-ssh-cpp-setup'
 import {
   cppScopeDirectoryName,
   cppScopeDirectoryPath,
@@ -22,7 +20,7 @@ import {
   buildRemoteListSubdirectoriesCommand,
   SshSetupExecQueue
 } from '../language-server/code-intelligence-ssh-setup-exec'
-import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
+import { parseExecutionHostId } from '../../shared/execution-host'
 import { getSshConnectionManager, getRegisteredSshState } from './ssh'
 import { subscribeSshTransportConnected } from './ssh-transport-connected'
 import { registerManagedLanguageServerInstallHandlers } from './code-intelligence-managed-install'
@@ -118,7 +116,6 @@ export function registerCodeIntelligenceHandlers(
   store: Store
 ): void {
   const cppCacheRoot = join(app.getPath('userData'), 'code-intelligence', 'cpp')
-  const cppSetup = new CodeIntelligenceCppSetup(store, cppCacheRoot)
   void sweepOrphanCppScopeDirectories(
     cppCacheRoot,
     scopes
@@ -126,12 +123,6 @@ export function registerCodeIntelligenceHandlers(
       .filter((scope) => scope.language === 'cpp' && scope.executionHostId === 'local')
       .map((scope) => scope.id)
   )
-  const sshCppSetup = new CodeIntelligenceSshCppSetup(store, {
-    getConnection: (targetId) => getSshConnectionManager()?.getConnection(targetId),
-    // Why: remotePlatform lives on the relay session; the raw manager state never
-    // carries it, so the enriched registered state is the only truthful source.
-    getPlatform: (targetId) => getRegisteredSshState(targetId)?.remotePlatform
-  })
   const { syncAggregateTracking } = registerAggregateCodeIntelligenceHandlers(
     scopes,
     store,
@@ -146,11 +137,6 @@ export function registerCodeIntelligenceHandlers(
   // Reconnect sweep = deferred delete for scopes removed while offline.
   subscribeSshTransportConnected((targetId) => {
     void sweepRemoteOrphanCppScopeDirectories(scopes, targetId)
-  })
-  ipcMain.handle('codeIntelligence:setupCpp', async (_event, request) => {
-    const repo = store.getRepo(request.repoId)
-    const host = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
-    return host?.kind === 'ssh' ? sshCppSetup.run(request) : cppSetup.run(request)
   })
   ipcMain.handle('codeIntelligence:upsertScope', (_event, scope: CodeIntelligenceScope) => {
     const result = scopes.upsert(scope)

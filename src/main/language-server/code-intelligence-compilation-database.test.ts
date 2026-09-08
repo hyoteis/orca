@@ -1,40 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { mergeCompilationDatabaseShards } from './code-intelligence-compilation-database'
+import { compilerArguments } from './code-intelligence-compilation-database'
 
-describe('mergeCompilationDatabaseShards', () => {
-  it('dedupes by file key, keeping the last shard spelling (nested members)', () => {
-    const first = [
-      { directory: '/w', file: '/w/module/src/main.cpp', arguments: ['clang++', '-c'] },
-      { directory: '/w', file: '/w/other.cpp', arguments: ['clang++', '-c'] }
-    ]
-    const second = [
-      { directory: '/w', file: '/w/module/src/main.cpp', arguments: ['clang++', '-c', '-DSECOND'] }
-    ]
-
-    const merged = mergeCompilationDatabaseShards([first, second])
-
-    // Replacement keeps the first occurrence's position, last shard's spelling.
-    expect(merged).toEqual([
-      { directory: '/w', file: '/w/module/src/main.cpp', arguments: ['clang++', '-c', '-DSECOND'] },
-      { directory: '/w', file: '/w/other.cpp', arguments: ['clang++', '-c'] }
+describe('compilerArguments', () => {
+  it('builds a C++ command with the shared options', () => {
+    expect(compilerArguments('/w/a.cpp', ['/inc'], ['FOO'], 'c++20')).toEqual([
+      'clang++',
+      '-std=c++20',
+      '-DFOO',
+      '-I/inc',
+      '-c',
+      '/w/a.cpp'
     ])
   })
 
-  it('folds POSIX duplicate separators when keying files (case stays significant)', () => {
-    const merged = mergeCompilationDatabaseShards([
-      [{ file: '/w/module//src/main.cpp', arguments: [] }],
-      [{ file: '/w/module/src/main.cpp', arguments: ['-DSECOND'] }],
-      [{ file: '/w/module/src/Main.CPP', arguments: [] }]
+  it('switches to the C compiler and c11 for .c/.m sources', () => {
+    expect(compilerArguments('/w/a.c', [], [], 'c++17')).toEqual([
+      'clang',
+      '-std=c11',
+      '-c',
+      '/w/a.c'
     ])
-    expect(merged).toEqual([
-      { file: '/w/module/src/main.cpp', arguments: ['-DSECOND'] },
-      { file: '/w/module/src/Main.CPP', arguments: [] }
-    ])
-  })
-
-  it('rejects a shard that is not an array', () => {
-    expect(() => mergeCompilationDatabaseShards([[{ file: '/w/a.cpp' }], {} as never])).toThrow(
-      'Build setup produced an invalid compile_commands.json'
-    )
   })
 })

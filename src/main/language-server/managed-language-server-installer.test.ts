@@ -11,7 +11,7 @@ import type {
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
 import { ManagedLanguageServerInstaller } from './managed-language-server-installer'
-import type { CppSetupCommandRunner } from './code-intelligence-cpp-setup-tools'
+import type { CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
 import { readManagedActivation } from './managed-language-server-install-root'
 
 const tempDirs: string[] = []

@@ -499,7 +499,6 @@ ipcRenderer.on('ui:findInBrowserPage', (_event, source: unknown) => {
 // Custom APIs for renderer
 const api = {
   codeIntelligence: {
-    setupCpp: (request) => ipcRenderer.invoke('codeIntelligence:setupCpp', request),
     upsertScope: (scope) => ipcRenderer.invoke('codeIntelligence:upsertScope', scope),
     removeScope: (scopeId) => ipcRenderer.invoke('codeIntelligence:removeScope', scopeId),
     grantConsent: (request) => ipcRenderer.invoke('codeIntelligence:grantConsent', request),

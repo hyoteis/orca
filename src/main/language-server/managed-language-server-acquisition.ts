@@ -9,7 +9,7 @@ import type {
   ManagedLanguageServerManifest,
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
-import type { CppSetupCommandRunner } from './code-intelligence-cpp-setup-tools'
+import type { CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
 import { buildManagedExtractionCommands } from './managed-language-server-extraction'
 import type { FetchManagedArchive } from './managed-language-server-archive'
 import { writeVerifiedManagedArchive } from './managed-language-server-archive'

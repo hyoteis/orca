@@ -1,10 +1,16 @@
 import { stat } from 'node:fs/promises'
-import { CLANGD_COMPILE_COMMANDS_DIR_ARG_PREFIX } from '../../shared/code-intelligence-cpp-setup'
 import type {
   LanguageServerKind,
   LanguageServerLaunchRequest
 } from '../../shared/language-server-session'
 import { resolveDefaultLocalLanguageServerCommand } from './local-language-server-session-manager'
+
+/** Single writer/reader source for the clangd spawn arg; extraction must match (spec §2 M17). */
+export const CLANGD_COMPILE_COMMANDS_DIR_ARG_PREFIX = '--compile-commands-dir='
+
+export function clangdCompileCommandsDirArg(directory: string): string {
+  return `${CLANGD_COMPILE_COMMANDS_DIR_ARG_PREFIX}${directory}`
+}
 
 export function clangdCompileCommandsDirFromArgs(
   kind: LanguageServerKind,
