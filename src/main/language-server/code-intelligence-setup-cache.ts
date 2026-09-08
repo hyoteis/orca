@@ -55,6 +55,9 @@ export function codeIntelligenceSetupFingerprintDigest(args: {
         defines: args.request.defines ?? [],
         cmakeDefines: args.request.cmakeDefines ?? [],
         cppStandard: args.request.cppStandard ?? 'c++17',
+        // #129: per-scope BASIC options ride the digest; null (absent field)
+        // keeps legacy requests on a stable serialization.
+        basicOptions: args.request.basicOptions ?? null,
         buildInputs: args.buildInputs
       })
     )

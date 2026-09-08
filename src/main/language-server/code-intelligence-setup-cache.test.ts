@@ -105,12 +105,41 @@ describe('setup manifest', () => {
         }
       })
     ).not.toBe(base)
+    // Digest-sensitivity for the persisted BASIC options (#129).
+    expect(
+      codeIntelligenceSetupFingerprintDigest({
+        ...digestArgs,
+        request: {
+          ...digestArgs.request,
+          basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [] }
+        }
+      })
+    ).not.toBe(base)
+    expect(
+      codeIntelligenceSetupFingerprintDigest({
+        ...digestArgs,
+        request: {
+          ...digestArgs.request,
+          basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [], cppStandard: 'c++20' }
+        }
+      })
+    ).not.toBe(
+      codeIntelligenceSetupFingerprintDigest({
+        ...digestArgs,
+        request: {
+          ...digestArgs.request,
+          basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [] }
+        }
+      })
+    )
     expect(codeIntelligenceSetupFingerprintDigest(digestArgs)).toBe(base)
   })
 
   it('keeps the digest byte-stable across refactors (setup caches depend on it)', () => {
     // Golden sha256: any change to the payload shape or key order invalidates
     // every user's local and remote setup cache. Update only deliberately.
+    // Updated for the #129 basicOptions payload field (previously
+    // 51ab097fbf2eb448dba4f8014be6fb2f7496346616e2311f1ffdb5c9cb5bef95).
     expect(
       codeIntelligenceSetupFingerprintDigest({
         repoId: 'repo-1',
@@ -134,7 +163,7 @@ describe('setup manifest', () => {
           }
         ]
       })
-    ).toBe('51ab097fbf2eb448dba4f8014be6fb2f7496346616e2311f1ffdb5c9cb5bef95')
+    ).toBe('4c9ef36c55327033e0bc40382f52f92cc14e0ceca1b243d89ec9ec7edbc9b556')
   })
 })
 

@@ -1,4 +1,5 @@
 import type {
+  CodeIntelligenceBasicOptions,
   CodeIntelligenceSetupStatus,
   CodeIntelligenceSetupSystemMode
 } from './code-intelligence-scope'
@@ -24,6 +25,9 @@ export type CodeIntelligenceCppSetupRequest = {
    * hatch for cross compiles (e.g. CMAKE_TOOLCHAIN_FILE=…ohos.toolchain.cmake). */
   cmakeDefines?: string[]
   cppStandard?: 'c++17' | 'c++20' | 'c++23'
+  /** Per-scope persisted BASIC options (#129) — joins the setup fingerprint;
+   * the flat fields above stay the wire shape until the Step 5 UI migration. */
+  basicOptions?: CodeIntelligenceBasicOptions
 }
 
 export type CodeIntelligenceCppSetupResult = {
