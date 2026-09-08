@@ -61,12 +61,6 @@ function renderSelection(props: { initialLanguage?: CodeIntelligenceLanguage } =
 
 /** #106: the enable action preselects the active file's language family. */
 describe('useSetupScopeSelection initialLanguage', () => {
-  it('seeds python instead of the cpp default', async () => {
-    const { result } = renderSelection({ initialLanguage: 'python' })
-    await waitFor(() => expect(result.current.scanning).toBe(false))
-    expect(result.current.language).toBe('python')
-  })
-
   it('falls back to cpp when absent', async () => {
     const { result } = renderSelection()
     await waitFor(() => expect(result.current.scanning).toBe(false))
@@ -74,27 +68,16 @@ describe('useSetupScopeSelection initialLanguage', () => {
   })
 })
 
-/** Python members must stay workspace-relative — the invariant the removed
- *  add-folder dialog enforced with a toast, now enforced by dropping custom picks. */
+/** cpp keeps the dual member form: workspace-relative plus host-absolute alike. */
 describe('useSetupScopeSelection selectedRoots', () => {
-  it('drops host-absolute custom picks for python but keeps them for cpp', async () => {
+  it('keeps host-absolute custom picks alongside workspace-relative ones', async () => {
     const { result } = renderSelection()
     await waitFor(() => expect(result.current.roots).toContain('src'))
     act(() => {
       result.current.setMode('selected')
       result.current.setSelected(new Set(['src', '/abs/host/path']))
     })
-    // cpp keeps the dual form: workspace-relative plus host-absolute alike.
     expect(result.current.selectedRoots).toEqual(['src', '/abs/host/path'])
-
-    // Separate act: the language pre-check effect resets selection on switch.
-    act(() => {
-      result.current.setLanguage('python')
-    })
-    act(() => {
-      result.current.setSelected(new Set(['src', '/abs/host/path']))
-    })
-    expect(result.current.selectedRoots).toEqual(['src'])
   })
 })
 

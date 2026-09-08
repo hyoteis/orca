@@ -67,7 +67,6 @@ import { installMonacoE2EProbe } from './monaco-e2e-probe'
 import { monacoFindOptions } from './monaco-find-options'
 import { matchesPendingEditorFocusRequest } from './pending-editor-focus-request'
 import { registerCppMonacoDocument } from '@/lib/language-server/cpp-monaco-language-features'
-import { registerPythonMonacoDocument } from '@/lib/language-server/python-monaco-language-features'
 import { formatDocumentBeforeSave } from '@/lib/language-server/semantic-monaco-documents'
 import { undoLatestSemanticEditForRequest } from '@/lib/language-server/semantic-edit-landing'
 
@@ -407,9 +406,6 @@ export default function MonacoEditor({
       const unregisterCppMonacoDocument = codeIntelligenceRequestAt
         ? registerCppMonacoDocument(monaco, editorInstance, codeIntelligenceRequestAt)
         : () => undefined
-      const unregisterPythonMonacoDocument = codeIntelligenceRequestAt
-        ? registerPythonMonacoDocument(monaco, editorInstance, codeIntelligenceRequestAt)
-        : () => undefined
       unregisterFileSearchSelectionRef.current?.()
       unregisterFileSearchSelectionRef.current = registerFileSearchSelectedTextProvider(() => {
         if (!editorInstance.hasTextFocus()) {
@@ -586,7 +582,6 @@ export default function MonacoEditor({
         scrollStateSub.dispose()
         gutterMouseDownSub.dispose()
         unregisterCppMonacoDocument()
-        unregisterPythonMonacoDocument()
         cleanupSaveShortcut()
         cleanupFindShortcut()
         cleanupAddReviewNoteShortcut()

@@ -6,12 +6,12 @@ import {
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 
 const scope: CodeIntelligenceScope = {
-  id: 'local:w:python',
+  id: 'local:w:cpp',
   name: 'Scope',
   executionHostId: 'local',
   workspaceKey: 'worktree:w',
   workspaceRoot: '/repo',
-  language: 'python',
+  language: 'cpp',
   members: [
     { path: '/repo/src', visibleResults: true },
     { path: '/repo/tools', visibleResults: true }

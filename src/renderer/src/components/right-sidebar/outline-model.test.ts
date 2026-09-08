@@ -16,12 +16,12 @@ import {
 
 function scope(overrides: Partial<CodeIntelligenceScope>): CodeIntelligenceScope {
   return {
-    id: 'local:worktree:repo-1:python',
+    id: 'local:worktree:repo-1:cpp',
     name: 'repo-1',
     executionHostId: 'local',
     workspaceKey: 'worktree:repo-1',
     workspaceRoot: '/ws/repo-1',
-    language: 'python',
+    language: 'cpp',
     members: [{ path: '.', visibleResults: true }],
     serverSource: { type: 'automatic' },
     enabled: true,
@@ -42,19 +42,19 @@ describe('resolveOutlineTier', () => {
       kind: 'unsupported'
     })
     expect(
-      resolveOutlineTier({ language: 'markdown', scope: scope({ language: 'python' }) })
+      resolveOutlineTier({ language: 'markdown', scope: scope({}) })
     ).toEqual({ kind: 'unsupported' })
   })
 
   it('marks a supported file with no covering scope as unavailable (no scope)', () => {
-    expect(resolveOutlineTier({ language: 'python', scope: null })).toEqual({
+    expect(resolveOutlineTier({ language: 'cpp', scope: null })).toEqual({
       kind: 'unavailable',
       reason: 'no-scope'
     })
   })
 
   it('marks a covered scope that was never consented as unavailable (consent)', () => {
-    expect(resolveOutlineTier({ language: 'python', scope: scope({}) })).toEqual({
+    expect(resolveOutlineTier({ language: 'cpp', scope: scope({}) })).toEqual({
       kind: 'unavailable',
       reason: 'consent'
     })
@@ -63,7 +63,7 @@ describe('resolveOutlineTier', () => {
   it('marks a scope whose consent no longer matches its members as unavailable (consent)', () => {
     expect(
       resolveOutlineTier({
-        language: 'python',
+        language: 'cpp',
         scope: scope({
           members: [{ path: 'src', visibleResults: true }],
           consent: freshConsent
@@ -74,7 +74,7 @@ describe('resolveOutlineTier', () => {
 
   it('resolves a consented enabled scope to the semantic tier', () => {
     expect(
-      resolveOutlineTier({ language: 'python', scope: scope({ consent: freshConsent }) })
+      resolveOutlineTier({ language: 'cpp', scope: scope({ consent: freshConsent }) })
     ).toEqual({ kind: 'semantic' })
   })
 
@@ -95,7 +95,7 @@ describe('resolveOutlineTier', () => {
   it('treats a disabled scope like no scope', () => {
     expect(
       resolveOutlineTier({
-        language: 'python',
+        language: 'cpp',
         scope: scope({ enabled: false, consent: freshConsent })
       })
     ).toEqual({ kind: 'unavailable', reason: 'no-scope' })
@@ -434,16 +434,16 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace,
         executionHostId: 'local',
-        language: 'python',
-        scopeName: 'repo-1 Python (Outline)',
+        language: 'cpp',
+        scopeName: 'repo-1 C++ (Outline)',
         scopes: [],
         declinedAutoScopeIds: []
       })
     ).toEqual({
       kind: 'create',
       scope: expect.objectContaining({
-        id: 'local:worktree:repo-1:python',
-        name: 'repo-1 Python (Outline)',
+        id: 'local:worktree:repo-1:cpp',
+        name: 'repo-1 C++ (Outline)',
         origin: 'outline-auto',
         workspaceRoot: '/ws/repo-1',
         members: [{ path: '.', visibleResults: true }],
@@ -470,7 +470,7 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace,
         executionHostId: 'local',
-        language: 'python',
+        language: 'cpp',
         scopeName: 'n',
         scopes: [scope({ enabled: false })],
         declinedAutoScopeIds: []
@@ -483,10 +483,10 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace,
         executionHostId: 'local',
-        language: 'python',
+        language: 'cpp',
         scopeName: 'n',
         scopes: [scope({ origin: undefined })],
-        declinedAutoScopeIds: ['local:worktree:repo-1:python']
+        declinedAutoScopeIds: ['local:worktree:repo-1:cpp']
       })
     ).toEqual({ kind: 'exists' })
   })
@@ -496,10 +496,10 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace,
         executionHostId: 'local',
-        language: 'python',
+        language: 'cpp',
         scopeName: 'n',
         scopes: [],
-        declinedAutoScopeIds: ['local:worktree:repo-1:python']
+        declinedAutoScopeIds: ['local:worktree:repo-1:cpp']
       })
     ).toEqual({ kind: 'declined' })
   })
@@ -509,7 +509,7 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace,
         executionHostId: 'ssh:box',
-        language: 'python',
+        language: 'cpp',
         scopeName: 'n',
         scopes: [],
         declinedAutoScopeIds: []
@@ -522,7 +522,7 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace,
         executionHostId: 'runtime:env-1',
-        language: 'python',
+        language: 'cpp',
         scopeName: 'n',
         scopes: [],
         declinedAutoScopeIds: []
@@ -535,7 +535,7 @@ describe('resolveOutlineAutoScope', () => {
       resolveOutlineAutoScope({
         workspace: null,
         executionHostId: null,
-        language: 'python',
+        language: 'cpp',
         scopeName: 'n',
         scopes: [],
         declinedAutoScopeIds: []
@@ -545,9 +545,8 @@ describe('resolveOutlineAutoScope', () => {
 })
 
 describe('OUTLINE_SUPPORTED_LANGUAGES', () => {
-  it('covers python and the C++ family', () => {
+  it('covers the C++ family', () => {
     expect([...OUTLINE_SUPPORTED_LANGUAGES]).toEqual([
-      'python',
       'c',
       'cpp',
       'objective-c',
@@ -557,8 +556,8 @@ describe('OUTLINE_SUPPORTED_LANGUAGES', () => {
 })
 
 describe('outlineLanguageFamily', () => {
-  it('maps python and the C++ family to scope-resolution languages', () => {
-    expect(outlineLanguageFamily('python')).toBe('python')
+  it('maps python to nothing and the C++ family to cpp', () => {
+    expect(outlineLanguageFamily('python')).toBeNull()
     expect(outlineLanguageFamily('c')).toBe('cpp')
     expect(outlineLanguageFamily('cpp')).toBe('cpp')
     expect(outlineLanguageFamily('objective-c')).toBe('cpp')

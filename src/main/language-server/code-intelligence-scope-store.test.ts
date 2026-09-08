@@ -337,11 +337,12 @@ describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
       authorizedMembers: [{ path: 'engine', visibleResults: true }]
     }
     const cpp = scope({ consent })
-    const python = scope({
+    const python = {
+      ...scope(),
       id: 'ssh%3Abox:folder:w:python',
       language: 'python',
       members: [{ path: 'scripts', visibleResults: true }]
-    })
+    } as unknown as CodeIntelligenceScope
     const store = createStore(
       [cpp, python],
       'ssh:box',
@@ -373,7 +374,11 @@ describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
 
   it('rejects a pre-migration python scope at authorizeSession', async () => {
     const store = createStore([
-      scope({ language: 'python', members: [{ path: 'scripts', visibleResults: true }] })
+      {
+        ...scope(),
+        language: 'python',
+        members: [{ path: 'scripts', visibleResults: true }]
+      } as unknown as CodeIntelligenceScope
     ])
     // Simulate the window before list()'s migration persists: raw settings keep
     // the python scope, so the launch path itself must refuse it explicitly.

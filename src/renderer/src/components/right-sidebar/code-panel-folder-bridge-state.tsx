@@ -35,7 +35,7 @@ export function FolderNotProjectEmptyState({
       <div className="max-w-[16rem] text-xs text-muted-foreground">
         {translate(
           'auto.components.rightSidebar.CodePanel.notProjectCopy',
-          'Code folders follow the project. Add this folder as a project to configure C++ / Python indexing here.'
+          'Code folders follow the project. Add this folder as a project to configure C++ indexing here.'
         )}
       </div>
       <Button type="button" size="xs" className="gap-1.5" onClick={onAddAsProject}>

@@ -8,11 +8,13 @@ import {
   resolveRuntimePath
 } from './cross-platform-path'
 
-export type CodeIntelligenceLanguage = 'python' | 'cpp'
+/** Python code intelligence is gone (#131); the wire kind union keeps
+ * tolerating python kinds for mixed-version remote pairs. */
+export type CodeIntelligenceLanguage = 'cpp'
 
-/** The server a scope's language launches; Python scopes use basedpyright. */
-export function languageServerKindForScope(language: CodeIntelligenceLanguage): LanguageServerKind {
-  return language === 'cpp' ? 'clangd' : 'basedpyright'
+/** The server a scope's language launches — clangd since python removal (#131). */
+export function languageServerKindForScope(_language: CodeIntelligenceLanguage): LanguageServerKind {
+  return 'clangd'
 }
 
 export function getCodeIntelligenceWorkspaceKey(
@@ -233,9 +235,6 @@ export function normalizeCodeIntelligenceScope(
   const configured: { key: string; mapped: boolean }[] = []
   for (const input of scope.members) {
     const path = normalizeScopeMemberPath(readScopeMemberPath(input))
-    if (scope.language === 'python' && isRuntimePathAbsolute(path)) {
-      throw new Error('Python code intelligence members must stay relative to the workspace')
-    }
     const compileDatabase =
       typeof input.compileDatabase === 'string'
         ? normalizeCompileDatabasePath(input.compileDatabase)

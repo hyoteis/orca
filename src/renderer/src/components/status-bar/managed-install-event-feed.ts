@@ -14,9 +14,6 @@ export function managedInstallKey(executionHostId: string, tool: string): string
 const installEventListeners = new Set<(event: ManagedLanguageServerInstallEvent) => void>()
 
 export function dispatchManagedInstallEvent(event: ManagedLanguageServerInstallEvent): void {
-  if (event.tool === 'node') {
-    return
-  }
   latestInstallEvents.set(managedInstallKey(event.executionHostId, event.tool), event)
   for (const listener of installEventListeners) {
     listener(event)

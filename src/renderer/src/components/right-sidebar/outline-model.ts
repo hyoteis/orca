@@ -16,14 +16,11 @@ import { regroupQualifiedRows } from './outline-qualified-regroup'
 // import chain) so node-side tests load it alone.
 const CPP_FAMILY_LANGUAGES = new Set(['c', 'cpp', 'objective-c', 'objective-cpp'])
 
-export const OUTLINE_SUPPORTED_LANGUAGES = new Set(['python', ...CPP_FAMILY_LANGUAGES])
+export const OUTLINE_SUPPORTED_LANGUAGES = new Set(CPP_FAMILY_LANGUAGES)
 
 /** Scope-resolution family for the active file; null means unsupported. */
 export function outlineLanguageFamily(language: string): CodeIntelligenceLanguage | null {
-  if (CPP_FAMILY_LANGUAGES.has(language)) {
-    return 'cpp'
-  }
-  return language === 'python' ? 'python' : null
+  return CPP_FAMILY_LANGUAGES.has(language) ? 'cpp' : null
 }
 
 export type OutlineRange = {

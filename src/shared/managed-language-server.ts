@@ -2,7 +2,18 @@ import type { ExecutionHostId } from './execution-host'
 import type { LanguageServerKind } from './language-server-session'
 import { LANGUAGE_SERVER_MANAGED_INSTALL_RUNTIME_CAPABILITY } from './protocol-version'
 
-export type ManagedLanguageServerToolId = 'basedpyright' | 'pyright' | 'clangd' | 'node'
+/** Managed-install tools (#131): python servers are gone; the wire kind union
+ * (LANGUAGE_SERVER_KINDS) keeps tolerating python kinds for mixed-version pairs. */
+export type ManagedLanguageServerToolId = 'clangd'
+
+/** Wire kinds still carry python kinds (mixed-version tolerance); managed
+ * installs reject them at the boundary with an explicit error. */
+export function assertManagedLanguageServerTool(tool: LanguageServerKind): ManagedLanguageServerToolId {
+  if (tool !== 'clangd') {
+    throw new Error(`Managed ${tool} language-server installs are no longer supported`)
+  }
+  return tool
+}
 
 export {
   /** Canonical wire capability (#15); protocol-version owns the registry. */
@@ -19,9 +30,8 @@ export type ManagedLanguageServerHostTarget = {
 
 export type ManagedLanguageServerArchiveFormat = 'zip' | 'tar-gz' | 'tar-xz'
 
-/** Path templates: `{root}` = the tool's version directory, `{runtime}` = the
- * private runtime version directory (managed Node; empty for clangd). Forward
- * slashes — Windows accepts them, so no per-host conversion is needed. */
+/** Path templates: `{root}` = the tool's version directory. Forward slashes —
+ * Windows accepts them, so no per-host conversion is needed. */
 export type ManagedLanguageServerCommandTemplate = {
   executable: string
   args: readonly string[]
@@ -29,8 +39,6 @@ export type ManagedLanguageServerCommandTemplate = {
 
 export type ManagedLanguageServerManifestEntry = {
   id: string
-  /** 'node' marks a private managed runtime (excluded from server listings
-   * and unrequestable by install IPC; referenced via runtimeEntryId). */
   tool: ManagedLanguageServerToolId
   version: string
   platform: 'win32' | 'darwin' | 'linux'
@@ -48,8 +56,6 @@ export type ManagedLanguageServerManifestEntry = {
   probe: ManagedLanguageServerCommandTemplate
   /** Session launch command resolved at activation time. */
   command: ManagedLanguageServerCommandTemplate
-  /** Private managed Node runtime this entry needs (Python servers). */
-  runtimeEntryId?: string
   license: { name: string; url: string }
 }
 
@@ -161,7 +167,7 @@ export function resolveManagedLanguageServerEntry(
   target: { tool: ManagedLanguageServerToolId; version?: string },
   host: ManagedLanguageServerHostTarget
 ):
-  | { entry: ManagedLanguageServerManifestEntry; runtimeEntry?: ManagedLanguageServerManifestEntry }
+  | { entry: ManagedLanguageServerManifestEntry }
   | { unsupported: ManagedLanguageServerUnsupportedReason } {
   const forTool = manifest.entries.filter((entry) => entry.tool === target.tool)
   // Platform filter first: one version ships several per-Host entries, and the
@@ -193,25 +199,15 @@ export function resolveManagedLanguageServerEntry(
       }
     }
   }
-  const runtimeEntry = requested.runtimeEntryId
-    ? manifest.entries.find((entry) => entry.id === requested.runtimeEntryId)
-    : undefined
-  if (requested.runtimeEntryId && !runtimeEntry) {
-    return { unsupported: { type: 'unknown-version', tool: target.tool, version: requested.runtimeEntryId } }
-  }
-  return { entry: requested, runtimeEntry }
+  return { entry: requested }
 }
 
-/** Substitute {root}/{runtime} placeholders in a probe/launch template. */
+/** Substitute {root} placeholders in a probe/launch template. */
 export function resolveManagedLanguageServerCommand(
   template: ManagedLanguageServerCommandTemplate,
-  roots: { root: string; runtimeRoot?: string }
+  roots: { root: string }
 ): { executable: string; args: string[] } {
-  const substitute = (value: string): string =>
-    value.replaceAll('{root}', roots.root).replaceAll('{runtime}', roots.runtimeRoot ?? '')
-  if (template.executable.includes('{runtime}') && !roots.runtimeRoot) {
-    throw new Error('Managed command needs a runtime root but none was resolved')
-  }
+  const substitute = (value: string): string => value.replaceAll('{root}', roots.root)
   return { executable: substitute(template.executable), args: template.args.map(substitute) }
 }
 

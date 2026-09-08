@@ -16,7 +16,7 @@ const scope = (
   executionHostId: 'local',
   workspaceKey: 'worktree:repo-1',
   workspaceRoot: '/workspace',
-  language: 'python',
+  language: 'cpp',
   members,
   serverSource: { type: 'automatic' },
   enabled: true,
@@ -55,12 +55,12 @@ describe('hasFileSearchScopeRangeMembers', () => {
 
 describe('isRelativePathInFileSearchScopeRange', () => {
   it('unions members across language groups with directory-prefix matching', () => {
-    const python = scope([{ path: 'engine/py', visibleResults: true }], { language: 'python' })
+    const other = scope([{ path: 'engine/py', visibleResults: true }])
     const cpp = scope(
       [{ path: '/workspace/engine/cpp', visibleResults: true }],
       { id: 'scope-2', language: 'cpp' }
     )
-    const range = [python, cpp]
+    const range = [other, cpp]
     expect(isRelativePathInFileSearchScopeRange(range, 'engine/py/app.py')).toBe(true)
     expect(isRelativePathInFileSearchScopeRange(range, 'engine/cpp/main.cpp')).toBe(true)
     // Non-code files inside member dirs count — the range is a directory set.

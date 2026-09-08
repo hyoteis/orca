@@ -1,7 +1,6 @@
 import { isAbsolute } from 'node:path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import type {
-  LanguageServerKind,
   LanguageServerLaunchRequest,
   LanguageServerSessionEvent
 } from '../../shared/language-server-session'
@@ -24,12 +23,13 @@ type LocalSession = {
 export function resolveDefaultLocalLanguageServerCommand(
   request: LanguageServerLaunchRequest
 ): ResolvedLanguageServerCommand {
-  const commands: Record<LanguageServerKind, { executable: string; args: string[] }> = {
-    basedpyright: { executable: 'basedpyright-langserver', args: ['--stdio'] },
-    pyright: { executable: 'pyright-langserver', args: ['--stdio'] },
-    clangd: { executable: 'clangd', args: [] }
+  // Wire kinds still carry python (#131); a python-kind launch reaches here
+  // only from a stale pre-migration renderer, so refuse it explicitly.
+  if (request.kind !== 'clangd') {
+    throw new Error(`Python language servers are no longer supported: ${request.kind}`)
   }
-  const command = request.command ?? commands[request.kind]
+  const command =
+    request.command ?? { executable: 'clangd', args: [] as string[] }
   return { executable: command.executable, args: [...command.args], cwd: request.workspaceRoot }
 }
 

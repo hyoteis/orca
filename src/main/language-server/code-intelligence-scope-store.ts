@@ -72,6 +72,12 @@ function sameLaunchConfiguration(
   )
 }
 
+/** Pre-#131 persisted scopes may still say python — the type no longer
+ * carries it, so raw comparisons read through this widened view. */
+function isPersistedPythonScope(scope: CodeIntelligenceScope): boolean {
+  return (scope as { language?: string }).language === 'python'
+}
+
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {
   return languageServerKindForScope(scope.language)
 }
@@ -109,9 +115,9 @@ export class CodeIntelligenceScopeStore {
     // notice. The notice flag doubles as the ran-once guard (undefined = never).
     const needsModelMigration =
       settings.codeIntelligenceModelUpgradeNoticePending === undefined &&
-      raw.some((scope) => scope.language === 'python' || scope.setupStatus !== undefined)
+      raw.some((scope) => isPersistedPythonScope(scope) || scope.setupStatus !== undefined)
     const scopes = raw
-      .filter((scope) => scope.language !== 'python')
+      .filter((scope) => !isPersistedPythonScope(scope))
       .map((scope) =>
         hasLegacyCodeIntelligenceMembers(scope) || (needsModelMigration && scope.setupStatus)
           ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
@@ -213,7 +219,7 @@ export class CodeIntelligenceScopeStore {
     const persisted = (this.store.getSettings().codeIntelligenceScopes ?? []).find(
       (candidate) => candidate.id === scopeId
     )
-    if (persisted?.language === 'python') {
+    if (persisted && isPersistedPythonScope(persisted)) {
       throw new Error('Python code intelligence is no longer supported on this Host')
     }
     const scope = this.list().find((candidate) => candidate.id === scopeId)

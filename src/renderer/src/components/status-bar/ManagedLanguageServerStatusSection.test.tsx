@@ -73,7 +73,7 @@ const state = (
 })
 
 const scope = (
-  language: 'cpp' | 'python',
+  language: 'cpp',
   executionHostId: string,
   serverSource: CodeIntelligenceScope['serverSource'] = { type: 'automatic' }
 ): CodeIntelligenceScope => ({
@@ -144,11 +144,11 @@ const emitEvent = (event: ManagedLanguageServerInstallEvent): void => {
 }
 
 describe('ManagedLanguageServerStatusSection', () => {
-  it('renders one sheet per scope language', async () => {
+  it('renders one sheet for the cpp scope language', async () => {
     managedInstallStateMock.mockResolvedValue(state())
-    mountSection([scope('cpp', 'local'), scope('python', 'local')], 'local')
+    mountSection([scope('cpp', 'local')], 'local')
     expect(await screen.findByText('clangd')).toBeTruthy()
-    expect(await screen.findByText('BasedPyright')).toBeTruthy()
+    expect(screen.queryByText('BasedPyright')).toBeNull()
     expect(managedInstallStateMock).toHaveBeenCalledWith(
       expect.objectContaining({ executionHostId: 'local', tool: 'clangd' })
     )

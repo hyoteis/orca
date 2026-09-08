@@ -1,5 +1,9 @@
 import { shellEscape } from '../ssh/ssh-connection-utils'
-import { compareManagedLanguageServerVersions, manifestEntryForLaunch } from '../../shared/managed-language-server'
+import {
+  assertManagedLanguageServerTool,
+  compareManagedLanguageServerVersions,
+  manifestEntryForLaunch
+} from '../../shared/managed-language-server'
 import type {
   ManagedLanguageServerInstallState,
   ManagedLanguageServerManifest,
@@ -35,7 +39,6 @@ export async function rollbackSshManagedLanguageServer(args: {
   const smoke = entry
     ? await probeSshManagedEntry(
         ctx,
-        args.manifest,
         entry,
         remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version)
       )
@@ -97,22 +100,21 @@ export async function resolveSshManagedLanguageServerCommand(args: {
   version?: string
 }): Promise<{ executable: string; args: string[] } | null> {
   const { ctx } = args
-  const record = await readSshManagedActivation(ctx, args.tool)
+  const tool = assertManagedLanguageServerTool(args.tool)
+  const record = await readSshManagedActivation(ctx, tool)
   if (!record) {
     return null
   }
   const entry = manifestEntryForLaunch(
     args.manifest,
     record,
-    { tool: args.tool, version: args.version },
+    { tool, version: args.version },
     { platform: ctx.remotePlatform, arch: ctx.remoteArch }
   )
   if (!entry) {
     return null
   }
   return resolveSshTemplate(
-    ctx,
-    args.manifest,
     entry,
     remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version),
     'command'

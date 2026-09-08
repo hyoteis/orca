@@ -8,28 +8,6 @@ import { outlineLanguageFamily, type OutlineSymbolRow } from './outline-model'
 
 type LineMatch = { name: string; kind: number; column: number }
 
-const PY_ASSIGNMENT_KEYWORDS = new Set([
-  'if',
-  'for',
-  'while',
-  'return',
-  'import',
-  'from',
-  'class',
-  'def',
-  'with',
-  'try',
-  'except',
-  'elif',
-  'else',
-  'pass',
-  'raise',
-  'assert',
-  'yield',
-  'del',
-  'global',
-  'nonlocal'
-])
 
 const CPP_DECL_PREFIX =
   /^\s*(?:static|inline|virtual|explicit|constexpr|friend|extern|thread_local)\s+/
@@ -47,38 +25,6 @@ const CPP_BAD_PREFIX_WORDS = new Set([
   'typedef',
   'sizeof'
 ])
-
-function pyLine(line: string): LineMatch | null {
-  const indent = line.length - line.trimStart().length
-  const text = line.slice(indent)
-  if (!text || text.startsWith('#')) {
-    return null
-  }
-  let match = /^(?:async\s+)?class\s+([A-Za-z_]\w*)/.exec(text)
-  if (match) {
-    return { name: match[1], kind: SymbolKind.Class, column: indent + match[0].indexOf(match[1]) }
-  }
-  match = /^(?:async\s+)?def\s+([A-Za-z_]\w*)/.exec(text)
-  if (match) {
-    // Indented defs read as methods, column-0 as functions — flat either way.
-    return {
-      name: match[1],
-      kind: indent === 0 ? SymbolKind.Function : SymbolKind.Method,
-      column: indent + match[0].indexOf(match[1])
-    }
-  }
-  // Module-level assignments only — locals would flood the flat list.
-  match = indent === 0 ? /^([A-Za-z_]\w*)\s*=(?!=)/.exec(text) : null
-  if (match && !PY_ASSIGNMENT_KEYWORDS.has(match[1])) {
-    const constant = /^[A-Z_][A-Z0-9_]*$/.test(match[1])
-    return {
-      name: match[1],
-      kind: constant ? SymbolKind.Constant : SymbolKind.Variable,
-      column: indent
-    }
-  }
-  return null
-}
 
 function cppTailAfterLastParen(line: string): string {
   const close = line.lastIndexOf(')')
@@ -188,7 +134,7 @@ export function extractHeuristicOutlineRows(text: string, language: string): Out
   const lines = text.split('\n')
   const matches: (LineMatch & { line: number })[] = []
   for (let index = 0; index < lines.length; index += 1) {
-    const match = family === 'python' ? pyLine(lines[index]) : cppLine(lines[index])
+    const match = cppLine(lines[index])
     if (match) {
       matches.push({ ...match, line: index })
     }

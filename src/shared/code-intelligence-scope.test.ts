@@ -70,19 +70,6 @@ describe('normalizeCodeIntelligenceScope member forms', () => {
     ).toThrow('~')
   })
 
-  it('rejects absolute members for python scopes', () => {
-    expect(() =>
-      normalizeCodeIntelligenceScope(
-        scope({ language: 'python', members: [{ path: '/opt/py', visibleResults: true }] })
-      )
-    ).toThrow('Python')
-    expect(
-      normalizeCodeIntelligenceScope(
-        scope({ language: 'python', members: [{ path: 'pkg', visibleResults: true }] })
-      ).members
-    ).toEqual([{ path: 'pkg', visibleResults: true }])
-  })
-
   it('maps legacy {relativePath} members to {path}', () => {
     const normalized = normalizeCodeIntelligenceScope({
       ...scope(),
@@ -103,11 +90,6 @@ describe('normalizeCodeIntelligenceScope member forms', () => {
       })
     )
     expect(drive.members).toEqual([{ path: 'D:/', visibleResults: true }])
-    expect(() =>
-      normalizeCodeIntelligenceScope(
-        scope({ language: 'python', members: [{ path: '/', visibleResults: true }] })
-      )
-    ).toThrow('Python')
   })
 })
 

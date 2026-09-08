@@ -11,17 +11,12 @@ import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence
 import { OutlinePanel } from './OutlinePanel'
 
 const mocks = vi.hoisted(() => ({
-  getPythonDocumentSymbols: vi.fn(),
   getCppDocumentSymbols: vi.fn(),
   openDefinitionTargetInWorkspace: vi.fn(() => true),
   semanticDocumentEditorFor: vi.fn(),
   upsertScope: vi.fn(),
   grantConsent: vi.fn(),
   fetchSettings: vi.fn().mockResolvedValue(undefined)
-}))
-
-vi.mock('@/lib/language-server/python-definition-navigation', () => ({
-  getPythonDocumentSymbols: mocks.getPythonDocumentSymbols
 }))
 
 vi.mock('@/lib/language-server/cpp-definition-navigation', () => ({
@@ -47,12 +42,12 @@ vi.mock('@/lib/language-server/semantic-monaco-documents', async (importOriginal
 
 function scopeFixture(overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligenceScope {
   return {
-    id: 'local:worktree:repo-1:python',
+    id: 'local:worktree:repo-1:cpp',
     name: 'repo-1',
     executionHostId: 'local',
     workspaceKey: 'worktree:repo-1',
     workspaceRoot: '/ws/repo-1',
-    language: 'python',
+    language: 'cpp',
     members: [{ path: '.', visibleResults: true }],
     serverSource: { type: 'automatic' },
     consent: {
@@ -93,9 +88,9 @@ function setState(overrides: Record<string, unknown> = {}): void {
     openFiles: [
       openFileFixture({
         id: 'f1',
-        filePath: '/ws/repo-1/src/renderer.py',
-        relativePath: 'src/renderer.py',
-        language: 'python'
+        filePath: '/ws/repo-1/src/renderer.cpp',
+        relativePath: 'src/renderer.cpp',
+        language: 'cpp'
       })
     ],
     repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
@@ -108,7 +103,7 @@ function setState(overrides: Record<string, unknown> = {}): void {
  * panel subscribes to, with mutable text for the debounce test. */
 function createDocumentHarness() {
   const harness = {
-    text: 'class Renderer:',
+    text: 'struct Renderer {',
     cursorListeners: [] as ((event: { position: { lineNumber: number } }) => void)[],
     contentListeners: [] as (() => void)[],
     editor: {} as Record<string, unknown>,
@@ -215,7 +210,6 @@ function activeRowName(): string | null {
 }
 
 beforeEach(() => {
-  mocks.getPythonDocumentSymbols.mockReset()
   mocks.getCppDocumentSymbols.mockReset()
   mocks.openDefinitionTargetInWorkspace.mockClear()
   mocks.semanticDocumentEditorFor.mockReset()
@@ -254,14 +248,14 @@ function renderPanel(): ReturnType<typeof render> {
 
 describe('OutlinePanel', () => {
   it('renders the header title and the active file chip', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    mocks.getCppDocumentSymbols.mockResolvedValue(treeSymbols)
     renderPanel()
     expect(screen.getByText('Outline')).toBeInTheDocument()
-    expect(await screen.findByText('renderer.py')).toBeInTheDocument()
+    expect(await screen.findByText('renderer.cpp')).toBeInTheDocument()
   })
 
   it('renders the nested symbol tree expanded with kind icons and line numbers', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    mocks.getCppDocumentSymbols.mockResolvedValue(treeSymbols)
     renderPanel()
     const parent = await screen.findByRole('button', { name: /Renderer/ })
     expect(parent).toBeInTheDocument()
@@ -272,7 +266,7 @@ describe('OutlinePanel', () => {
   })
 
   it('reveals a row through the shared symbol-open path with its range', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    mocks.getCppDocumentSymbols.mockResolvedValue(treeSymbols)
     renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: /draw/ }))
     expect(mocks.openDefinitionTargetInWorkspace).toHaveBeenCalledTimes(1)
@@ -283,19 +277,19 @@ describe('OutlinePanel', () => {
       { id: string }
     ]
     expect(request).toMatchObject({
-      filePath: '/ws/repo-1/src/renderer.py',
-      relativePath: 'src/renderer.py',
+      filePath: '/ws/repo-1/src/renderer.cpp',
+      relativePath: 'src/renderer.cpp',
       worktreeId: 'repo-1::/ws/repo-1'
     })
     expect(target).toMatchObject({
-      uri: 'file:///ws/repo-1/src/renderer.py',
+      uri: 'file:///ws/repo-1/src/renderer.cpp',
       range: { start: { line: 10, character: 7 } }
     })
-    expect(scope.id).toBe('local:worktree:repo-1:python')
+    expect(scope.id).toBe('local:worktree:repo-1:cpp')
   })
 
   it('switches content when the active editor tab changes', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    mocks.getCppDocumentSymbols.mockResolvedValue(treeSymbols)
     const other = [
       {
         name: 'solo',
@@ -312,19 +306,19 @@ describe('OutlinePanel', () => {
       openFiles: [
         openFileFixture({
           id: 'f2',
-          filePath: '/ws/repo-1/src/other.py',
-          relativePath: 'src/other.py',
-          language: 'python'
+          filePath: '/ws/repo-1/src/other.cpp',
+          relativePath: 'src/other.cpp',
+          language: 'cpp'
         })
       ],
       repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
       settings: { codeIntelligenceScopes: [scopeFixture()] }
     } as unknown as Partial<ReturnType<typeof useAppStore.getState>>)
-    mocks.getPythonDocumentSymbols.mockResolvedValueOnce(other)
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce(other)
 
     expect(await screen.findByRole('button', { name: /solo/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Renderer/ })).not.toBeInTheDocument()
-    expect(screen.getByText('other.py')).toBeInTheDocument()
+    expect(screen.getByText('other.cpp')).toBeInTheDocument()
   })
 
   it.each([
@@ -369,7 +363,11 @@ describe('OutlinePanel', () => {
       expect(await screen.findByRole('button', { name: /Renderer/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /draw/ })).toBeInTheDocument()
       expect(screen.getByText(fileName)).toBeInTheDocument()
-      expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+      expect(mocks.getCppDocumentSymbols).toHaveBeenCalledTimes(1)
+      expect(mocks.getCppDocumentSymbols.mock.calls[0]?.[0]).toMatchObject({
+        filePath: `/ws/repo-1/src/${fileName}`,
+        language
+      })
     }
   )
 
@@ -388,7 +386,7 @@ describe('OutlinePanel', () => {
     })
     renderPanel()
     expect(await screen.findByText('No symbols for this file type')).toBeInTheDocument()
-    expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+    expect(mocks.getCppDocumentSymbols).not.toHaveBeenCalled()
   })
 
   it('shows an unavailable state when the file backs no workspace repo', async () => {
@@ -398,7 +396,7 @@ describe('OutlinePanel', () => {
     })
     renderPanel()
     expect(await screen.findByText('No symbols available')).toBeInTheDocument()
-    expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+    expect(mocks.getCppDocumentSymbols).not.toHaveBeenCalled()
     expect(mocks.upsertScope).not.toHaveBeenCalled()
   })
 
@@ -408,7 +406,7 @@ describe('OutlinePanel', () => {
     await waitFor(() => expect(mocks.upsertScope).toHaveBeenCalledTimes(1))
     const created = mocks.upsertScope.mock.calls[0][0] as CodeIntelligenceScope
     expect(created).toMatchObject({
-      id: 'local:worktree:repo-1:python',
+      id: 'local:worktree:repo-1:cpp',
       origin: 'outline-auto',
       workspaceRoot: '/ws/repo-1',
       members: [{ path: '.', visibleResults: true }],
@@ -428,7 +426,7 @@ describe('OutlinePanel', () => {
     setState({
       settings: {
         codeIntelligenceScopes: [],
-        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:cpp']
       }
     })
     renderPanel()
@@ -452,14 +450,14 @@ describe('OutlinePanel', () => {
       openModal,
       settings: {
         codeIntelligenceScopes: [],
-        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:cpp']
       }
     })
     renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: 'Enable code intelligence' }))
     expect(openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
       repoId: 'repo-1',
-      language: 'python'
+      language: 'cpp'
     })
   })
 
@@ -495,19 +493,19 @@ describe('OutlinePanel', () => {
     })
     renderPanel()
     expect(await screen.findByText('No symbols available')).toBeInTheDocument()
-    expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+    expect(mocks.getCppDocumentSymbols).not.toHaveBeenCalled()
   })
 
   it('shows an open-a-file state when no editor tab is active', async () => {
     setState({ activeFileId: null, activeTabType: 'terminal' })
     renderPanel()
     expect(await screen.findByText('Open a file to see its symbols')).toBeInTheDocument()
-    expect(mocks.getPythonDocumentSymbols).not.toHaveBeenCalled()
+    expect(mocks.getCppDocumentSymbols).not.toHaveBeenCalled()
   })
 
   it('shows a loading state while the query is in flight', async () => {
     const gate: { release: ((symbols: unknown) => void) | null } = { release: null }
-    mocks.getPythonDocumentSymbols.mockReturnValue(
+    mocks.getCppDocumentSymbols.mockReturnValue(
       new Promise<unknown>((resolve) => {
         gate.release = resolve
       })
@@ -521,15 +519,15 @@ describe('OutlinePanel', () => {
   })
 
   it('shows the server-error state with a retry that re-queries (#102)', async () => {
-    mocks.getPythonDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
+    mocks.getCppDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
     renderPanel()
     expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
     // The rejection message replaces the generic subtitle — it names the remedy.
     expect(screen.getByText('server exited')).toBeInTheDocument()
-    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    mocks.getCppDocumentSymbols.mockResolvedValue(treeSymbols)
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByRole('button', { name: /Renderer/ })).toBeInTheDocument()
-    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(2)
+    expect(mocks.getCppDocumentSymbols).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -542,7 +540,7 @@ describe('OutlinePanel interactions (#102)', () => {
           id,
           filePath,
           relativePath: filePath.split('/').pop() ?? filePath,
-          language: 'python'
+          language: 'cpp'
         })
       ],
       repos: [{ id: 'repo-1', path: '/ws/repo-1', connectionId: null }],
@@ -551,7 +549,7 @@ describe('OutlinePanel interactions (#102)', () => {
   }
 
   it('filters rows by name, keeps ancestors expandable, and expands the filter input to its own row', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    mocks.getCppDocumentSymbols.mockResolvedValue(interactiveSymbols())
     renderPanel()
     await screen.findByRole('button', { name: /render_pass/ })
     expect(screen.queryByPlaceholderText('Filter symbols')).not.toBeInTheDocument()
@@ -577,7 +575,7 @@ describe('OutlinePanel interactions (#102)', () => {
   })
 
   it('sorts position by default and cycles through name and kind modes', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    mocks.getCppDocumentSymbols.mockResolvedValue(interactiveSymbols())
     renderPanel()
     await screen.findByRole('button', { name: /alpha/ })
     expect(renderedRowNames()).toEqual(['zed', 'mid', 'alpha', 'draw', 'render_pass'])
@@ -590,7 +588,7 @@ describe('OutlinePanel interactions (#102)', () => {
   })
 
   it('highlights the row enclosing the editor cursor and follows moves', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    mocks.getCppDocumentSymbols.mockResolvedValue(interactiveSymbols())
     renderPanel()
     await screen.findByRole('button', { name: /render_pass/ })
     const emitCursor = (lineNumber: number): void => {
@@ -608,34 +606,34 @@ describe('OutlinePanel interactions (#102)', () => {
   })
 
   it('remembers per-file collapse state across file switches for the session', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    mocks.getCppDocumentSymbols.mockResolvedValue(interactiveSymbols())
     // Dedicated paths: the session collapse map is module state, shared across tests.
-    switchToFile('f3', '/ws/repo-1/src/collapse.py')
+    switchToFile('f3', '/ws/repo-1/src/collapse.cc')
     renderPanel()
     // alpha is the only row with children → the only chevron.
     fireEvent.click(await screen.findByRole('button', { name: 'Collapse' }))
     expect(screen.queryByRole('button', { name: /render_pass/ })).not.toBeInTheDocument()
 
-    mocks.getPythonDocumentSymbols.mockResolvedValueOnce([
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce([
       { name: 'solo', kind: 12, range: symbolSpan(0, 3), selectionRange: nameRange(0, 4, 8) }
     ])
-    switchToFile('f4', '/ws/repo-1/src/other.py')
+    switchToFile('f4', '/ws/repo-1/src/other.cc')
     expect(await screen.findByRole('button', { name: /solo/ })).toBeInTheDocument()
 
-    switchToFile('f3', '/ws/repo-1/src/collapse.py')
+    switchToFile('f3', '/ws/repo-1/src/collapse.cc')
     await screen.findByRole('button', { name: /zed/ })
     expect(screen.queryByRole('button', { name: /render_pass/ })).not.toBeInTheDocument()
   })
 
   it('refreshes the tree ~500 ms after document edits, not before', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(interactiveSymbols())
-    switchToFile('f5', '/ws/repo-1/src/refresh.py')
+    mocks.getCppDocumentSymbols.mockResolvedValue(interactiveSymbols())
+    switchToFile('f5', '/ws/repo-1/src/refresh.cc')
     renderPanel()
     await screen.findByRole('button', { name: /render_pass/ })
 
     vi.useFakeTimers()
     documentHarness.text = 'class Renderer:\n    def render_pass2(self):'
-    mocks.getPythonDocumentSymbols.mockResolvedValueOnce([
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce([
       { name: 'zed', kind: 12, range: symbolSpan(0, 5), selectionRange: nameRange(0, 4, 7) },
       {
         name: 'render_pass2',
@@ -647,18 +645,18 @@ describe('OutlinePanel interactions (#102)', () => {
     act(() => {
       documentHarness.contentListeners.at(-1)?.()
     })
-    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(1)
+    expect(mocks.getCppDocumentSymbols).toHaveBeenCalledTimes(1)
 
     act(() => {
       vi.advanceTimersByTime(400)
     })
-    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(1)
+    expect(mocks.getCppDocumentSymbols).toHaveBeenCalledTimes(1)
 
     act(() => {
       vi.advanceTimersByTime(100)
     })
-    expect(mocks.getPythonDocumentSymbols).toHaveBeenCalledTimes(2)
-    expect(mocks.getPythonDocumentSymbols.mock.calls[1][0]).toMatchObject({
+    expect(mocks.getCppDocumentSymbols).toHaveBeenCalledTimes(2)
+    expect(mocks.getCppDocumentSymbols.mock.calls[1][0]).toMatchObject({
       text: 'class Renderer:\n    def render_pass2(self):'
     })
     await act(async () => {
@@ -671,12 +669,12 @@ describe('OutlinePanel interactions (#102)', () => {
 
 describe('OutlinePanel heuristic tier (#103)', () => {
   const HEURISTIC_TEXT =
-    'class Renderer:\n    def draw(self):\n        pass\n\ndef main():\n    pass\n'
+    'struct Renderer {\n    void draw();\n};\n\nint main() { return 0; }\n'
   const setDeclinedScope = (): void =>
     setState({
       settings: {
         codeIntelligenceScopes: [],
-        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:cpp']
       }
     })
 
@@ -711,14 +709,14 @@ describe('OutlinePanel heuristic tier (#103)', () => {
       setPendingEditorReveal,
       settings: {
         codeIntelligenceScopes: [],
-        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:python']
+        codeIntelligenceDeclinedAutoScopes: ['local:worktree:repo-1:cpp']
       }
     })
     documentHarness.text = HEURISTIC_TEXT
     renderPanel()
     fireEvent.click(await screen.findByRole('button', { name: /main/ }))
     expect(setPendingEditorReveal).toHaveBeenCalledWith({
-      filePath: '/ws/repo-1/src/renderer.py',
+      filePath: '/ws/repo-1/src/renderer.cpp',
       line: 5,
       column: 5,
       matchLength: 0
@@ -727,14 +725,14 @@ describe('OutlinePanel heuristic tier (#103)', () => {
   })
 
   it('keeps a semantic-ready outline free of the approximate badge', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValue(treeSymbols)
+    mocks.getCppDocumentSymbols.mockResolvedValue(treeSymbols)
     renderPanel()
     await screen.findByRole('button', { name: /Renderer/ })
     expect(screen.queryByTestId('outline-approximate-badge')).not.toBeInTheDocument()
   })
 
   it('falls back to heuristic rows plus retry when the semantic query fails', async () => {
-    mocks.getPythonDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
+    mocks.getCppDocumentSymbols.mockRejectedValueOnce(new Error('server exited'))
     documentHarness.text = HEURISTIC_TEXT
     renderPanel()
     expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
@@ -753,7 +751,7 @@ describe('OutlinePanel heuristic tier (#103)', () => {
   })
 
   it('renders the error state with heuristic rows and retry when the session dropped (query resolves null, #107)', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValueOnce(null)
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce(null)
     documentHarness.text = HEURISTIC_TEXT
     renderPanel()
     expect(await screen.findByText('Language server connection failed')).toBeInTheDocument()
@@ -782,7 +780,7 @@ describe('OutlinePanel heuristic tier (#103)', () => {
   })
 
   it('keeps the empty-file state when the query resolves a real empty array (#107)', async () => {
-    mocks.getPythonDocumentSymbols.mockResolvedValueOnce([])
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce([])
     renderPanel()
     expect(await screen.findByText('No symbols in this file')).toBeInTheDocument()
     expect(screen.queryByText('Language server connection failed')).not.toBeInTheDocument()

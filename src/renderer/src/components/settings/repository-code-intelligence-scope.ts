@@ -17,7 +17,7 @@ export function createRepositoryCodeIntelligenceScope(args: {
   language: CodeIntelligenceLanguage
   relativeRoot?: string
 }): CodeIntelligenceScope {
-  const languageLabel = args.language === 'python' ? 'Python' : 'C++'
+  const languageLabel = 'C++'
   const workspaceKey = getCodeIntelligenceWorkspaceKey(args.repoId, args.isFolder)
   return {
     id: getCodeIntelligenceScopeId({

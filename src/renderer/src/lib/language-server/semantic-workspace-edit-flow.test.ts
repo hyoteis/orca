@@ -12,12 +12,12 @@ import type { WorkspaceEditTransactionPorts } from './workspace-edit-transaction
 import type { OpenFile } from '@/store/slices/editor'
 
 const scope: CodeIntelligenceScope = {
-  id: 'local:w:python',
+  id: 'local:w:cpp',
   name: 'Scope',
   executionHostId: 'local',
   workspaceKey: 'worktree:w',
   workspaceRoot: '/repo',
-  language: 'python',
+  language: 'cpp',
   members: [{ path: '/repo/src', visibleResults: true }],
   serverSource: { type: 'automatic' },
   enabled: true,
@@ -70,7 +70,7 @@ const openFiles: OpenFile[] = [
     filePath: '/repo/src/a.py',
     relativePath: 'src/a.py',
     worktreeId: 'w',
-    language: 'python',
+    language: 'cpp',
     isDirty: false,
     mode: 'edit'
   } as OpenFile

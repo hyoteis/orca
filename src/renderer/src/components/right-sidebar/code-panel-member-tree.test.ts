@@ -32,8 +32,7 @@ describe('buildCodePanelMemberRows', () => {
     const rows = buildCodePanelMemberRows([
       scope({ language: 'cpp', members: [{ path: 'src/core', visibleResults: true }], consent }),
       scope({
-        id: 'local:worktree:repo-1:python',
-        language: 'python',
+        id: 'local:worktree:repo-1:cpp2',
         members: [{ path: 'src/core', visibleResults: true }],
         consent
       })
@@ -43,7 +42,7 @@ describe('buildCodePanelMemberRows', () => {
         path: 'src/core',
         displayName: 'src/core',
         directory: '/ws/repo-1/src/core',
-        languages: ['cpp', 'python'],
+        languages: ['cpp'],
         browseBlocked: false
       }
     ])
@@ -85,8 +84,7 @@ describe('buildCodePanelMemberRows', () => {
         consent: undefined
       }),
       scope({
-        id: 'local:worktree:repo-1:python',
-        language: 'python',
+        id: 'local:worktree:repo-1:cpp2',
         members: [{ path: 'tools', visibleResults: true }],
         consent: {
           configurationFingerprint: 'fp',
@@ -101,7 +99,7 @@ describe('buildCodePanelMemberRows', () => {
         path: 'tools',
         displayName: 'tools',
         directory: '/ws/repo-1/tools',
-        languages: ['python'],
+        languages: ['cpp'],
         browseBlocked: false
       }
     ])
@@ -116,8 +114,7 @@ describe('buildCodePanelMemberRows', () => {
     const rows = buildCodePanelMemberRows([
       scope({ language: 'cpp', members: [{ path: 'src', visibleResults: true }], consent }),
       scope({
-        id: 'local:worktree:repo-1:python',
-        language: 'python',
+        id: 'local:worktree:repo-1:cpp2',
         members: [{ path: 'src', visibleResults: true }],
         consent: undefined
       })
@@ -127,7 +124,7 @@ describe('buildCodePanelMemberRows', () => {
         path: 'src',
         displayName: 'src',
         directory: '/ws/repo-1/src',
-        languages: ['cpp', 'python'],
+        languages: ['cpp'],
         browseBlocked: true
       }
     ])
@@ -186,15 +183,14 @@ describe('removeCodePanelMemberRow', () => {
         { path: 'tools', visibleResults: true }
       ]
     })
-    const python = scope({
-      id: 'local:worktree:repo-1:python',
-      language: 'python',
+    const other = scope({
+      id: 'local:worktree:repo-1:cpp2',
       members: [{ path: 'src/core', visibleResults: true }]
     })
-    const edits = removeCodePanelMemberRow([cpp, python], 'src/core')
+    const edits = removeCodePanelMemberRow([cpp, other], 'src/core')
     expect(edits).toHaveLength(2)
     expect(edits[0]).toMatchObject({ id: cpp.id, members: [{ path: 'tools', visibleResults: true }] })
-    expect(edits[1]).toMatchObject({ id: python.id, members: [] })
+    expect(edits[1]).toMatchObject({ id: other.id, members: [] })
   })
 
   it('returns no edit for scopes without the member', () => {

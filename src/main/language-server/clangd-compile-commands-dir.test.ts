@@ -61,8 +61,11 @@ describe('assertClangdCompileCommandsDirExists', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('skips validation for python launches and clangd without the arg', async () => {
+  it('skips validation for clangd without the arg and refuses python kinds (#131)', async () => {
     const directoryExists = vi.fn(async () => false)
+    await expect(
+      assertClangdCompileCommandsDirExists(launch(), directoryExists)
+    ).resolves.toBeUndefined()
     await expect(
       assertClangdCompileCommandsDirExists(
         launch({
@@ -71,10 +74,7 @@ describe('assertClangdCompileCommandsDirExists', () => {
         }),
         directoryExists
       )
-    ).resolves.toBeUndefined()
-    await expect(
-      assertClangdCompileCommandsDirExists(launch(), directoryExists)
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow('no longer supported')
     expect(directoryExists).not.toHaveBeenCalled()
   })
 })

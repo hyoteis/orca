@@ -224,11 +224,7 @@
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
       "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there.",
       "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}...",
-      "toggleFolderTree": "Expand folder",
-      "languageSelection": "Language scope",
-      "pythonSetupDescription": "Pick Python code folders. They stay relative to the workspace; no tools are installed.",
-      "saveFolders": "Save",
-      "pythonScopeSaved": "Python folders saved"
+      "toggleFolderTree": "Expand folder"
     },
     "appearance": {
       "language": {
@@ -12362,7 +12358,7 @@
             "7e498c4509": "Outline",
             "e8bcf14f01": "Open a file to see its symbols",
             "dee11bd70f": "No symbols for this file type",
-            "2b8019ac88": "Supports Python and C++ files",
+            "2b8019ac88": "Supports C++ family files",
             "a54eff7728": "No symbols available",
             "a7fc6e9b08": "No code-intelligence scope covers this file",
             "db937ed166": "Enable code intelligence",
@@ -14989,7 +14985,7 @@
         "CodePanel": {
           "addAsProject": "Add Folder as Project",
           "bridgedInfo": "Code folders come from the linked project {{value0}}; changes here write back to it.",
-          "notProjectCopy": "Code folders follow the project. Add this folder as a project to configure C++ / Python indexing here.",
+          "notProjectCopy": "Code folders follow the project. Add this folder as a project to configure C++ indexing here.",
           "notProjectTitle": "This folder is not a project yet",
           "browseBlocked": "Authorize code intelligence to browse this folder",
           "configureCode": "Configure Code…",

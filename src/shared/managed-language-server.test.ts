@@ -157,36 +157,4 @@ describe('resolveManagedLanguageServerEntry', () => {
     )
     expect(result).toMatchObject({ entry: { version: '22.1.6' } })
   })
-
-  it('resolves the private managed runtime dependency', () => {
-    const node = entry({
-      id: 'node',
-      tool: 'clangd',
-      version: '24.20.0',
-      archiveRootDirectory: 'node-v24.20.0-linux-x64'
-    })
-    const pyright = entry({
-      id: 'pyright',
-      tool: 'pyright',
-      platform: 'linux',
-      runtimeEntryId: 'node',
-      command: { executable: '{runtime}/bin/node', args: ['{root}/langserver.index.js', '--stdio'] }
-    })
-    const result = resolveManagedLanguageServerEntry(
-      manifest([node, pyright]),
-      { tool: 'pyright' },
-      { platform: 'linux', arch: 'x64' }
-    )
-    expect(result).toMatchObject({ entry: { id: 'pyright' }, runtimeEntry: { id: 'node' } })
-  })
-
-  it('treats a missing runtime dependency as unsupported', () => {
-    const pyright = entry({ id: 'pyright', tool: 'pyright', runtimeEntryId: 'node' })
-    const result = resolveManagedLanguageServerEntry(
-      manifest([pyright]),
-      { tool: 'pyright' },
-      { platform: 'linux', arch: 'x64' }
-    )
-    expect(result).toMatchObject({ unsupported: { type: 'unknown-version' } })
-  })
 })

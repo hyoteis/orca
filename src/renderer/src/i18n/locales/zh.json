@@ -196,11 +196,7 @@
       "setupReady": "C++ 代码智能已就绪",
       "setupUnsupportedHost": "代码智能配置目前支持本地和 SSH 主机。",
       "runningSetupOnHost": "正在 {{host}} 上安装工具并生成编译命令…",
-      "sshSetupDescription": "Orca 会在已连接的 SSH 主机上执行 C++ 设置，并按需在该主机上安装缺失工具。",
-      "languageSelection": "语言范围",
-      "pythonSetupDescription": "选择 Python 代码文件夹;仅接受工作区相对路径,无需安装工具。",
-      "saveFolders": "保存",
-      "pythonScopeSaved": "Python 代码范围已保存"
+      "sshSetupDescription": "Orca 会在已连接的 SSH 主机上执行 C++ 设置，并按需在该主机上安装缺失工具。"
     },
     "appearance": {
       "language": {
@@ -11713,7 +11709,7 @@
             "7e498c4509": "大纲",
             "e8bcf14f01": "打开文件以查看其符号",
             "dee11bd70f": "此文件类型没有符号",
-            "2b8019ac88": "支持 Python 和 C++ 文件",
+            "2b8019ac88": "支持 C++ 系列文件",
             "a54eff7728": "没有可用符号",
             "a7fc6e9b08": "没有代码智能范围覆盖此文件",
             "db937ed166": "启用代码智能",

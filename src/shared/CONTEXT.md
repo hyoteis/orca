@@ -4,16 +4,17 @@ Terms shared across Main, renderer, and remote clients. Implementation-free.
 
 ## Code intelligence scope
 
-The single unit of C++/Python indexing: a named set of scope members bound to
+The single unit of C++ indexing: a named set of scope members bound to
 one workspace and one execution Host. There is no distinct "aggregate scope"
 kind — a workspace-relative-only scope is the degenerate case of the same
-concept, not a variant. One scope, one code path.
+concept, not a variant. One scope, one code path. Python code intelligence
+was removed (#131); ordinary Python editing stays.
 
 ## Scope member
 
 A single filesystem path in one of two forms: relative to the workspace root,
 or absolute on the execution Host. The form is a property of the path string
-itself (is-absolute), not a tag. Python scopes accept the relative form only.
+itself (is-absolute), not a tag.
 
 ## C++ setup pipeline
 
@@ -35,8 +36,7 @@ transport errors) belong to each realization, not to the pipeline.
 
 An Orca-supplied language server installed per execution Host from a trusted,
 shipped manifest. Clients request manifest entry ids — never URLs or hashes.
-Managed Python servers carry a private managed Node runtime instead of the
-user's Node; system package managers and PATH are never touched.
+System package managers and PATH are never touched.
 
 ## Manifest entry
 
@@ -70,7 +70,7 @@ _Avoid_: Struct panel, member tree (that is a Scope member directory tree), Symb
 ## Heuristic symbols
 
 Outline's degraded symbol tier: regex-extracted names and line ranges
-(C++/Python only) shown when no language server can run. Approximate by
+(C++ family only) shown when no language server can run. Approximate by
 definition — distinct from the semantic symbols a scope's LSP session
 returns, and marked as approximate in the UI.
 _Avoid_: fallback symbols

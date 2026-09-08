@@ -10,7 +10,6 @@ import {
   type CodeIntelligenceCppSetupResult
 } from '../../../../shared/code-intelligence-cpp-setup'
 import { getCppScopeIdForRepo, type CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
-import { writeCodeIntelligenceScopeEdit } from '@/lib/language-server/code-intelligence-scope-member-edit'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
 import { Button } from '../ui/button'
 import {
@@ -53,8 +52,6 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
   const {
     mode,
     setMode,
-    language,
-    setLanguage,
     roots,
     selected,
     setSelected,
@@ -64,7 +61,6 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     scanning,
     scanError,
     selectedRoots,
-    pythonScopeId
   } = useSetupScopeSelection({ open, repo, initialLanguage: modalData.language })
 
   useEffect(() => {
@@ -176,37 +172,6 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
     }
   }
 
-  /** Python needs no toolchain — persist folder members and close, like the
-      removed add-folder dialog did. */
-  const savePythonScope = async (): Promise<void> => {
-    if (!repo || !pythonScopeId || selectedRoots.length === 0) {
-      return
-    }
-    const existing = settings?.codeIntelligenceScopes?.find(
-      (scope) => scope.id === pythonScopeId
-    )
-    const base =
-      existing ??
-      createRepositoryCodeIntelligenceScope({
-        repoId: repo.id,
-        repoName: repo.displayName,
-        repoPath: repo.path,
-        isFolder: isFolderRepo(repo),
-        executionHostId: getRepoExecutionHostId(repo),
-        language: 'python'
-      })
-    const saved = await writeCodeIntelligenceScopeEdit({
-      ...base,
-      members: selectedRoots.map((path) => ({ path, visibleResults: true }))
-    })
-    if (saved) {
-      toast.success(
-        translate('settings.codeIntelligence.pythonScopeSaved', 'Python folders saved')
-      )
-      closeModal()
-    }
-  }
-
   const runningText =
     scanning
       ? translate('settings.codeIntelligence.scanningBuildFolders', 'Scanning CMake and GN build folders...')
@@ -226,12 +191,7 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
             {translate('settings.codeIntelligence.setupTitle', 'Configure code intelligence')}
           </DialogTitle>
           <DialogDescription>
-            {language === 'python'
-              ? translate(
-                  'settings.codeIntelligence.pythonSetupDescription',
-                  'Pick Python code folders. They stay relative to the workspace; no tools are installed.'
-                )
-              : setupHost?.kind === 'ssh'
+            {setupHost?.kind === 'ssh'
                 ? translate(
                     'settings.codeIntelligence.sshSetupDescription',
                     'Orca runs C++ setup on the connected SSH Host and installs missing tools there.'
@@ -256,18 +216,6 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
           </div>
         ) : (
           <div className="min-w-0 space-y-4">
-            <SettingsSegmentedControl
-              value={language}
-              onChange={(value) => setLanguage(value as 'cpp' | 'python')}
-              ariaLabel={translate(
-                'settings.codeIntelligence.languageSelection',
-                'Language scope'
-              )}
-              options={[
-                { value: 'cpp', label: 'C++' },
-                { value: 'python', label: 'Python' }
-              ]}
-            />
             <SettingsSegmentedControl
               value={mode}
               onChange={(value) => setMode(value as SetupScopeSelectionMode)}
@@ -294,18 +242,16 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
                 onRescan={rescan}
               />
             ) : null}
-            {language === 'cpp' ? (
-              <CodeIntelligenceBasicOptions
-                additionalIncludes={additionalIncludes}
-                defines={defines}
-                cmakeDefines={cmakeDefines}
-                cppStandard={cppStandard}
-                onAdditionalIncludesChange={setAdditionalIncludes}
-                onDefinesChange={setDefines}
-                onCmakeDefinesChange={setCmakeDefines}
-                onCppStandardChange={setCppStandard}
-              />
-            ) : null}
+            <CodeIntelligenceBasicOptions
+              additionalIncludes={additionalIncludes}
+              defines={defines}
+              cmakeDefines={cmakeDefines}
+              cppStandard={cppStandard}
+              onAdditionalIncludesChange={setAdditionalIncludes}
+              onDefinesChange={setDefines}
+              onCmakeDefinesChange={setCmakeDefines}
+              onCppStandardChange={setCppStandard}
+            />
             {busy ? (
               <div
                 className="flex items-center gap-2 text-sm text-muted-foreground"
@@ -363,23 +309,13 @@ export default function CodeIntelligenceCppSetupDialog(): React.JSX.Element | nu
               : translate('settings.codeIntelligence.cancel', 'Cancel')}
           </Button>
           {setupSupported && stage !== 'success' ? (
-            language === 'python' ? (
-              <Button
-                type="button"
-                disabled={selectedRoots.length === 0}
-                onClick={() => void savePythonScope()}
-              >
-                {translate('settings.codeIntelligence.saveFolders', 'Save')}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                disabled={busy || selectedRoots.length === 0}
-                onClick={() => void runSetup()}
-              >
-                {translate('settings.codeIntelligence.generateEnable', 'Generate and enable')}
-              </Button>
-            )
+            <Button
+              type="button"
+              disabled={busy || selectedRoots.length === 0}
+              onClick={() => void runSetup()}
+            >
+              {translate('settings.codeIntelligence.generateEnable', 'Generate and enable')}
+            </Button>
           ) : null}
         </DialogFooter>
       </DialogContent>

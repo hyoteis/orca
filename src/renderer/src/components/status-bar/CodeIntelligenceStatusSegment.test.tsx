@@ -196,10 +196,8 @@ describe('CodeIntelligenceStatusSegment re-consent', () => {
     mountSegment([
       makeScope([{ path: 'engine', visibleResults: true }], { consent: staleConsent }),
       makeScope([{ path: 'scripts', visibleResults: true }], {
-        id: 'local:worktree:demo:python',
-        name: 'demo Python',
-        language: 'python',
-        serverSource: { type: 'custom', executable: 'pyright', args: [] },
+        id: 'local:worktree:demo-2:cpp',
+        name: 'demo 2',
         consent: staleConsent
       })
     ])

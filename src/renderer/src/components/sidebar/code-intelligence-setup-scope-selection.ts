@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import type { Repo } from '../../../../shared/types'
-import { getRepoExecutionHostId } from '../../../../shared/execution-host'
-import { isFolderRepo } from '../../../../shared/repo-kind'
 import type { CodeIntelligenceCppSetupResult } from '../../../../shared/code-intelligence-cpp-setup'
-import {
-  getCodeIntelligenceScopeId,
-  getCodeIntelligenceWorkspaceKey,
-  getCppScopeIdForRepo,
-  type CodeIntelligenceLanguage
-} from '../../../../shared/code-intelligence-scope'
+import { getCppScopeIdForRepo, type CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 import {
   getCodeIntelligenceCustomPaths,
   getMinimalCodeIntelligenceDirectories
@@ -42,7 +35,6 @@ export function useSetupScopeSelection({
   scanning: boolean
   scanError: CodeIntelligenceCppSetupResult | null
   selectedRoots: string[]
-  pythonScopeId: string | null
 } {
   const settings = useAppStore((state) => state.settings)
   const settingsRef = useRef(settings)
@@ -53,18 +45,6 @@ export function useSetupScopeSelection({
   const [directoryQuery, setDirectoryQuery] = useState('')
   const { roots, scanning, scanError, rescan, discoverWithin } =
     useCodeIntelligenceDirectoryDiscovery({ open, repo, settings })
-  const pythonScopeId = useMemo(
-    () =>
-      repo
-        ? getCodeIntelligenceScopeId({
-            executionHostId: getRepoExecutionHostId(repo),
-            workspaceKey: getCodeIntelligenceWorkspaceKey(repo.id, isFolderRepo(repo)),
-            language: 'python'
-          })
-        : null,
-    [repo]
-  )
-
   useEffect(() => {
     if (!open) {
       return
@@ -84,15 +64,15 @@ export function useSetupScopeSelection({
     if (!open || !repo) {
       return
     }
-    // Why: tree rows map 1:1 to members — pre-check exactly what the language scope holds.
-    const scopeId = language === 'cpp' ? getCppScopeIdForRepo(repo) : pythonScopeId
+    // Why: tree rows map 1:1 to members — pre-check exactly what the scope holds.
+    const scopeId = getCppScopeIdForRepo(repo)
     const members =
       settingsRef.current?.codeIntelligenceScopes?.find((scope) => scope.id === scopeId)?.members ??
       []
     const paths = members.map((member) => member.path)
     setSelectedState(new Set(paths))
     discoverWithin(paths)
-  }, [open, repo, language, pythonScopeId, discoverWithin])
+  }, [open, repo, discoverWithin])
 
   const setSelected = useCallback(
     (next: Set<string>): void => {
@@ -114,11 +94,9 @@ export function useSetupScopeSelection({
     () => getCodeIntelligenceCustomPaths(roots, selected),
     [roots, selected]
   )
-  // Why: python members must stay workspace-relative; host-absolute picks are cpp-only.
   const selectedRoots = useMemo(
-    () =>
-      language === 'python' ? relativeSelectedRoots : [...relativeSelectedRoots, ...customRoots],
-    [language, relativeSelectedRoots, customRoots]
+    () => [...relativeSelectedRoots, ...customRoots],
+    [relativeSelectedRoots, customRoots]
   )
 
   return {
@@ -134,7 +112,6 @@ export function useSetupScopeSelection({
     rescan,
     scanning,
     scanError,
-    selectedRoots,
-    pythonScopeId
+    selectedRoots
   }
 }

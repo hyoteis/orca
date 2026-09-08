@@ -9,7 +9,6 @@ import type {
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
 import { buildManagedExtractionCommands } from './managed-language-server-extraction'
-import { manifestEntryById } from './managed-language-server-install-root'
 import { PROBE_LOG_LIMIT } from './managed-language-server-acquisition'
 import type { SshSetupExecResult } from './code-intelligence-ssh-setup-exec'
 import {
@@ -24,30 +23,19 @@ export const probeTail = (result: SshSetupExecResult): string =>
   `${result.stdout}${result.stderr}`.trim().slice(0, PROBE_LOG_LIMIT)
 
 export function resolveSshTemplate(
-  ctx: SshManagedInstallContext,
-  manifest: ManagedLanguageServerManifest,
   entry: ManagedLanguageServerManifestEntry,
   rootDirectory: string,
   template: 'probe' | 'command'
 ): { executable: string; args: string[] } {
-  const runtimeEntry = entry.runtimeEntryId
-    ? manifestEntryById(manifest, entry.runtimeEntryId)
-    : undefined
-  return resolveManagedLanguageServerCommand(entry[template], {
-    root: rootDirectory,
-    runtimeRoot: runtimeEntry
-      ? remoteManagedVersionDirectory(ctx.home, runtimeEntry.tool, runtimeEntry.version)
-      : undefined
-  })
+  return resolveManagedLanguageServerCommand(entry[template], { root: rootDirectory })
 }
 
 export async function probeSshManagedEntry(
   ctx: SshManagedInstallContext,
-  manifest: ManagedLanguageServerManifest,
   entry: ManagedLanguageServerManifestEntry,
   rootDirectory: string
 ): Promise<SshSetupExecResult> {
-  const command = resolveSshTemplate(ctx, manifest, entry, rootDirectory, 'probe')
+  const command = resolveSshTemplate(entry, rootDirectory, 'probe')
   return ctx.queue.exec(
     buildPosixLanguageServerCommand({ executable: command.executable, args: command.args, cwd: rootDirectory })
   )
@@ -56,7 +44,6 @@ export async function probeSshManagedEntry(
 /** Installed-version smoke test; false when the directory is absent or dead. */
 export async function probeSshManagedVersion(
   ctx: SshManagedInstallContext,
-  manifest: ManagedLanguageServerManifest,
   entry: ManagedLanguageServerManifestEntry
 ): Promise<boolean> {
   const exists = await ctx.queue.exec(
@@ -68,7 +55,6 @@ export async function probeSshManagedVersion(
   return (
     await probeSshManagedEntry(
       ctx,
-      manifest,
       entry,
       remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version)
     )
@@ -156,9 +142,9 @@ export async function acquireSshManagedVersion(args: {
       entry.archiveRootDirectory === '.'
         ? extractDirectory
         : posix.join(extractDirectory, entry.archiveRootDirectory)
-    const probePath = resolveSshTemplate(ctx, args.manifest, entry, extracted, 'probe')
+    const probePath = resolveSshTemplate(entry, extracted, 'probe')
     await ctx.queue.exec(`chmod +x ${shellEscape(probePath.executable)}`)
-    const smoke = await probeSshManagedEntry(ctx, args.manifest, entry, extracted)
+    const smoke = await probeSshManagedEntry(ctx, entry, extracted)
     if (smoke.code !== 0) {
       throw new Error(
         `Managed ${entry.tool} ${entry.version} smoke test failed on the SSH Host: ${probeTail(smoke)}`
@@ -168,7 +154,7 @@ export async function acquireSshManagedVersion(args: {
     const move = await ctx.queue.exec(
       `test ! -e ${shellEscape(destination)} && mv ${shellEscape(extracted)} ${shellEscape(destination)}`
     )
-    if (move.code !== 0 && !(await probeSshManagedVersion(ctx, args.manifest, entry))) {
+    if (move.code !== 0 && !(await probeSshManagedVersion(ctx, entry))) {
       throw new Error(`Existing managed ${entry.tool} ${entry.version} failed its smoke test`)
     }
     args.signal?.throwIfAborted()

@@ -2,11 +2,8 @@ import React from 'react'
 import { cn } from '@/lib/utils'
 import type { CodeIntelligenceLanguage } from '../../../../shared/code-intelligence-scope'
 
-export const LANGUAGE_DISPLAY: Record<CodeIntelligenceLanguage, string> = {
-  cpp: 'C++',
-  python: 'Python'
-}
-const LANGUAGE_BADGE: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++', python: 'Py' }
+export const LANGUAGE_DISPLAY: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++' }
+const LANGUAGE_BADGE: Record<CodeIntelligenceLanguage, string> = { cpp: 'C++' }
 
 export function LanguageBadge({ language }: { language: CodeIntelligenceLanguage }): React.JSX.Element {
   return (

@@ -19,6 +19,7 @@ import { useWorktreeMap } from '@/store/selectors'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import { getFolderWorkspaceExecutionHostId } from '../../../../shared/folder-workspace-repo-link'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { LANGUAGE_DISPLAY } from '../right-sidebar/code-panel-language-badge'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   countChangedCodeIntelligenceMembers,
@@ -323,7 +324,7 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
             {scopes.map((scope) => (
               <section key={scope.id} className="rounded-md px-1.5 py-1.5">
                 <div className="flex items-center justify-between gap-2 px-1 pb-1 text-[10px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
-                  <span>{scope.language === 'cpp' ? 'C++' : 'Python'}</span>
+                  <span>{LANGUAGE_DISPLAY[scope.language]}</span>
                   <span>{scope.members.length}</span>
                 </div>
                 <div className="space-y-0.5">

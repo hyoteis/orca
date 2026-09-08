@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
-import { searchPythonWorkspaceSymbols } from '@/lib/language-server/python-definition-navigation'
 import { searchCppWorkspaceSymbols } from '@/lib/language-server/cpp-definition-navigation'
 import { openDefinitionTargetInWorkspace } from '@/lib/language-server/code-intelligence-workspace'
 import type { WorkspaceSymbolFanout } from '@/lib/language-server/code-intelligence-workspace'
@@ -55,17 +54,13 @@ export function useSymbolSearch({ query, symbolMode, scopes }: UseSymbolSearchAr
     const generation = ++generationRef.current
     setLoading(true)
     const timer = setTimeout(() => {
-      // Both language stacks answer in parallel (#7: Python and C++).
-      void Promise.all([
-        searchPythonWorkspaceSymbols(trimmed),
-        searchCppWorkspaceSymbols(trimmed)
-      ]).then(([python, cpp]) => {
+      void searchCppWorkspaceSymbols(trimmed).then((cpp) => {
         if (generationRef.current !== generation) {
           return
         }
         const fanout: WorkspaceSymbolFanout = {
-          results: [...python.results, ...cpp.results],
-          partial: python.partial || cpp.partial
+          results: cpp.results,
+          partial: cpp.partial
         }
         setRows(buildSymbolSearchRows(fanout, scopeInfoById))
         setPartial(fanout.partial)

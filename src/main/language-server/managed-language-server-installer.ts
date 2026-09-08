@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import {
+  assertManagedLanguageServerTool,
   compareManagedLanguageServerVersions,
   manifestEntryForLaunch,
   manifestEntryForVersion,
@@ -24,8 +25,6 @@ import { runCppSetupCommand } from './code-intelligence-cpp-setup-tools'
 import {
   acquireManagedVersion,
   resolveLocalManagedHostTarget,
-  isProbingManagedVersion,
-  managedRuntimeRoot,
   probeManagedEntry
 } from './managed-language-server-acquisition'
 import type { FetchManagedArchive } from './managed-language-server-archive'
@@ -70,7 +69,8 @@ export class ManagedLanguageServerInstaller {
     /** Per-call progress sink (relay RPC streams); falls back to options.emit. */
     onEvent?: (event: ManagedLanguageServerInstallEvent) => void
   }): Promise<ManagedLanguageServerInstallResult> {
-    const running = this.locks.get(args.tool)
+    const managedTool = assertManagedLanguageServerTool(args.tool)
+    const running = this.locks.get(managedTool)
     if (running) {
       return running
     }
@@ -86,7 +86,7 @@ export class ManagedLanguageServerInstaller {
         const message = error instanceof Error ? error.message : String(error)
         emit({
           executionHostId: 'local',
-          tool: args.tool,
+          tool: managedTool,
           version: '',
           phase: 'error',
           message,
@@ -97,32 +97,33 @@ export class ManagedLanguageServerInstaller {
           : { status: 'failed', error: message }
       })
       .finally(() => {
-        this.locks.delete(args.tool)
-        this.aborts.delete(args.tool)
+        this.locks.delete(managedTool)
+        this.aborts.delete(managedTool)
       })
-    this.locks.set(args.tool, promise)
+    this.locks.set(managedTool, promise)
     return promise
   }
 
   cancel(tool: LanguageServerKind): boolean {
-    const controller = this.aborts.get(tool)
+    const controller = this.aborts.get(assertManagedLanguageServerTool(tool))
     controller?.abort(new Error('Managed language-server install was canceled'))
     return controller !== undefined
   }
 
   async rollback(tool: LanguageServerKind): Promise<ManagedLanguageServerRollbackResult> {
-    const toolRoot = managedToolRoot(this.options.root, tool)
+    const managedTool = assertManagedLanguageServerTool(tool)
+    const toolRoot = managedToolRoot(this.options.root, managedTool)
     const record = await readManagedActivation(toolRoot)
     if (!record?.rollback) {
       return { status: 'no-rollback' }
     }
     try {
-      await this.probeVersion(tool, record.rollback.version)
+      await this.probeVersion(managedTool, record.rollback.version)
       await writeManagedActivation(toolRoot, {
         active: record.rollback,
         rollback: record.active
       })
-      await this.gc(tool)
+      await this.gc(managedTool)
       return { status: 'rolled-back', version: record.rollback.version }
     } catch (error) {
       return { status: 'failed', error: error instanceof Error ? error.message : String(error) }
@@ -130,14 +131,15 @@ export class ManagedLanguageServerInstaller {
   }
 
   async state(tool: LanguageServerKind): Promise<ManagedLanguageServerInstallState> {
-    const toolRoot = managedToolRoot(this.options.root, tool)
+    const managedTool = assertManagedLanguageServerTool(tool)
+    const toolRoot = managedToolRoot(this.options.root, managedTool)
     const [record, installedVersions] = await Promise.all([
       readManagedActivation(toolRoot),
       listManagedVersions(toolRoot)
     ])
     const resolved = resolveManagedLanguageServerEntry(
       this.options.manifest,
-      { tool },
+      { tool: managedTool },
       await this.resolveHostTarget()
     )
     if (!('entry' in resolved)) {
@@ -171,7 +173,8 @@ export class ManagedLanguageServerInstaller {
     tool: LanguageServerKind,
     version?: string
   ): Promise<{ executable: string; args: string[] } | null> {
-    const toolRoot = managedToolRoot(this.options.root, tool)
+    const managedTool = assertManagedLanguageServerTool(tool)
+    const toolRoot = managedToolRoot(this.options.root, managedTool)
     const record = await readManagedActivation(toolRoot)
     if (!record) {
       return null
@@ -179,15 +182,14 @@ export class ManagedLanguageServerInstaller {
     const entry = manifestEntryForLaunch(
       this.options.manifest,
       record,
-      { tool, version },
+      { tool: managedTool, version },
       { platform: process.platform, arch: process.arch }
     )
     if (!entry) {
       return null
     }
     return resolveManagedLanguageServerCommand(entry.command, {
-      root: managedVersionDirectory(this.options.root, entry.tool, entry.version),
-      runtimeRoot: managedRuntimeRoot(this.options.root, this.options.manifest, entry)
+      root: managedVersionDirectory(this.options.root, entry.tool, entry.version)
     })
   }
 
@@ -196,16 +198,16 @@ export class ManagedLanguageServerInstaller {
     controller: AbortController,
     emit: (event: ManagedLanguageServerInstallEvent) => void
   ): Promise<ManagedLanguageServerInstallResult> {
-    this.aborts.set(args.tool, controller)
+    this.aborts.set(assertManagedLanguageServerTool(args.tool), controller)
     const resolved = resolveManagedLanguageServerEntry(
       this.options.manifest,
-      { tool: args.tool, version: args.version },
+      { tool: 'clangd', version: args.version },
       await this.resolveHostTarget()
     )
     if (!('entry' in resolved)) {
       return { status: 'unsupported', reason: resolved.unsupported }
     }
-    const { entry, runtimeEntry } = resolved
+    const { entry } = resolved
     controller.signal.throwIfAborted()
     const seams = {
       run: this.run,
@@ -213,25 +215,11 @@ export class ManagedLanguageServerInstaller {
       emit: (target: ManagedLanguageServerManifestEntry, phase: ManagedLanguageServerInstallPhase, extra?: { receivedBytes?: number; totalBytes?: number }) =>
         emit({
           executionHostId: 'local',
-          tool: target.tool as LanguageServerKind,
+          tool: target.tool,
           version: target.version,
           phase,
           ...extra
         })
-    }
-    if (runtimeEntry && !(await isProbingManagedVersion(this.options.root, this.options.manifest, runtimeEntry, this.run))) {
-      await acquireManagedVersion({
-        root: this.options.root,
-        manifest: this.options.manifest,
-        entry: runtimeEntry,
-        route: { type: 'host-download' },
-        signal: controller.signal,
-        seams
-      })
-      await writeManagedActivation(
-        managedToolRoot(this.options.root, runtimeEntry.tool),
-        this.activationFor(runtimeEntry)
-      )
     }
     const toolRoot = managedToolRoot(this.options.root, entry.tool)
     const record = await readManagedActivation(toolRoot)
@@ -247,14 +235,13 @@ export class ManagedLanguageServerInstaller {
         root: this.options.root,
         manifest: this.options.manifest,
         entry,
-        runtimeEntry,
         route: args.route,
         signal: controller.signal,
         seams
       })
       await this.activate(entry, record)
     }
-    emit({ executionHostId: 'local', tool: entry.tool as LanguageServerKind, version: entry.version, phase: 'complete' })
+    emit({ executionHostId: 'local', tool: entry.tool, version: entry.version, phase: 'complete' })
     await this.gc(entry.tool)
     return { status: 'installed', version: entry.version }
   }
@@ -270,8 +257,6 @@ export class ManagedLanguageServerInstaller {
       throw new Error(`No trusted manifest entry for ${tool} ${version}`)
     }
     await probeManagedEntry(
-      this.options.root,
-      this.options.manifest,
       entry,
       managedVersionDirectory(this.options.root, entry.tool, entry.version),
       this.run
@@ -301,8 +286,7 @@ export class ManagedLanguageServerInstaller {
   private async gc(tool: ManagedLanguageServerToolId): Promise<void> {
     const toolRoot = managedToolRoot(this.options.root, tool)
     const record = await readManagedActivation(toolRoot)
-    const pinned =
-      tool === 'node' ? [] : ((await this.options.getPinnedVersions?.(tool)) ?? [])
+    const pinned = (await this.options.getPinnedVersions?.(tool)) ?? []
     const keep = new Set<string>(
       [record?.active?.version, record?.rollback?.version, ...pinned].filter(
         (version): version is string => typeof version === 'string'

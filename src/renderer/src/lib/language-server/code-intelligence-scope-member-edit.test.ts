@@ -110,9 +110,9 @@ describe('findCodeIntelligenceScopeForWorkspace', () => {
     expect(findCodeIntelligenceScopeForWorkspace(query('cpp', [cpp]))).toBe(cpp)
   })
 
-  it('returns null for another language, host, workspace, or disabled scope', () => {
-    const python = { ...cpp, id: 'local:worktree:demo:python', language: 'python' as const }
-    expect(findCodeIntelligenceScopeForWorkspace(query('cpp', [python]))).toBeNull()
+  it('returns null for another host, workspace, or disabled scope', () => {
+    const otherWorkspace = { ...cpp, id: 'local:worktree:other:cpp', workspaceKey: 'worktree:other' as const }
+    expect(findCodeIntelligenceScopeForWorkspace(query('cpp', [otherWorkspace]))).toBeNull()
     expect(
       findCodeIntelligenceScopeForWorkspace({
         ...query('cpp', [cpp]),

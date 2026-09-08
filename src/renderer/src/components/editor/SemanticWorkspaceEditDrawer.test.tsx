@@ -13,12 +13,12 @@ import type { WorkspaceEditPlanView } from '@/lib/language-server/workspace-edit
 import type { WorkspaceEditTransactionPorts } from '@/lib/language-server/workspace-edit-transaction'
 
 const scope: CodeIntelligenceScope = {
-  id: 'local:w:python',
+  id: 'local:w:cpp',
   name: 'Python scope',
   executionHostId: 'local',
   workspaceKey: 'worktree:w',
   workspaceRoot: '/repo',
-  language: 'python',
+  language: 'cpp',
   members: [{ path: '/repo/src', visibleResults: true }],
   serverSource: { type: 'automatic' },
   enabled: true,
