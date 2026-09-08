@@ -1,0 +1,707 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway(#125 "Prototype the C++ Configure Code workflow")
+  三个结构不同的变体, ?variant=A|B|C 切换(底部浮动条 / ←→ 键):
+    A 文件夹行内模式 —— 单页列表, 每行模式切换 + 展开配置(现有 setup dialog 的演化)
+    B 数据库优先 —— compile_commands 卡片为轴, 文件夹是数据库的映射 chips
+    C 主从工作台 —— 左工作区树 + 右详情面板
+  共享 stub 场景:SSH/本机主机切换 × degraded 数据库(保留 last-valid)× 部分覆盖警告
+  × 一个 CDB 映射两个文件夹 × 全局 BASIC 选项 × overlap 拒绝(Graphics/、Utilities/)
+  Token 取自 src/renderer/src/assets/main.css;双击打开即用;内存态, 刷新重置。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Configure Code 工作流</title>
+<style>
+  :root, .light {
+    --background:#fff; --foreground:#0a0a0a; --card:#fff; --card-foreground:#0a0a0a;
+    --popover:#fff; --primary:#171717; --primary-foreground:#fafafa;
+    --secondary:#f5f5f5; --secondary-foreground:#171717;
+    --muted:#f5f5f5; --muted-foreground:#737373;
+    --accent:#f5f5f5; --accent-foreground:#171717;
+    --destructive:#e40014; --destructive-foreground:#fcf3f3;
+    --border:#e5e5e5; --input:#e5e5e5; --ring:#737373;
+    --radius:0.625rem; --status-success:#15803d; --warning:#b45309;
+  }
+  .dark {
+    --background:#0a0a0a; --foreground:#fafafa; --card:#171717; --card-foreground:#fafafa;
+    --popover:#171717; --primary:#e5e5e5; --primary-foreground:#171717;
+    --secondary:#262626; --secondary-foreground:#fafafa;
+    --muted:#262626; --muted-foreground:#a1a1a1;
+    --accent:#404040; --accent-foreground:#fafafa;
+    --destructive:#ff6568; --destructive-foreground:#df2225;
+    --border:rgb(255 255 255 / 0.07); --input:rgb(255 255 255 / 0.15); --ring:#737373;
+    --status-success:#86efac; --warning:#f59e0b;
+  }
+  * { box-sizing:border-box; margin:0; }
+  svg { width:1em; height:1em; flex:none; }
+  html,body { height:100%; }
+  body {
+    font-family:'Geist',-apple-system,'Segoe UI',system-ui,sans-serif;
+    font-size:14px; letter-spacing:0.01em; color:var(--foreground);
+    background:color-mix(in srgb, var(--foreground) 4%, var(--background));
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .proto-tag {
+    position:fixed; top:10px; left:12px; font-size:10px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.08em; color:var(--muted-foreground);
+    border:1px dashed var(--border); border-radius:999px; padding:2px 8px; background:var(--card);
+  }
+  .dialog {
+    width:100%; max-width:36rem; max-height:calc(100vh - 120px);
+    display:flex; flex-direction:column;
+    background:var(--card); border:1px solid var(--border); border-radius:calc(var(--radius)*1.4);
+    box-shadow:0 10px 24px rgba(0,0,0,.18);
+  }
+  .dialog.wide { max-width:52rem; }
+  .dlg-head { padding:16px 20px 8px; }
+  .dlg-title { font-size:15px; font-weight:600; }
+  .dlg-desc { margin-top:3px; font-size:12px; color:var(--muted-foreground); line-height:1.5; }
+  .dlg-body { padding:8px 20px 12px; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
+  .dlg-foot { padding:12px 20px 16px; display:flex; align-items:center; gap:8px; justify-content:flex-end; }
+  .host-line { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted-foreground); }
+  .host-badge {
+    display:inline-flex; align-items:center; gap:5px; padding:1px 8px; font-size:11px; font-weight:600;
+    border:1px solid var(--border); border-radius:999px; color:var(--foreground);
+    background:color-mix(in srgb, var(--muted-foreground) 8%, transparent);
+  }
+  .dot { width:6px; height:6px; border-radius:999px; background:currentColor; }
+  .sec-label {
+    font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--muted-foreground); display:flex; align-items:center; gap:6px;
+  }
+  .sec-label .count { font-variant-numeric:tabular-nums; }
+  /* buttons */
+  .btn {
+    display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:13px;
+    padding:0 12px; height:30px; border-radius:calc(var(--radius)*0.8); cursor:pointer;
+    border:1px solid transparent; background:transparent; color:var(--foreground);
+  }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-primary { background:var(--primary); color:var(--primary-foreground); font-weight:500; }
+  .btn-outline { border-color:var(--border); background:var(--card); }
+  .btn-outline:hover { background:var(--accent); }
+  .btn-ghost { color:var(--muted-foreground); padding:0 8px; }
+  .btn-ghost:hover { background:var(--accent); color:var(--foreground); }
+  .btn-sm { height:24px; font-size:12px; padding:0 8px; }
+  .btn-destructive { color:var(--destructive); }
+  .btn-destructive:hover { background:color-mix(in srgb, var(--destructive) 10%, transparent); }
+  /* chips — status */
+  .chip {
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500;
+    padding:1px 8px; border-radius:999px; border:1px solid var(--border);
+    color:var(--muted-foreground); white-space:nowrap;
+  }
+  .chip svg { width:11px; height:11px; flex:none; }
+  .chip-ok { color:var(--status-success); border-color:color-mix(in srgb, var(--status-success) 25%, transparent); background:color-mix(in srgb, var(--status-success) 10%, transparent); }
+  .chip-warn { color:var(--warning); border-color:color-mix(in srgb, var(--warning) 25%, transparent); background:color-mix(in srgb, var(--warning) 10%, transparent); }
+  .chip-degraded { color:var(--warning); border-color:color-mix(in srgb, var(--warning) 52%, transparent); background:color-mix(in srgb, var(--warning) 12%, transparent); }
+  .chip-err { color:var(--destructive); border-color:color-mix(in srgb, var(--destructive) 30%, transparent); background:color-mix(in srgb, var(--destructive) 6%, transparent); }
+  .mode-pill {
+    display:inline-flex; align-items:center; font-size:11px; font-weight:600;
+    padding:1px 7px; border-radius:999px; border:1px solid var(--border); color:var(--muted-foreground);
+  }
+  .mode-cdb { color:var(--foreground); border-color:color-mix(in srgb, var(--foreground) 25%, transparent); }
+  /* segmented */
+  .seg { display:inline-flex; border:1px solid var(--border); border-radius:calc(var(--radius)*0.8); padding:2px; gap:2px; background:var(--muted); }
+  .seg button { font:inherit; font-size:12px; padding:3px 10px; border-radius:calc(var(--radius)*0.5); border:0; background:transparent; color:var(--muted-foreground); cursor:pointer; }
+  .seg button[aria-pressed="true"] { background:var(--card); color:var(--foreground); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:500; }
+  /* rows (variant A) */
+  .row {
+    border:1px solid var(--border); border-radius:var(--radius); background:var(--card);
+    display:flex; flex-direction:column;
+  }
+  .row.conflict { border-color:color-mix(in srgb, var(--destructive) 40%, transparent); }
+  .row-main { display:flex; align-items:center; gap:8px; padding:7px 10px; min-width:0; }
+  .row-path { font-family:ui-monospace,Consolas,monospace; font-size:12px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .row-detail { border-top:1px solid var(--border); padding:8px 10px; display:flex; flex-direction:column; gap:7px; }
+  .detail-grid { display:flex; align-items:center; gap:8px; font-size:12px; min-width:0; }
+  .detail-grid label { color:var(--muted-foreground); flex:none; width:5.5em; }
+  .field {
+    flex:1; min-width:0; font-family:ui-monospace,Consolas,monospace; font-size:12px;
+    background:color-mix(in srgb, var(--foreground) 4%, transparent);
+    border:1px solid var(--input); border-radius:calc(var(--radius)*0.6); padding:4px 8px;
+    color:var(--foreground); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .vstat { display:flex; align-items:flex-start; gap:6px; font-size:12px; line-height:1.45; }
+  .vstat svg { width:13px; height:13px; flex:none; margin-top:2px; }
+  .vstat.ok { color:var(--status-success); }
+  .vstat.ok span { color:var(--foreground); }
+  .vstat.warn { color:var(--warning); }
+  .vstat.warn span { color:var(--foreground); }
+  .vstat.bad { color:var(--destructive); }
+  .vstat.neutral { color:var(--muted-foreground); }
+  .vstat.neutral span { color:var(--foreground); }
+  .note { font-size:11px; color:var(--muted-foreground); line-height:1.5; }
+  /* cards (variant B) */
+  .db-card { border:1px solid var(--border); border-radius:var(--radius); background:var(--card); padding:9px 11px; display:flex; flex-direction:column; gap:7px; }
+  .db-card.degraded { border-color:color-mix(in srgb, var(--warning) 52%, transparent); }
+  .db-card-head { display:flex; align-items:center; gap:8px; min-width:0; }
+  .db-path { font-family:ui-monospace,Consolas,monospace; font-size:12px; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+  .folder-chip {
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; font-family:ui-monospace,Consolas,monospace;
+    padding:1px 7px; border-radius:999px; border:1px solid var(--border); background:var(--muted); color:var(--foreground);
+  }
+  .folder-chip button { border:0; background:transparent; color:var(--muted-foreground); cursor:pointer; font:inherit; font-size:11px; padding:0; display:inline-flex; }
+  .folder-chip button:hover { color:var(--destructive); }
+  /* tree (variant C) */
+  .split { display:flex; gap:0; min-height:300px; align-items:stretch; }
+  .tree-pane {
+    width:250px; flex:none; border:1px solid var(--border); border-radius:var(--radius);
+    overflow-y:auto; padding:5px 0; background:var(--card);
+  }
+  .tree-node {
+    display:flex; align-items:center; gap:6px; padding:3px 10px; cursor:pointer; font-size:13px;
+    border:0; background:transparent; width:100%; text-align:left; color:var(--foreground); font-family:inherit;
+  }
+  .tree-node:hover { background:var(--accent); }
+  .tree-node[aria-current="true"] { background:var(--accent); box-shadow:inset 0 0 0 1px var(--ring); border-radius:6px; }
+  .tree-node .chev { width:10px; height:10px; flex:none; color:var(--muted-foreground); }
+  .tree-node .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+  .tree-node .mini-badge { font-size:10px; flex:none; }
+  .mini-badge.b-cdb { color:var(--foreground); }
+  .mini-badge.b-basic { color:var(--muted-foreground); }
+  .mini-badge.b-bad { color:var(--destructive); }
+  .tree-sep { border-top:1px solid var(--border); margin:5px 8px; }
+  .detail-pane { flex:1; min-width:0; border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; display:flex; flex-direction:column; gap:10px; background:var(--card); }
+  .detail-title { font-size:13px; font-weight:600; font-family:ui-monospace,Consolas,monospace; word-break:break-all; }
+  /* forms */
+  .form-grid { display:grid; grid-template-columns:auto 1fr; gap:7px 10px; align-items:center; font-size:12px; }
+  .form-grid label { color:var(--muted-foreground); text-align:right; }
+  textarea.field {
+    height:auto; font-size:12px; resize:vertical; min-height:44px; white-space:pre; line-height:1.5;
+    overflow:auto; text-overflow:clip;
+  }
+  select.field { font-family:inherit; }
+  .disclosure { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .disclosure > button {
+    width:100%; display:flex; align-items:center; gap:6px; padding:7px 10px; background:var(--card);
+    border:0; font:inherit; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--muted-foreground); cursor:pointer; text-align:left;
+  }
+  .disclosure > button:hover { background:var(--accent); color:var(--foreground); }
+  .disclosure .body { padding:10px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:8px; }
+  .alert {
+    display:flex; gap:8px; align-items:flex-start; font-size:12px; line-height:1.5;
+    border-radius:calc(var(--radius)*0.8); padding:8px 10px;
+    border:1px solid color-mix(in srgb, var(--destructive) 30%, transparent);
+    background:color-mix(in srgb, var(--destructive) 5%, transparent); color:var(--destructive);
+  }
+  .alert svg { width:13px; height:13px; flex:none; margin-top:2px; }
+  .reauth {
+    display:flex; gap:8px; align-items:center; font-size:11px; color:var(--muted-foreground);
+    margin-right:auto; line-height:1.4;
+  }
+  /* add-folder popover (absolute — nearest positioned ancestor is .sec-label / .chips) */
+  .sec-label, .chips { position:relative; }
+  .picker {
+    position:absolute; top:100%; left:0; z-index:50; min-width:230px; max-height:220px; overflow-y:auto;
+    background:var(--popover); color:var(--popover-foreground);
+    border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:0 10px 24px rgba(0,0,0,.18); padding:4px;
+  }
+  .picker .item {
+    display:flex; align-items:center; gap:6px; width:100%; border:0; background:transparent;
+    font-family:ui-monospace,Consolas,monospace; font-size:12px; color:inherit; text-align:left;
+    padding:4px 8px; border-radius:6px; cursor:pointer;
+  }
+  .picker .item:hover { background:var(--accent); }
+  .picker .item .sub { margin-left:auto; font-size:10px; color:var(--muted-foreground); font-family:inherit; }
+  .picker .item.conflicts .sub { color:var(--destructive); }
+  /* switcher */
+  .switcher {
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:100;
+    display:flex; align-items:center; gap:4px; padding:5px 8px;
+    background:var(--popover); color:var(--popover-foreground);
+    border:1px solid var(--border); border-radius:999px; box-shadow:0 10px 24px rgba(0,0,0,.25);
+    font-size:12px;
+  }
+  .switcher button {
+    width:26px; height:26px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center;
+    border:0; background:transparent; color:var(--muted-foreground); cursor:pointer; font:inherit; padding:0;
+  }
+  .switcher button:hover { background:var(--accent); color:var(--foreground); }
+  .switcher .lbl { min-width:150px; text-align:center; font-weight:500; }
+  .switcher .lbl small { display:block; font-weight:400; font-size:10px; color:var(--muted-foreground); }
+  .switcher .sep { width:1px; height:16px; background:var(--border); margin:0 3px; }
+  .switcher .host-toggle { width:auto; padding:0 10px; border-radius:999px; font-size:11px; font-family:ui-monospace,Consolas,monospace; }
+  /* toast */
+  .toast {
+    position:fixed; top:18px; right:18px; z-index:200; font-size:12px; line-height:1.5;
+    background:var(--popover); color:var(--popover-foreground);
+    border:1px solid var(--border); border-radius:var(--radius);
+    box-shadow:0 10px 24px rgba(0,0,0,.25); padding:10px 14px; max-width:320px;
+  }
+</style>
+</head>
+<body>
+<div class="proto-tag">Prototype · throwaway · #125</div>
+<div id="stage"></div>
+<div class="switcher" id="switcher"></div>
+<script>
+'use strict'
+
+// ---------- icons (lucide paths, hand-picked) ----------
+const I = {
+  chevR: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  chevD: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>',
+  server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.3 11.3 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>'
+}
+
+// ---------- shared stub scenario ----------
+const HOSTS = {
+  local: {
+    label: '本机 (Windows)', kind: 'local',
+    workspace: 'D:\\src\\DiligentCore',
+    db: { engine: 'D:\\build\\engine\\compile_commands.json',
+          vulkan: 'D:\\build\\vulkan\\compile_commands.json',
+          d3d12: 'D:\\out\\d3d12\\compile_commands.json',
+          util: 'D:\\build\\utilities\\compile_commands.json' },
+    include: '-I D:\\sdk\\include'
+  },
+  ssh: {
+    label: 'build-server', kind: 'ssh',
+    workspace: '/home/dev/DiligentCore',
+    db: { engine: '/home/dev/build/engine/compile_commands.json',
+          vulkan: '/home/dev/build/vulkan/compile_commands.json',
+          d3d12: '/home/dev/out/d3d12/compile_commands.json',
+          util: '/home/dev/build/utilities/compile_commands.json' },
+    include: '-I /opt/sdk/include'
+  }
+}
+// db states: ok | degraded | partial | shared
+function freshMembers(hostKey) {
+  const db = HOSTS[hostKey].db
+  return [
+    { path: 'Engine/', mode: 'cdb', dbKey: 'engine', state: 'degraded', expanded: true,
+      entries: 1024, lastValid: '2026-09-07 21:14' },
+    { path: 'Graphics/GraphicsEngineVulkan/', mode: 'cdb', dbKey: 'vulkan', state: 'ok', expanded: false,
+      entries: 527, coverage: [512, 512] },
+    { path: 'Graphics/GraphicsEngineD3D12/', mode: 'cdb', dbKey: 'd3d12', state: 'partial', expanded: false,
+      entries: 89, coverage: [42, 58] },
+    { path: 'Utilities/Common/', mode: 'cdb', dbKey: 'util', state: 'ok', expanded: false, shared: true, entries: 133 },
+    { path: 'Utilities/Platform/', mode: 'cdb', dbKey: 'util', state: 'ok', expanded: false, shared: true },
+    { path: 'Common/', mode: 'basic', expanded: false },
+    { path: 'Tests/', mode: 'basic', expanded: false }
+  ]
+}
+// candidate folders for the add-picker (conflicts exercise the overlap rule)
+const PICKER = [
+  { path: 'Graphics/', conflict: 'Graphics/GraphicsEngineVulkan/' },
+  { path: 'Utilities/', conflict: 'Utilities/Common/' },
+  { path: 'ThirdParty/' },
+  { path: 'Interfaces/' }
+]
+
+// ---------- state ----------
+const VARIANTS = [
+  { key: 'A', name: '文件夹行内模式', sub: '单页列表 · 每行模式切换' },
+  { key: 'B', name: '数据库优先', sub: 'CDB 卡片为轴 · 文件夹是映射' },
+  { key: 'C', name: '主从工作台', sub: '工作区树 + 详情面板' }
+]
+const state = {
+  variant: new URLSearchParams(location.search).get('variant') || 'A',
+  host: 'ssh', dark: true,
+  members: freshMembers('ssh'),
+  optsOpen: true, reauth: false,
+  pickerFor: null,          // 'members' | 'basic' | dbKey
+  conflict: null,           // { path, withPath }
+  sel: null,                // variant C selected node ('opts' | folder path)
+  reloaded: {}              // dbKey -> true (reload 已经演示过)
+}
+
+// ---------- shared render helpers ----------
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const modeName = (m) => (m === 'cdb' ? '编译数据库' : 'BASIC')
+
+function chipFor(m) {
+  if (m.mode === 'basic') return '<span class="chip">BASIC 索引</span>'
+  if (m.state === 'degraded')
+    return '<span class="chip chip-degraded">' + I.pause + '降级 · 保留最后有效</span>'
+  if (m.state === 'partial')
+    return '<span class="chip chip-warn">' + I.warn + '部分覆盖</span>'
+  return '<span class="chip chip-ok">' + I.check + '有效</span>'
+}
+
+function vstatFor(m) {
+  const host = HOSTS[state.host]
+  if (m.state === 'degraded') {
+    const reloaded = state.reloaded[m.dbKey]
+    return reloaded
+      ? '<div class="vstat bad">' + I.x + '<span>重新验证失败:文件不存在。已保留最后有效映射(' + m.lastValid + '),其他映射不受影响。</span></div>'
+      : '<div class="vstat warn">' + I.pause + '<span>数据库已删除或损坏。沿用最后有效映射(有效期至 ' + m.lastValid + '),BASIC 与其他映射不受影响;恢复文件或重新指向后重载。</span></div>'
+  }
+  if (m.state === 'partial')
+    return '<div class="vstat warn">' + I.warn + '<span>覆盖 42/58 个源文件 — 未覆盖文件由 clangd 推断命令,不阻塞启用。</span></div>'
+  const cov = m.coverage ? '(覆盖 ' + m.coverage[0] + '/' + m.coverage[1] + ')' : ''
+  const ent = m.entries ? m.entries + ' 条命令' : ''
+  return '<div class="vstat ok">' + I.check + '<span>JSON 结构有效 · ' + [ent, cov].filter(Boolean).join(' · ') +
+    (m.shared ? ' · 与 Utilities/Platform/ 共享此数据库' : '') + '</span></div>'
+}
+
+function basicOptionsForm() {
+  const host = HOSTS[state.host]
+  return `<div class="form-grid">
+    <label>include 路径</label><textarea class="field" rows="2">${esc(host.include)}\n-I ${esc(state.host === 'local' ? 'D:\\sdk\\gli' : '/opt/sdk/gli')}</textarea>
+    <label>宏定义</label><textarea class="field" rows="1">MALEOON_SUPPORTED=1</textarea>
+    <label>C++ 标准</label>
+    <select class="field" style="width:9rem;flex:none"><option>C++17</option><option selected>C++20</option><option>C++23</option></select>
+  </div>
+  <div class="note">所有 BASIC 文件夹共享以上设置(合成编译命令时注入);编译数据库文件夹不使用它们,以数据库内容为准。</div>`
+}
+
+function dialogShell(wide, title, desc, bodyHtml, footHtml) {
+  return `<div class="dialog${wide ? ' wide' : ''}" role="dialog" aria-label="${esc(title)}">
+    <div class="dlg-head">
+      <div class="dlg-title">${esc(title)}</div>
+      <div class="dlg-desc">${desc}</div>
+    </div>
+    <div class="dlg-body">${bodyHtml}</div>
+    <div class="dlg-foot">${footHtml}</div>
+  </div>`
+}
+
+function hostLine() {
+  const h = HOSTS[state.host]
+  return `<div class="host-line">
+    <span class="host-badge">${h.kind === 'ssh' ? I.server + esc(h.label) : I.server + esc(h.label)}</span>
+    工作区 <code style="font-size:11px">${esc(h.workspace)}</code>
+    · 数据库须位于同一${h.kind === 'ssh' ? '远程主机' : '主机'},可在工作区之外
+  </div>`
+}
+
+function footHtml(primaryLabel) {
+  return (state.reauth
+    ? `<div class="reauth">${I.gear} 结构已变更 — 保存后将请求重新授权;数据库<b>内容</b>变化会自动刷新,无需重新授权</div>`
+    : '') +
+    `<button class="btn btn-outline" data-a="noop">取消</button>
+     <button class="btn btn-primary" data-a="save">${primaryLabel || '保存并授权'}</button>`
+}
+
+function conflictAlert() {
+  if (!state.conflict) return ''
+  return `<div class="alert" role="alert">${I.x}
+    <div>无法添加 <b>${esc(state.conflict.path)}</b>:与已配置的
+    <b>${esc(state.conflict.withPath)}</b> 重叠。文件夹映射不能交叉,请改用未被覆盖的文件夹。</div></div>`
+}
+
+function pickerHtml(action) {
+  if (state.pickerFor !== action) return ''
+  return `<div class="picker" role="menu">
+    ${PICKER.map((p) => `<button class="item${p.conflict ? ' conflicts' : ''}" data-a="pick" data-path="${esc(p.path)}" data-conflict="${esc(p.conflict || '')}">
+      ${I.folder}${esc(p.path)}<span class="sub">${p.conflict ? '重叠' : '未配置'}</span></button>`).join('')}
+  </div>`
+}
+
+// ---------- variant A: per-row mode ----------
+function renderA() {
+  const rows = state.members.map((m, i) => {
+    const main = `<div class="row-main">
+      <button class="btn btn-ghost btn-sm" data-a="expand" data-i="${i}" aria-label="展开">${m.expanded ? I.chevD : I.chevR}</button>
+      <span class="row-path" title="${esc(m.path)}">${esc(m.path)}</span>
+      ${m.mode === 'cdb' ? '<span class="mode-pill mode-cdb">CDB</span>' : '<span class="mode-pill">BASIC</span>'}
+      ${chipFor(m)}
+      ${m.mode === 'cdb' ? `<button class="btn btn-ghost btn-sm" data-a="reload" data-i="${i}" title="重新验证并重载" aria-label="重载">${I.refresh}</button>` : ''}
+      <button class="btn btn-ghost btn-sm btn-destructive" data-a="remove" data-i="${i}" title="移除文件夹" aria-label="移除">${I.x}</button>
+    </div>`
+    if (!m.expanded) return `<div class="row">${main}</div>`
+    const detail = m.mode === 'cdb'
+      ? `<div class="row-detail">
+          <div class="detail-grid"><label>数据库</label>
+            <input class="field" readonly value="${esc(HOSTS[state.host].db[m.dbKey])}">
+            <button class="btn btn-outline btn-sm" data-a="browse" data-i="${i}">浏览…</button></div>
+          <div class="detail-grid"><label>模式</label>
+            <div class="seg" role="group" aria-label="模式">
+              <button aria-pressed="true">编译数据库</button>
+              <button data-a="setmode" data-i="${i}" data-mode="basic">BASIC</button>
+            </div>
+            <span class="note">切换模式即更换映射,保存后需重新授权</span></div>
+          ${vstatFor(m)}
+        </div>`
+      : `<div class="row-detail">
+          <div class="detail-grid"><label>模式</label>
+            <div class="seg" role="group" aria-label="模式">
+              <button data-a="setmode" data-i="${i}" data-mode="cdb">编译数据库</button>
+              <button aria-pressed="true">BASIC</button>
+            </div></div>
+          <div class="vstat neutral">${I.folder}<span>BASIC 索引 — 使用下方全局 BASIC 选项合成编译命令,无需数据库。</span></div>
+        </div>`
+    return `<div class="row">${main}${detail}</div>`
+  })
+
+  const body = hostLine() +
+    conflictAlert() +
+    `<div class="sec-label">代码文件夹 <span class="count">${state.members.length}</span>
+       <button class="btn btn-ghost btn-sm" data-a="open-picker" data-for="members" style="margin-left:auto">${I.plus}添加文件夹</button>
+       ${pickerHtml('members')}
+     </div>` +
+    `<div style="display:flex;flex-direction:column;gap:6px">${rows.join('')}</div>` +
+    `<div class="disclosure">
+       <button data-a="toggle-opts" aria-expanded="${state.optsOpen}">
+         ${state.optsOpen ? I.chevD : I.chevR}全局 BASIC 选项
+       </button>
+       ${state.optsOpen ? `<div class="body">${basicOptionsForm()}</div>` : ''}
+     </div>`
+
+  return dialogShell(false, '配置 C++ 代码智能',
+    '每个代码文件夹使用一种模式:提供的 compile_commands.json,或 BASIC 索引。', body, footHtml())
+}
+
+// ---------- variant B: database-first ----------
+function renderB() {
+  const dbs = {}
+  for (const m of state.members) if (m.mode === 'cdb') (dbs[m.dbKey] ||= []).push(m)
+  const dbCards = Object.entries(dbs).map(([dbKey, members]) => {
+    const m = members[0]
+    const degraded = m.state === 'degraded'
+    return `<div class="db-card${degraded ? ' degraded' : ''}">
+      <div class="db-card-head">
+        <span class="db-path" title="${esc(HOSTS[state.host].db[dbKey])}">${esc(HOSTS[state.host].db[dbKey])}</span>
+        ${chipFor(m)}
+        <button class="btn btn-ghost btn-sm" data-a="reload" data-i="${state.members.indexOf(m)}" title="重载">${I.refresh}</button>
+        <button class="btn btn-ghost btn-sm btn-destructive" data-a="rmdb" data-db="${dbKey}" title="移除数据库及其全部映射">${I.x}</button>
+      </div>
+      ${vstatFor(m)}
+      <div class="chips">
+        ${members.map((mm) => `<span class="folder-chip">${esc(mm.path)}
+          <button data-a="rmmap" data-i="${state.members.indexOf(mm)}" title="解除映射(回到未配置)" aria-label="解除">${I.x}</button></span>`).join('')}
+        <button class="btn btn-ghost btn-sm" data-a="open-picker" data-for="${dbKey}">${I.plus}映射文件夹</button>
+        ${state.pickerFor === dbKey ? pickerHtml(dbKey) : ''}
+      </div>
+    </div>`
+  })
+
+  const basicChips = state.members.filter((m) => m.mode === 'basic')
+    .map((m) => `<span class="folder-chip">${esc(m.path)}
+      <button data-a="remove" data-i="${state.members.indexOf(m)}" title="移除" aria-label="移除">${I.x}</button></span>`).join('')
+
+  const body = hostLine() +
+    conflictAlert() +
+    `<div class="sec-label">编译数据库 <span class="count">${Object.keys(dbs).length}</span>
+       <button class="btn btn-ghost btn-sm" data-a="adddb" style="margin-left:auto">${I.plus}添加数据库</button>
+     </div>` +
+    `<div style="display:flex;flex-direction:column;gap:8px">${dbCards.join('') || '<div class="note">尚无数据库 — 添加 compile_commands.json 路径,再映射文件夹。</div>'}</div>` +
+    `<div class="sec-label">BASIC 文件夹 <span class="count">${state.members.filter((m) => m.mode === 'basic').length}</span>
+       <button class="btn btn-ghost btn-sm" data-a="open-picker" data-for="basic" style="margin-left:auto">${I.plus}添加</button>
+       ${state.pickerFor === 'basic' ? pickerHtml('basic') : ''}
+     </div>` +
+    `<div class="chips">${basicChips || '<span class="note">无 — 未被任何数据库覆盖的文件夹可走 BASIC 索引。</span>'}</div>` +
+    `<div class="disclosure">
+       <button data-a="toggle-opts" aria-expanded="${state.optsOpen}">${state.optsOpen ? I.chevD : I.chevR}全局 BASIC 选项</button>
+       ${state.optsOpen ? `<div class="body">${basicOptionsForm()}</div>` : ''}
+     </div>`
+
+  return dialogShell(false, '配置 C++ 代码智能',
+    '先注册编译数据库,再把工作区文件夹映射上去;一个数据库可服务多个不重叠文件夹,其余文件夹走 BASIC。',
+    body, footHtml())
+}
+
+// ---------- variant C: master-detail ----------
+const TREE = [
+  { path: 'Common/', depth: 0 },
+  { path: 'Engine/', depth: 0 },
+  { path: 'Graphics/', depth: 0, container: ['Graphics/GraphicsEngineVulkan/', 'Graphics/GraphicsEngineD3D12/'] },
+  { path: 'Graphics/GraphicsEngineD3D12/', depth: 1 },
+  { path: 'Graphics/GraphicsEngineVulkan/', depth: 1 },
+  { path: 'Interfaces/', depth: 0, unconfigured: true },
+  { path: 'Tests/', depth: 0 },
+  { path: 'ThirdParty/', depth: 0, unconfigured: true },
+  { path: 'Utilities/', depth: 0, container: ['Utilities/Common/', 'Utilities/Platform/'] },
+  { path: 'Utilities/Common/', depth: 1 },
+  { path: 'Utilities/Platform/', depth: 1 }
+]
+
+function renderC() {
+  const member = (path) => state.members.find((m) => m.path === path)
+  const treeNodes = TREE.map((t) => {
+    const m = member(t.path)
+    let badge = ''
+    if (m) badge = m.mode === 'cdb'
+      ? `<span class="mini-badge b-cdb">${m.state === 'degraded' ? 'CDB ⏸' : 'CDB'}</span>`
+      : '<span class="mini-badge b-basic">BASIC</span>'
+    else if (t.unconfigured) badge = '<span class="mini-badge b-basic">—</span>'
+    else if (t.container) badge = `<span class="mini-badge b-basic">▾ ${t.container.length} 个子级已配置</span>`
+    const sel = state.sel === t.path
+    return `<button class="tree-node" data-a="sel" data-path="${esc(t.path)}" aria-current="${sel}">
+      <span style="width:${t.depth * 14}px;flex:none"></span><span class="chev">${t.container ? I.chevD : ''}</span>
+      <span class="nm">${esc(t.path.replace(/\/$/, ''))}</span>${badge}</button>`
+  }).join('')
+
+  const selPath = state.sel && state.sel !== 'opts' ? state.sel : null
+  let detail
+  if (state.sel === 'opts') {
+    detail = `<div class="detail-title">全局 BASIC 选项</div>` + basicOptionsForm()
+  } else if (!selPath) {
+    detail = `<div class="detail-title">选择一个文件夹</div>
+      <div class="note">左侧勾选/点开工作区文件夹以配置其模式;根节点下的「全局 BASIC 选项」对所有 BASIC 文件夹生效。</div>`
+  } else {
+    const t = TREE.find((x) => x.path === selPath)
+    const m = member(selPath)
+    if (t.container && !m) {
+      detail = `<div class="detail-title">${esc(selPath)}</div>
+        <div class="alert">${I.x}<div>该文件夹的子级已单独配置(${t.container.map(esc).join('、')})。父文件夹与子级映射重叠,不能再整体配置。</div></div>`
+    } else if (!m) {
+      detail = `<div class="detail-title">${esc(selPath)}</div>
+        <div class="vstat neutral">${I.folder}<span>未配置 — 设为代码文件夹并选择模式:</span></div>
+        <div class="chips">
+          <button class="btn btn-outline btn-sm" data-a="addas" data-path="${esc(selPath)}" data-mode="cdb">使用编译数据库</button>
+          <button class="btn btn-outline btn-sm" data-a="addas" data-path="${esc(selPath)}" data-mode="basic">使用 BASIC 索引</button>
+        </div>`
+    } else if (m.mode === 'basic') {
+      detail = `<div class="detail-title">${esc(selPath)}</div>
+        <div class="detail-grid"><label>模式</label>
+          <div class="seg"><button data-a="setmode" data-i="${state.members.indexOf(m)}" data-mode="cdb">编译数据库</button><button aria-pressed="true">BASIC</button></div></div>
+        <div class="vstat neutral">${I.folder}<span>BASIC 索引 — 使用全局 BASIC 选项(见树底部节点)。</span></div>
+        <div class="chips"><button class="btn btn-outline btn-sm btn-destructive" data-a="remove" data-i="${state.members.indexOf(m)}">${I.x}移除文件夹</button></div>`
+    } else {
+      detail = `<div class="detail-title">${esc(selPath)}</div>
+        <div class="detail-grid"><label>模式</label>
+          <div class="seg"><button aria-pressed="true">编译数据库</button><button data-a="setmode" data-i="${state.members.indexOf(m)}" data-mode="basic">BASIC</button></div></div>
+        <div class="detail-grid"><label>数据库</label>
+          <input class="field" readonly value="${esc(HOSTS[state.host].db[m.dbKey])}">
+          <button class="btn btn-outline btn-sm" data-a="browse" data-i="${state.members.indexOf(m)}">浏览…</button></div>
+        ${vstatFor(m)}
+        <div class="chips">
+          <button class="btn btn-outline btn-sm" data-a="reload" data-i="${state.members.indexOf(m)}">${I.refresh}重新验证并重载</button>
+          <button class="btn btn-outline btn-sm btn-destructive" data-a="remove" data-i="${state.members.indexOf(m)}">${I.x}移除文件夹</button>
+        </div>`
+    }
+  }
+
+  const body = hostLine() +
+    `<div class="split">
+       <div class="tree-pane">${treeNodes}
+         <div class="tree-sep"></div>
+         <button class="tree-node" data-a="sel" data-path="opts" aria-current="${state.sel === 'opts'}">
+           <span class="chev">${I.gear.replace('<svg', '<svg width=12 height=12 style="color:var(--muted-foreground)"')}</span>
+           <span class="nm" style="font-family:inherit">全局 BASIC 选项</span></button>
+       </div>
+       <div class="detail-pane">${detail}</div>
+     </div>`
+
+  return dialogShell(true, '配置 C++ 代码智能',
+    '在工作区树上选择文件夹并指定模式:编译数据库或 BASIC 索引。', body, footHtml())
+}
+
+// ---------- switcher + plumbing ----------
+function render() {
+  document.body.className = state.dark ? 'dark' : 'light'
+  const stage = document.getElementById('stage')
+  stage.innerHTML = state.variant === 'A' ? renderA() : state.variant === 'B' ? renderB() : renderC()
+  const idx = VARIANTS.findIndex((v) => v.key === state.variant)
+  const v = VARIANTS[idx]
+  document.getElementById('switcher').innerHTML =
+    `<button data-sw="prev" aria-label="上一变体">←</button>
+     <div class="lbl">${v.key} · ${esc(v.name)}<small>${esc(v.sub)}</small></div>
+     <button data-sw="next" aria-label="下一变体">→</button>
+     <div class="sep"></div>
+     <button class="host-toggle" data-sw="host" title="切换执行主机">${state.host === 'ssh' ? I.server + ' SSH · build-server' : '⌂ 本机 · Windows'}</button>
+     <button data-sw="theme" aria-label="切换主题">${state.dark ? I.sun : I.moon}</button>`
+  try { // file:// may refuse query-only replaceState; variant persistence is best-effort
+    const url = new URL(location)
+    url.searchParams.set('variant', state.variant)
+    history.replaceState(null, '', url)
+  } catch (_) { /* ignore */ }
+}
+
+function toast(html) {
+  const el = document.createElement('div')
+  el.className = 'toast'
+  el.innerHTML = html
+  document.body.appendChild(el)
+  setTimeout(() => el.remove(), 2600)
+}
+
+function touch() { state.reauth = true } // any structural edit flags reauthorization
+
+document.addEventListener('click', (e) => {
+  const sw = e.target.closest('[data-sw]')
+  if (sw) {
+    const idx = VARIANTS.findIndex((v) => v.key === state.variant)
+    const act = sw.dataset.sw
+    if (act === 'prev') state.variant = VARIANTS[(idx + VARIANTS.length - 1) % VARIANTS.length].key
+    if (act === 'next') state.variant = VARIANTS[(idx + 1) % VARIANTS.length].key
+    if (act === 'host') { state.host = state.host === 'ssh' ? 'local' : 'ssh'; state.members = freshMembers(state.host); state.reloaded = {}; state.sel = null; state.pickerFor = null }
+    if (act === 'theme') state.dark = !state.dark
+    render()
+    return
+  }
+  const b = e.target.closest('[data-a]')
+  // clicking bare space only dismisses popover/conflict — full rerender would drop textarea input
+  if (!b) {
+    if (state.pickerFor !== null || state.conflict !== null) {
+      state.pickerFor = null
+      state.conflict = null
+      render()
+    }
+    return
+  }
+  const { a } = b.dataset
+  const m = b.dataset.i !== undefined ? state.members[+b.dataset.i] : null
+  if (a === 'expand' && m) { m.expanded = !m.expanded }
+  else if (a === 'setmode' && m) {
+    m.mode = b.dataset.mode; m.expanded = true; touch()
+    if (m.mode === 'cdb' && !m.dbKey) m.dbKey = 'vulkan'
+  }
+  else if (a === 'reload' && m) { state.reloaded[m.dbKey] = true; toast('已在 ' + HOSTS[state.host].label + ' 上重新验证:<b>' + esc(HOSTS[state.host].db[m.dbKey]) + '</b>') }
+  else if (a === 'remove' && m) { state.members.splice(+b.dataset.i, 1); touch() }
+  else if (a === 'rmdb') { state.members = state.members.filter((x) => x.dbKey !== b.dataset.db || x.mode !== 'cdb'); touch() }
+  else if (a === 'rmmap' && m) { state.members.splice(+b.dataset.i, 1); touch() }
+  else if (a === 'browse') { toast('打开' + (state.host === 'ssh' ? ' <b>' + esc(HOSTS[state.host].label) + '</b> 远程主机' : '本机') + '文件浏览器选择 compile_commands.json(原型 stub)') }
+  else if (a === 'toggle-opts') { state.optsOpen = !state.optsOpen }
+  else if (a === 'open-picker') { state.pickerFor = b.dataset.for; state.conflict = null }
+  else if (a === 'adddb') { toast('添加数据库:输入/浏览主机上的 compile_commands.json 路径(原型 stub)') }
+  else if (a === 'pick') {
+    const p = b.dataset.path
+    if (b.dataset.conflict) state.conflict = { path: p, withPath: b.dataset.conflict }
+    else {
+      state.members.push({ path: p, mode: 'basic', expanded: false })
+      touch()
+    }
+    state.pickerFor = null
+  }
+  else if (a === 'sel') {
+    state.sel = b.dataset.path
+    const t = TREE.find((x) => x.path === b.dataset.path)
+    if (t && t.container && !state.members.find((x) => x.path === t.path))
+      state.conflict = { path: t.path, withPath: t.container[0] }
+    else state.conflict = null
+  }
+  else if (a === 'addas') {
+    state.members.push({ path: b.dataset.path, mode: b.dataset.mode, dbKey: b.dataset.mode === 'cdb' ? 'vulkan' : undefined, expanded: false, state: 'ok', entries: 5 })
+    touch()
+  }
+  else if (a === 'save') {
+    const dbs = new Set(state.members.filter((x) => x.mode === 'cdb').map((x) => x.dbKey))
+    toast('<b>已保存</b> · ' + dbs.size + ' 个数据库 · ' +
+      state.members.filter((x) => x.mode === 'basic').length + ' 个 BASIC 文件夹' +
+      (state.reauth ? ' · 结构变更,已记录重新授权' : ''))
+    state.reauth = false
+  }
+  render()
+})
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return
+  const idx = VARIANTS.findIndex((v) => v.key === state.variant)
+  state.variant = VARIANTS[(idx + (e.key === 'ArrowRight' ? 1 : VARIANTS.length - 1)) % VARIANTS.length].key
+  render()
+})
+
+render()
+</script>
+</body>
+</html>
