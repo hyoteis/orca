@@ -110,5 +110,68 @@
     "text": "A–Z",
     "dynamic": false,
     "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "kind": "object-property:label",
+    "text": "BASIC",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "kind": "jsx-attribute:placeholder",
+    "text": "/home/user/build/compile_commands.json",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "kind": "jsx-attribute:placeholder",
+    "text": "D:\\build\\compile_commands.json",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "kind": "jsx-text",
+    "text": "C++17",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "kind": "jsx-text",
+    "text": "C++20",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "kind": "jsx-text",
+    "text": "C++23",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/status-bar/managed-language-server-recovery-details.tsx",
+    "kind": "jsx-expression",
+    "text": "Downloads",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/status-bar/use-managed-language-server-install.ts",
+    "kind": "object-property:error",
+    "text": "Runtime Hosts accept host downloads only",
+    "dynamic": false,
+    "count": 1
+  },
+  {
+    "filePath": "src/renderer/src/components/terminal-pane/terminal-log-level-colorizer.ts",
+    "kind": "object-property:error",
+    "text": "\u001b[91m",
+    "dynamic": false,
+    "count": 1
   }
 ]
