@@ -1,3 +1,5 @@
+import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
+
 /**
  * Aggregate refresh chain (spec §2 Step 3): changed supplied databases
  * re-merge automatically — local hosts through file events, SSH hosts through
@@ -11,7 +13,11 @@ export type AggregateRefreshRebuild = (scopeId: string) => Promise<void>
 export type AggregateDriftProbe = (paths: readonly string[]) => Promise<(string | null)[]>
 
 type TrackedScope = {
+  /** Configured paths verbatim — the drift probe stats these. */
   databasePaths: Set<string>
+  /** Comparison keys — Windows watchers report native backslash paths while
+   * the scope stores the configured form, so matching must fold separators. */
+  matchKeys: Set<string>
   rebuild: AggregateRefreshRebuild
 }
 
@@ -34,7 +40,11 @@ export class AggregateRefreshCoordinator {
       this.mergedSignatures.delete(scopeId)
       return
     }
-    this.scopes.set(scopeId, { databasePaths: new Set(databasePaths), rebuild })
+    this.scopes.set(scopeId, {
+      databasePaths: new Set(databasePaths),
+      matchKeys: new Set(databasePaths.map(normalizeRuntimePathForComparison)),
+      rebuild
+    })
   }
 
   untrack(scopeId: string): void {
@@ -44,8 +54,9 @@ export class AggregateRefreshCoordinator {
   /** A file event landed (local watcher or SSH provider) — schedule one
    * debounced single-flight rebuild per scope whose mapping it touches. */
   handleFileChange(changed: readonly string[]): void {
+    const changedKeys = changed.map(normalizeRuntimePathForComparison)
     for (const [scopeId, scope] of this.scopes) {
-      if (!changed.some((path) => scope.databasePaths.has(path))) {
+      if (!changedKeys.some((key) => scope.matchKeys.has(key))) {
         continue
       }
       this.clearTimer(scopeId)

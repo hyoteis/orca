@@ -29,6 +29,27 @@ describe('AggregateRefreshCoordinator', () => {
     coordinator.dispose()
   })
 
+  it('matches watcher events across separator forms', async () => {
+    // Windows watchers report native backslash paths while the scope stores the
+    // configured forward-slash form — and the native browse pick does the
+    // reverse. Either direction must still trigger the rebuild.
+    const forwardRebuild = vi.fn(async () => {})
+    const forwardCoordinator = new AggregateRefreshCoordinator(5)
+    forwardCoordinator.track('scope-a', ['D:/ws/build/compile_commands.json'], forwardRebuild)
+    forwardCoordinator.handleFileChange(['D:\\ws\\build\\compile_commands.json'])
+    await flush(20)
+    expect(forwardRebuild).toHaveBeenCalledTimes(1)
+    forwardCoordinator.dispose()
+
+    const nativeRebuild = vi.fn(async () => {})
+    const nativeCoordinator = new AggregateRefreshCoordinator(5)
+    nativeCoordinator.track('scope-b', ['D:\\ws\\build\\compile_commands.json'], nativeRebuild)
+    nativeCoordinator.handleFileChange(['D:/ws/build/compile_commands.json'])
+    await flush(20)
+    expect(nativeRebuild).toHaveBeenCalledTimes(1)
+    nativeCoordinator.dispose()
+  })
+
   it('keeps scopes independent and single-flights concurrent triggers', async () => {
     const resolvers: (() => void)[] = []
     const rebuildA = vi.fn(

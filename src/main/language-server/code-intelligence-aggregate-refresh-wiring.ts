@@ -1,23 +1,29 @@
 import { stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { subscribe as subscribeParcelWatcher } from '@parcel/watcher'
 import type { CodeIntelligenceScope } from '../../shared/code-intelligence-scope'
 import type { CodeIntelligenceScopeStore } from './code-intelligence-scope-store'
 import { AggregateRefreshCoordinator } from './code-intelligence-aggregate-refresh'
+import { subscribeViaWatcherProcess } from '../ipc/parcel-watcher-process'
 
-/** Local watch seam — tests mock it; production subscribes @parcel/watcher. */
+/** Local watch seam — tests mock it; production rides the crash-isolated
+ * watcher process (direct @parcel/watcher in Electron main silently delivers
+ * nothing on Windows; electron#7547). */
 export type LocalWatchSubscribe = (
   directory: string,
   onChange: (changed: readonly string[]) => void
 ) => Promise<() => void>
 
 const parcelSubscribe: LocalWatchSubscribe = async (directory, onChange) => {
-  const subscription = await subscribeParcelWatcher(directory, (error, events) => {
-    if (error || events.length === 0) {
-      return
-    }
-    onChange(events.map((event) => event.path))
-  })
+  const subscription = await subscribeViaWatcherProcess(
+    directory,
+    (error, events) => {
+      if (error || events.length === 0) {
+        return
+      }
+      onChange(events.map((event) => event.path))
+    },
+    {}
+  )
   return () => void subscription.unsubscribe()
 }
 
