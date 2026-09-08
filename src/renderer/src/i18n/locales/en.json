@@ -224,6 +224,12 @@
       "setupUnsupportedHost": "Code intelligence setup currently supports local and SSH Hosts.",
       "sshSetupDescription": "Orca runs C++ setup on the connected SSH Host and installs missing tools there.",
       "runningSetupOnHost": "Installing tools and generating compile commands on {{host}}...",
+      "mappingDegradedToast": "A compile database became unreadable — its last-valid entries keep working",
+      "mappingDegradedBanner": "A compile database is unreadable — its last-valid entries are still in use. Restore the file to re-merge automatically.",
+      "mappingDegradedDismiss": "Dismiss",
+      "upgradeNoticeTitle": "C++ code intelligence was upgraded",
+      "upgradeNoticeBody": "Python code intelligence was removed, and existing C++ scopes moved to the new mapped-database and BASIC model. Open Configure Code to review your folders.",
+      "upgradeNoticeDismiss": "Got it",
       "toggleFolderTree": "Expand folder"
     },
     "appearance": {

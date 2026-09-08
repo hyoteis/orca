@@ -494,3 +494,52 @@ describe('single aggregate session (#134 spec §2 Step 3)', () => {
     expect(launch.members).toHaveLength(3)
   })
 })
+
+describe('consent evolution and reauthorization (#137 spec §2 Step 4)', () => {
+  it('reauthorizes on a mode/database change at save', async () => {
+    const store = createStore([scope()])
+    const catalog = new CodeIntelligenceScopeStore(store)
+    const granted = catalog.grantConsent('scope', 1, 10)
+    expect(await catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })).toBeDefined()
+
+    // Save flips the folder from BASIC to a supplied database.
+    const saved = catalog.upsert(
+      scope({
+        ...granted,
+        members: [{ path: 'engine', visibleResults: true, compileDatabase: '/cdb/one.json' }]
+      })
+    )
+    expect(saved.scope.revision).toBe(2)
+    // Stale consent refuses the launch…
+    await expect(
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
+    ).rejects.toThrow('consent')
+    // …the reauthorize on save restores it.
+    catalog.grantConsent('scope', 2, 11)
+    const launch = await catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
+    expect(launch.members[0]).toMatchObject({ compileDatabase: '/cdb/one.json' })
+  })
+
+  it('auto-syncs folder evolution into members inheriting the workspace BASIC mode', () => {
+    const store = createStore([scope()])
+    const catalog = new CodeIntelligenceScopeStore(store)
+    const granted = catalog.grantConsent('scope', 1, 10)
+
+    // A new workspace folder joins through the same save path: it inherits the
+    // workspace's BASIC mode (no compileDatabase), riding the stale-consent banner.
+    const evolved = catalog.upsert(
+      scope({
+        ...granted,
+        members: [
+          { path: 'engine', visibleResults: true },
+          { path: 'newly-added', visibleResults: true }
+        ]
+      })
+    )
+    expect(evolved.scope.revision).toBe(2)
+    expect(evolved.scope.members.map((member) => member.path)).toEqual(['engine', 'newly-added'])
+    expect(evolved.scope.members.every((member) => member.compileDatabase === undefined)).toBe(true)
+    // The prior consent survived but is stale — the banner diff shows the new folder.
+    expect(evolved.scope.consent?.authorizedMembers).toEqual([{ path: 'engine', visibleResults: true }])
+  })
+})

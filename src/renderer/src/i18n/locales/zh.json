@@ -77,6 +77,12 @@
         "workingLabel": "正在处理…",
         "openLink": "打开下载页面"
       },
+      "mappingDegradedToast": "编译数据库无法读取——最近的可用条目仍在工作",
+      "mappingDegradedBanner": "编译数据库无法读取——仍在使用其最近的有效条目。恢复该文件后将自动重新合并。",
+      "mappingDegradedDismiss": "关闭",
+      "upgradeNoticeTitle": "C++ 代码智能已升级",
+      "upgradeNoticeBody": "Python 代码智能已移除，现有 C++ 范围已迁移到新的映射数据库与 BASIC 模型。可通过“配置代码”查看文件夹。",
+      "upgradeNoticeDismiss": "知道了",
       "setupTitle": "配置代码",
       "setupDescription": "Orca 会安装缺失工具，并生成编译命令。源文件不会被修改。",
       "buildScanFailed": "无法扫描 C++ 构建文件夹",

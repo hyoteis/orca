@@ -19,6 +19,7 @@ const mockState = vi.hoisted(() => ({
   sshConnectionStates: new Map<string, { supportsFolderDownload?: boolean }>(),
   sshStateByEnvironment: new Map<string, unknown>(),
   openFiles: [] as unknown[],
+  updateSettings: vi.fn(async () => {}) as unknown as (updates: Partial<GlobalSettings>) => Promise<void>,
   closeFile: vi.fn(),
   showRightSidebarSearch: vi.fn(),
   openModal: vi.fn(),
@@ -545,5 +546,31 @@ describe('CodeScopesSection member context menu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
     expect(windowApi.shell.openPath).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalled()
+  })
+})
+
+describe('CodeScopesSection one-time upgrade notice (#137)', () => {
+  it('shows while pending and persists dismissal through the flag', async () => {
+    const mockUpdateSettings = vi.fn(async () => {})
+    ;(mockState as { updateSettings?: unknown }).updateSettings = mockUpdateSettings
+    mockState.settings = {
+      codeIntelligenceScopes: [],
+      codeIntelligenceModelUpgradeNoticePending: true
+    } as unknown as GlobalSettings
+    const { rerender } = render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.getByRole('status').textContent).toContain('C++ code intelligence was upgraded')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+    await waitFor(() =>
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ codeIntelligenceModelUpgradeNoticePending: false })
+    )
+
+    // Dismissal persisted: the flag reads false and the notice never returns.
+    mockState.settings = {
+      codeIntelligenceScopes: [],
+      codeIntelligenceModelUpgradeNoticePending: false
+    } as unknown as GlobalSettings
+    rerender(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

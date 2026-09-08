@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { ChevronDown, ChevronRight, Loader2, Settings2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, Settings2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppStore } from '@/store'
@@ -62,8 +62,38 @@ export function CodeScopesSection({
     return null
   }
 
+  const settings = useAppStore((s) => s.settings)
+  const updateSettings = useAppStore((s) => s.updateSettings)
+  // One-time (#128 armed it): covers the python removal + BASIC migration;
+  // dismissal persists through the flag flip, never returns.
+  const upgradeNoticePending = settings?.codeIntelligenceModelUpgradeNoticePending === true
+
   return (
     <div className={cn(!collapsed && fillRemaining && 'flex min-h-0 flex-1 flex-col')}>
+      {upgradeNoticePending && !collapsed ? (
+        <div className="flex items-start gap-1.5 border-b border-explorer-section-divider bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground" role="status">
+          <Sparkles className="mt-0.5 size-3 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <span className="font-medium text-foreground">
+              {translate('settings.codeIntelligence.upgradeNoticeTitle', 'C++ code intelligence was upgraded')}
+            </span>
+            <p className="mt-0.5 leading-snug">
+              {translate('settings.codeIntelligence.upgradeNoticeBody', 'Python code intelligence was removed, and existing C++ scopes moved to the new mapped-database and BASIC model. Open Configure Code to review your folders.')}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-5 shrink-0 px-1.5 text-[10px]"
+            onClick={() => {
+              void updateSettings({ codeIntelligenceModelUpgradeNoticePending: false })
+            }}
+          >
+            {translate('settings.codeIntelligence.upgradeNoticeDismiss', 'Got it')}
+          </Button>
+        </div>
+      ) : null}
       <div className="flex items-center gap-0.5 border-y border-explorer-section-divider px-1 py-1">
         <button
           type="button"
