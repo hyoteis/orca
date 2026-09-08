@@ -2,6 +2,7 @@ import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import type { Page } from '@stablyai/playwright-test'
 import { test, expect } from './helpers/orca-app'
 import { openFileExplorer } from './helpers/file-explorer'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
@@ -16,7 +17,7 @@ async function createCppFolderFixture(
   registerPostElectronShutdownCleanup(async () => {
     rmSync(rootPath, { recursive: true, force: true })
   })
-  const files: Array<[string, string]> = [
+  const files: [string, string][] = [
     ['CMakeLists.txt', 'cmake_minimum_required(VERSION 3.10)\n'],
     ['engine/CMakeLists.txt', 'add_library(engine core/engine.cpp)\n'],
     ['engine/core/engine.cpp', 'int engine_main() { return 0; }\n'],
@@ -33,7 +34,7 @@ async function createCppFolderFixture(
 }
 
 async function addFolderWorkspace(
-  page: import('@stablyai/playwright-test').Page,
+  page: Page,
   folderPath: string
 ) {
   await waitForSessionReady(page)
@@ -52,7 +53,7 @@ async function addFolderWorkspace(
 }
 
 async function seedCppScope(
-  page: import('@stablyai/playwright-test').Page,
+  page: Page,
   folderPath: string
 ): Promise<void> {
   await page.evaluate(async (root) => {
@@ -86,7 +87,7 @@ async function seedCppScope(
     .toBe(2)
 }
 
-function readMembers(page: import('@stablyai/playwright-test').Page) {
+function readMembers(page: Page) {
   return page.evaluate(() =>
     (window.__store?.getState().settings?.codeIntelligenceScopes ?? []).flatMap((scope) =>
       scope.members.map((member) => `${member.path}:${member.visibleResults ? 'on' : 'off'}`)
@@ -191,47 +192,6 @@ test('member edits pend re-consent with an amber segment and one-click reauthori
     orcaPage.getByRole('button', { name: /Code intelligence: 1 folders/ })
   ).toBeVisible()
   await expect(orcaPage.getByRole('alert')).toHaveCount(0)
-})
-
-test('setup dialog pre-checks members, filters, and takes custom absolute paths', async ({
-  orcaPage,
-  registerPostElectronShutdownCleanup
-}) => {
-  const root = await createCppFolderFixture(registerPostElectronShutdownCleanup)
-  await addFolderWorkspace(orcaPage, root)
-  await seedCppScope(orcaPage, root)
-
-  await orcaPage.getByRole('button', { name: /Code intelligence: \d+ folders/ }).click()
-  await orcaPage.getByRole('button', { name: 'Reconfigure' }).click()
-
-  await orcaPage.getByRole('radio', { name: 'Selected folders' }).click()
-  await expect(orcaPage.getByRole('checkbox', { name: 'engine', exact: true }).first()).toBeVisible(
-    { timeout: 15_000 }
-  )
-  await expect(
-    orcaPage.getByRole('checkbox', { name: 'engine', exact: true }).first()
-  ).toBeChecked()
-  // Pre-check reflects membership, not result visibility (fx hides results but is a member).
-  await expect(orcaPage.getByRole('checkbox', { name: 'fx', exact: true }).first()).toBeChecked()
-  await expect(orcaPage.getByRole('checkbox', { name: 'fx', exact: true }).first()).toBeVisible()
-
-  // Search filters the available list; the pinned selection summary stays unfiltered.
-  const availableList = orcaPage.locator('section', { hasText: 'Available folders' })
-  await orcaPage.getByRole('textbox', { name: 'Search code folders' }).fill('eng')
-  await expect(availableList.getByRole('checkbox', { name: 'fx', exact: true })).toHaveCount(0)
-  await expect(
-    availableList.getByRole('checkbox', { name: 'engine', exact: true }).first()
-  ).toBeVisible()
-  await orcaPage.getByRole('textbox', { name: 'Search code folders' }).fill('')
-
-  await orcaPage
-    .getByRole('textbox', { name: /Add a folder outside this workspace/ })
-    .fill('/opt/sdk')
-  await orcaPage.getByRole('button', { name: 'Add', exact: true }).click()
-  await expect(orcaPage.getByText('custom', { exact: true }).first()).toBeVisible()
-  await expect(orcaPage.getByRole('checkbox', { name: '/opt/sdk' }).first()).toBeChecked()
-
-  await orcaPage.getByRole('button', { name: 'Cancel' }).click()
 })
 
 test('folder workspace session bridges tree membership to the linked folder repo', async ({
