@@ -111,6 +111,26 @@ export type AggregateMappingHealthSnapshot = {
   state: 'ok' | 'degraded' | 'warning'
   failure?: 'not-found' | 'invalid-json' | 'invalid-shape' | 'no-in-folder-commands'
 }
+
+/** Workspace-level Configure Code save (#138): one row, one mode. */
+export type CodeIntelligenceConfigureAggregateRequest = {
+  repoId: string
+  mode: 'cdb' | 'basic'
+  /** Host-absolute; required in cdb mode. */
+  compileDatabase?: string
+  basicOptions?: CodeIntelligenceBasicOptions
+}
+
+export type CodeIntelligenceConfigureAggregateResult = {
+  scope: CodeIntelligenceScope
+  mappings: readonly AggregateMappingHealthSnapshot[]
+  entryCount: number
+}
+
+export type CodeIntelligenceRevalidateAggregateResult = {
+  mappings: readonly AggregateMappingHealthSnapshot[]
+  entryCount: number
+}
 export type CodeIntelligenceScope = {
   id: string
   name: string

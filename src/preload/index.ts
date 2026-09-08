@@ -4,6 +4,11 @@ import { contextBridge, ipcRenderer, webFrame, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { preloadE2EConfig } from './e2e-config'
 import { glApi } from './gitlab'
+import type {
+  CodeIntelligenceConfigureAggregateRequest,
+  CodeIntelligenceConfigureAggregateResult,
+  CodeIntelligenceRevalidateAggregateResult
+} from '../shared/code-intelligence-scope'
 import type { AppIdentity } from '../shared/app-identity'
 import type { ComputerAwakeStatus } from '../shared/computer-awake-mode'
 import type {
@@ -499,6 +504,10 @@ const api = {
     removeScope: (scopeId) => ipcRenderer.invoke('codeIntelligence:removeScope', scopeId),
     grantConsent: (request) => ipcRenderer.invoke('codeIntelligence:grantConsent', request),
     authorizeSession: (request) => ipcRenderer.invoke('codeIntelligence:authorizeSession', request),
+    configureAggregate: (request: CodeIntelligenceConfigureAggregateRequest) =>
+      ipcRenderer.invoke('codeIntelligence:configureAggregate', request) as Promise<CodeIntelligenceConfigureAggregateResult>,
+    revalidateAggregate: (request: { repoId: string }) =>
+      ipcRenderer.invoke('codeIntelligence:revalidateAggregate', request) as Promise<CodeIntelligenceRevalidateAggregateResult>,
     managedInstallState: (request) =>
       ipcRenderer.invoke('codeIntelligence:managedInstallState', request),
     installManagedLanguageServer: (request) =>
@@ -2537,6 +2546,7 @@ const api = {
     pathExists: (path: string): Promise<boolean> => ipcRenderer.invoke('shell:pathExists', path),
 
     pickAttachment: (): Promise<string | null> => ipcRenderer.invoke('shell:pickAttachment'),
+    pickCompileDatabase: (): Promise<string | null> => ipcRenderer.invoke('shell:pickCompileDatabase'),
 
     pickImage: (): Promise<string | null> => ipcRenderer.invoke('shell:pickImage'),
 

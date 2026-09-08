@@ -236,6 +236,19 @@ export function registerShellHandlers(store: Store): void {
     return result.filePaths[0]
   })
 
+  // Configure Code (#138): local host compile database picker — JSON filter,
+  // no directory selection (the path must name a file on the Host).
+  ipcMain.handle('shell:pickCompileDatabase', async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'compile_commands.json', extensions: ['json'] }]
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    return result.filePaths[0]
+  })
+
   // Why: window.prompt() and <input type="file"> are unreliable in Electron,
   // so we use the native OS dialog to let the user pick an image file.
   ipcMain.handle('shell:pickImage', async (): Promise<string | null> => {
