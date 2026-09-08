@@ -95,7 +95,8 @@ describe('supplied database validation', () => {
         initial: true
       })
     ).rejects.toThrow('mapped folder')
-    // …a later re-merge of the same readable database no longer blocks on it.
+    // …a later re-merge of the same readable database no longer blocks on it:
+    // entries merge and the mapping only warns (#136).
     const result = await buildAggregateCompileDatabase({
       host: createHost(files),
       workspaceRoot: '/ws',
@@ -104,7 +105,10 @@ describe('supplied database validation', () => {
       initial: false
     })
     expect(result).toMatchObject({ entryCount: 1 })
-    expect(result.mappings[0]).toMatchObject({ degraded: false })
+    expect(result.mappings[0]).toMatchObject({
+      state: 'warning',
+      failure: 'no-in-folder-commands'
+    })
   })
 
   it('accepts a database whose commands cover the mapped folder', () => {
@@ -223,7 +227,7 @@ describe('buildAggregateCompileDatabase', () => {
       mappings: { memberPath: string; degraded: boolean; entryCount: number }[]
     }
     expect(manifest.mappings).toMatchObject([
-      { memberPath: 'one', degraded: false, entryCount: 2 }
+      { memberPath: 'one', state: 'ok', entryCount: 2 }
     ])
   })
 
@@ -253,10 +257,58 @@ describe('buildAggregateCompileDatabase', () => {
       initial: false
     })
     expect(degraded.mappings).toMatchObject([
-      { memberPath: 'one', degraded: false, entryCount: 1 },
-      { memberPath: 'two', degraded: true, failure: 'not-found', entryCount: 1 }
+      { memberPath: 'one', state: 'ok', entryCount: 1 },
+      { memberPath: 'two', state: 'degraded', failure: 'not-found', entryCount: 1 }
     ])
     const aggregate = JSON.parse(host.files.get('/cache/scope/compile_commands.json')!) as { file: string }[]
     expect(aggregate.map((row) => row.file).sort()).toEqual(['/ws/one/main.cpp', '/ws/two/gen.cpp'])
+  })
+})
+
+describe('degradation semantics (#136 spec §2 Step 4)', () => {
+  const members = [
+    { path: 'one', visibleResults: true, compileDatabase: '/cdb/one.json' }
+  ]
+
+  it('warns on readable-but-corrupt content while the snapshot keeps working', async () => {
+    const host = createHost({
+      '/cdb/one.json': JSON.stringify([entry('/ws/one/main.cpp')])
+    })
+    await buildAggregateCompileDatabase({
+      host, workspaceRoot: '/ws', members, scopeDirectory: '/cache/scope', initial: true
+    })
+    // The file stays readable but its content rots.
+    host.files.set('/cdb/one.json', '}{ not json')
+    const rebuilt = await buildAggregateCompileDatabase({
+      host, workspaceRoot: '/ws', members, scopeDirectory: '/cache/scope', initial: false
+    })
+    expect(rebuilt.mappings[0]).toMatchObject({
+      state: 'warning',
+      failure: 'invalid-json',
+      entryCount: 1
+    })
+    const aggregate = JSON.parse(host.files.get('/cache/scope/compile_commands.json')!) as { file: string }[]
+    expect(aggregate.map((row) => row.file)).toEqual(['/ws/one/main.cpp'])
+  })
+
+  it('auto-heals back to ok when the database recovers', async () => {
+    const host = createHost({
+      '/cdb/one.json': JSON.stringify([entry('/ws/one/main.cpp')])
+    })
+    await buildAggregateCompileDatabase({
+      host, workspaceRoot: '/ws', members, scopeDirectory: '/cache/scope', initial: true
+    })
+    host.files.delete('/cdb/one.json')
+    const degraded = await buildAggregateCompileDatabase({
+      host, workspaceRoot: '/ws', members, scopeDirectory: '/cache/scope', initial: false
+    })
+    expect(degraded.mappings[0]).toMatchObject({ state: 'degraded', failure: 'not-found' })
+    // The mount returns — the refresh chain rebuilds and health returns to ok.
+    host.files.set('/cdb/one.json', JSON.stringify([entry('/ws/one/main.cpp')]))
+    const healed = await buildAggregateCompileDatabase({
+      host, workspaceRoot: '/ws', members, scopeDirectory: '/cache/scope', initial: false
+    })
+    expect(healed.mappings[0]).toMatchObject({ state: 'ok' })
+    expect('failure' in healed.mappings[0]).toBe(false)
   })
 })

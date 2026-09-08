@@ -98,6 +98,18 @@ export type CodeIntelligenceScopeChange = {
   scopeId: string
   revision: number | null
   removed: boolean
+  /** Ephemeral mapping health (#136 spec §2 Step 4): rides this push, never
+   * persisted into settings — absent on ordinary scope changes. */
+  mappingHealth?: readonly AggregateMappingHealthSnapshot[]
+}
+
+/** Per-mapping health as of the latest aggregate rebuild. */
+export type AggregateMappingHealthSnapshot = {
+  id: string
+  memberPath: string
+  compileDatabase: string
+  state: 'ok' | 'degraded' | 'warning'
+  failure?: 'not-found' | 'invalid-json' | 'invalid-shape' | 'no-in-folder-commands'
 }
 export type CodeIntelligenceScope = {
   id: string

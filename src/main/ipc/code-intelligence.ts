@@ -154,7 +154,7 @@ export function registerCodeIntelligenceHandlers(
       : createLocalCppSetupHost({ cacheRoot: cppCacheRoot })
     const repo = store.getRepos().find((candidate) => candidate.id === scope.workspaceKey.split(':').slice(1).join(':'))
     const scopeDirectory = repo ? await host.scopeDirectoryFor(repo) : cppScopeDirectoryPath(cppCacheRoot, scope.id)
-    await buildAggregateCompileDatabase({
+    const built = await buildAggregateCompileDatabase({
       host,
       workspaceRoot: scope.workspaceRoot,
       members: scope.members,
@@ -169,6 +169,21 @@ export function registerCodeIntelligenceHandlers(
       const mtimes = (await host.statMtimes(databases)) ?? []
       coordinator.noteMerged(scope.id, mtimes.join('|'))
     }
+    // Health rides the existing scope-snapshot push as an ephemeral field
+    // (#136): revision null + removed false marks it health-only; nothing is
+    // persisted into settings.
+    broadcastScopeChange({
+      scopeId: scope.id,
+      revision: null,
+      removed: false,
+      mappingHealth: built.mappings.map((mapping) => ({
+        id: mapping.id,
+        memberPath: mapping.memberPath,
+        compileDatabase: mapping.compileDatabase,
+        state: mapping.state,
+        ...(mapping.failure ? { failure: mapping.failure } : {})
+      }))
+    })
   }
   const syncAggregateTracking = (): void => {
     void syncAggregateRefreshTracking({ scopes, watch: aggregateWatch, rebuild: rebuildAggregate })

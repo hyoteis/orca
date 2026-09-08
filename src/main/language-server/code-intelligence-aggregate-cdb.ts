@@ -147,13 +147,18 @@ export type AggregateCdbHost = Pick<
   'detection' | 'readTextFile' | 'writeTextFile' | 'findSourceFiles' | 'findIncludeDirectories' | 'readableDirectories' | 'ensureDirectory'
 >
 
+/** Mapping health (#136 spec §2 Step 4): `degraded` = unreadable, the
+ * last-valid snapshot is what keeps working; `warning` = readable but flawed
+ * (corrupt JSON/shape, or zero in-folder coverage) — never blocks, never
+ * banners; `ok` = fresh entries merged. */
+export type AggregateCdbMappingState = 'ok' | 'degraded' | 'warning'
+
 export type AggregateCdbMappingStatus = {
   id: string
   memberPath: string
   compileDatabase: string
   entryCount: number
-  /** True when this rebuild fell back to the mapping's last-valid snapshot. */
-  degraded: boolean
+  state: AggregateCdbMappingState
   failure?: SuppliedCdbFailureType
 }
 
@@ -190,7 +195,7 @@ async function collectMappedEntries(
     memberPath: member.path,
     compileDatabase: member.compileDatabase,
     entryCount: 0,
-    degraded: false
+    state: 'ok'
   }
   let text: string
   try {
@@ -202,7 +207,7 @@ async function collectMappedEntries(
     const snapshot = await readSnapshot(host, args.mappingsDirectory, id)
     return {
       entries: snapshot,
-      status: { ...status, entryCount: snapshot.length, degraded: true, failure: 'not-found' }
+      status: { ...status, entryCount: snapshot.length, state: 'degraded', failure: 'not-found' }
     }
   }
   const parsed = parseSuppliedCdbText(text)
@@ -210,10 +215,12 @@ async function collectMappedEntries(
     if (initial) {
       throw new Error(failureMessage('invalid-json', member.compileDatabase))
     }
+    // Readable but corrupt: the snapshot keeps the TU set working — a warning,
+    // never a degradation (#136).
     const snapshot = await readSnapshot(host, args.mappingsDirectory, id)
     return {
       entries: snapshot,
-      status: { ...status, entryCount: snapshot.length, degraded: true, failure: 'invalid-json' }
+      status: { ...status, entryCount: snapshot.length, state: 'warning', failure: 'invalid-json' }
     }
   }
   if (!isValidSuppliedCdbShape(parsed)) {
@@ -223,12 +230,18 @@ async function collectMappedEntries(
     const snapshot = await readSnapshot(host, args.mappingsDirectory, id)
     return {
       entries: snapshot,
-      status: { ...status, entryCount: snapshot.length, degraded: true, failure: 'invalid-shape' }
+      status: { ...status, entryCount: snapshot.length, state: 'warning', failure: 'invalid-shape' }
     }
   }
   const entries = normalizeSuppliedCdbEntries(parsed, host.detection)
-  if (initial && !hasInFolderCommand(entries, workspaceRoot, member.path)) {
-    throw new Error(failureMessage('no-in-folder-commands', member.compileDatabase))
+  if (!hasInFolderCommand(entries, workspaceRoot, member.path)) {
+    if (initial) {
+      throw new Error(failureMessage('no-in-folder-commands', member.compileDatabase))
+    }
+    // Zero in-folder coverage on a later re-merge: entries stay merged, the
+    // mapping only warns.
+    await host.writeTextFile(args.mappingsDirectory, `${id}.json`, serializeAggregateCdb(entries))
+    return { entries, status: { ...status, entryCount: entries.length, state: 'warning', failure: 'no-in-folder-commands' } }
   }
   await host.writeTextFile(args.mappingsDirectory, `${id}.json`, serializeAggregateCdb(entries))
   return { entries, status: { ...status, entryCount: entries.length } }
