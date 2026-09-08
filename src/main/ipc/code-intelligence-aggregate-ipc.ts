@@ -51,15 +51,28 @@ export function registerAggregateCodeIntelligenceHandlers(
 ): { syncAggregateTracking: () => void } {
   const aggregateWatch = new LocalAggregateWatchSet()
   const coordinator = getAggregateRefreshCoordinator()
-  const hostFor = (scope: CodeIntelligenceScope) =>
-    parseExecutionHostId(scope.executionHostId)?.kind === 'ssh'
-      ? createSshCppSetupHost(dependencies as never)
-      : createLocalCppSetupHost({ cacheRoot: cppCacheRoot })
-  const rebuildAggregate = async (scope: CodeIntelligenceScope): Promise<void> => {
-    const host = hostFor(scope)
-    const repo = store
+  const repoFor = (scope: CodeIntelligenceScope) =>
+    store
       .getRepos()
       .find((candidate) => candidate.id === scope.workspaceKey.split(':').slice(1).join(':'))
+  // Why validate first: the SSH host resolves its exec queue/platform lazily
+  // inside validateRepoHost — every other seam throws before it runs.
+  const hostFor = async (scope: CodeIntelligenceScope) => {
+    const host =
+      parseExecutionHostId(scope.executionHostId)?.kind === 'ssh'
+        ? createSshCppSetupHost(dependencies as never)
+        : createLocalCppSetupHost({ cacheRoot: cppCacheRoot })
+    const repo = repoFor(scope)
+    if (repo) {
+      const problem = await host.validateRepoHost(repo, [])
+      if (problem) {
+        throw new Error(problem)
+      }
+    }
+    return { host, repo }
+  }
+  const rebuildAggregate = async (scope: CodeIntelligenceScope): Promise<void> => {
+    const { host, repo } = await hostFor(scope)
     const scopeDirectory = repo
       ? await host.scopeDirectoryFor(repo)
       : cppScopeDirectoryPath(cppCacheRoot, scope.id)
@@ -101,7 +114,8 @@ export function registerAggregateCodeIntelligenceHandlers(
   const driftProbeFor = (scope: CodeIntelligenceScope): AggregateDriftProbe =>
     parseExecutionHostId(scope.executionHostId)?.kind === 'ssh'
       ? async (paths) => {
-          const mtimes = (await createSshCppSetupHost(dependencies as never).statMtimes(paths)) ?? []
+          const { host } = await hostFor(scope)
+          const mtimes = (await host.statMtimes(paths)) ?? []
           return mtimes.map((mtime) => (mtime === null ? null : String(mtime)))
         }
       : localAggregateDriftProbe
@@ -174,8 +188,10 @@ export function registerAggregateCodeIntelligenceHandlers(
     async (_event, request: Parameters<typeof upsertWorkspaceScope>[0]) => {
       const scope = await upsertWorkspaceScope(request)
       // Initial build: full validation; failures fail the save with a readable error.
-      const host = hostFor(scope)
-      const repo = store.getRepo(request.repoId)!
+      const { host, repo } = await hostFor(scope)
+      if (!repo) {
+        throw new Error('Unknown workspace')
+      }
       const built = await buildAggregateCompileDatabase({
         host,
         workspaceRoot: scope.workspaceRoot,
@@ -201,7 +217,7 @@ export function registerAggregateCodeIntelligenceHandlers(
       throw new Error('Unknown workspace')
     }
     await rebuildAggregate(scope)
-    const host = hostFor(scope)
+    const { host } = await hostFor(scope)
     const built = await buildAggregateCompileDatabase({
       host,
       workspaceRoot: scope.workspaceRoot,
