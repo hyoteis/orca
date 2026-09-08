@@ -51,15 +51,14 @@ function sameConfiguration(left: CodeIntelligenceScope, right: CodeIntelligenceS
 }
 
 /** Config payload without members — member-only edits keep the clangd session
- * alive (spec §5: the atomic CDB rewrite is picked up lazily), while any other
- * change alters the launch and must restart it. */
+ * alive (spec §5), while any other change alters the launch and must restart
+ * it. setupStatus/generatedAt and basicOptions stay out too (#134): they shape
+ * the aggregate's *content*, which the running session re-reads lazily; only a
+ * real launch-config change restarts. */
 function launchConfigurationPayload(scope: CodeIntelligenceScope): Record<string, unknown> {
-  const { members: _members, ...payload } = scopeConfigurationPayload(
-    scope
-  ) as Record<string, unknown>
-  // A setup regeneration rewrote the compile database this launch consumes:
-  // identical everything else still restarts the server (dialog re-run).
-  return { ...payload, setupGeneratedAt: scope.setupStatus?.generatedAt ?? null }
+  const { members: _members, setupStatus: _setupStatus, basicOptions: _basicOptions, ...payload } =
+    scopeConfigurationPayload(scope) as Record<string, unknown>
+  return payload
 }
 
 function sameLaunchConfiguration(
@@ -147,10 +146,9 @@ export class CodeIntelligenceScopeStore {
     const index = scopes.findIndex((scope) => scope.id === next.id)
     const prior = index !== -1 ? scopes[index] : null
     const configurationChanged = prior ? !sameConfiguration(prior, next) : false
-    // Restart when the launch itself changed; member-only changes bump the
-    // revision (consent chain) while the running clangd session stays up.
-    // setupGeneratedAt rides in the launch payload, so a re-run setup
-    // restarts without touching the consent chain.
+    // Restart when the launch itself changed; member-only changes and
+    // aggregate re-merges (setupStatus/generatedAt) keep the running clangd
+    // session up — it re-reads the rewritten compile database lazily.
     const restartRequired = prior ? !sameLaunchConfiguration(prior, next) : false
     next = prior
       ? {

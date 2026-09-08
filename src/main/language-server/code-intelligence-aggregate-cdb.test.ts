@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { posix } from 'node:path'
 import type { CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
+import type { AggregateCdbEntry } from './code-intelligence-aggregate-cdb'
 import {
   aggregateMappingId,
   buildAggregateCompileDatabase,
@@ -20,7 +21,7 @@ const posixDetection = {
   basename: posix.basename,
   isAbsolute: posix.isAbsolute,
   isReadablePath: async () => true
-} as CppBuildRootDetection
+} as unknown as CppBuildRootDetection
 
 function createHost(files: Record<string, string> = {}): AggregateCdbHost & {
   files: Map<string, string>
@@ -47,10 +48,10 @@ function createHost(files: Record<string, string> = {}): AggregateCdbHost & {
     findIncludeDirectories: async () => [],
     readableDirectories: async (candidates) => candidates,
     ensureDirectory: async () => {}
-  } as AggregateCdbHost & { files: Map<string, string>; writes: { directory: string; fileName: string; content: string }[] }
+  } as unknown as AggregateCdbHost & { files: Map<string, string>; writes: { directory: string; fileName: string; content: string }[] }
 }
 
-const entry = (file: string, overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+const entry = (file: string, overrides: Partial<AggregateCdbEntry> = {}): AggregateCdbEntry => ({
   directory: posix.dirname(file),
   file,
   arguments: ['clang++', '-c', file],

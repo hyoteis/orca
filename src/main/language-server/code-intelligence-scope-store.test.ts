@@ -107,9 +107,9 @@ describe('CodeIntelligenceScopeStore', () => {
     ).toBe(false)
   })
 
-  it('restarts on a re-run setup without burning a revision or consent', () => {
-    // Identical configuration, but the setup regenerated the compile database
-    // the launch consumes — the session must restart; the consent chain must not.
+  it('keeps the session alive across an aggregate re-merge (#134)', () => {
+    // The setup regenerated the compile database behind the launch — the
+    // running clangd re-reads it lazily; the session must not restart.
     const result = new CodeIntelligenceScopeStore(createStore([scope()])).upsert({
       ...scope(),
       setupStatus: {
@@ -121,7 +121,7 @@ describe('CodeIntelligenceScopeStore', () => {
         compileCommandsDir: 'C:/cache/scope'
       }
     })
-    expect(result.restartRequired).toBe(true)
+    expect(result.restartRequired).toBe(false)
     expect(result.scope.revision).toBe(1)
   })
 
@@ -436,5 +436,61 @@ describe('declined-auto-scope pruning (#130)', () => {
     expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([])
     // No python scope was dropped, so no upgrade notice is owed.
     expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBeUndefined()
+  })
+})
+
+describe('single aggregate session (#134 spec §2 Step 3)', () => {
+  it('restarts only on genuine launch-config changes', () => {
+    const upsert = (next: CodeIntelligenceScope): boolean =>
+      new CodeIntelligenceScopeStore(createStore([scope()])).upsert(next).restartRequired
+    // Real launch changes restart.
+    expect(upsert({ ...scope(), enabled: false })).toBe(true)
+    expect(
+      upsert({ ...scope(), serverSource: { type: 'custom', executable: '/opt/clangd', args: [] } })
+    ).toBe(true)
+    // Mapping edits (compileDatabase) are member-only: no restart.
+    expect(
+      upsert({
+        ...scope(),
+        members: [{ path: 'engine', visibleResults: true, compileDatabase: '/b/cdb.json' }]
+      })
+    ).toBe(false)
+    // basicOptions edits synthesize different entries — still no restart.
+    expect(
+      upsert({
+        ...scope(),
+        basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [] }
+      })
+    ).toBe(false)
+    // A later re-merge touching only setupStatus freshness: no restart.
+    expect(
+      upsert({
+        ...scope(),
+        setupStatus: { state: 'ready', mode: 'basic', generatedAt: 99 }
+      })
+    ).toBe(false)
+  })
+
+  it('serves mapped and BASIC folders of one scope from a single launch', async () => {
+    const store = createStore()
+    const catalog = new CodeIntelligenceScopeStore(store)
+    const mixed = scope({
+      members: [
+        { path: 'engine', visibleResults: true, compileDatabase: '/b/engine-cdb.json' },
+        { path: 'third_party', visibleResults: true, compileDatabase: '/b/vendor-cdb.json' },
+        { path: 'tools', visibleResults: true }
+      ]
+    })
+    const saved = catalog.upsert(mixed)
+    catalog.grantConsent('scope', saved.scope.revision)
+    // One authorizeSession call describes the whole scope: one clangd, one
+    // --compile-commands-dir over the aggregate, every member riding along.
+    const launch = await catalog.authorizeSession({
+      sessionId: 's',
+      scopeId: 'scope',
+      revision: saved.scope.revision
+    })
+    expect(launch).toMatchObject({ kind: 'clangd', workspaceRoot: '/workspace' })
+    expect(launch.members).toHaveLength(3)
   })
 })
