@@ -2,7 +2,7 @@ import type {
   CodeIntelligenceLanguage,
   CodeIntelligenceScope
 } from '../../../../shared/code-intelligence-scope'
-import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-scope'
+import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-consent-staleness'
 import { isRuntimePathAbsolute } from '../../../../shared/cross-platform-path'
 import { joinPath, basename } from '../../lib/path'
 

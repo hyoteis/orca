@@ -6,9 +6,9 @@ import type {
 } from '../../../../shared/code-intelligence-scope'
 import {
   getCodeIntelligenceScopeId,
-  getCodeIntelligenceWorkspaceKey,
-  isCodeIntelligenceConsentStale
+  getCodeIntelligenceWorkspaceKey
 } from '../../../../shared/code-intelligence-scope'
+import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-consent-staleness'
 import { createRepositoryCodeIntelligenceScope } from '../settings/repository-code-intelligence-scope'
 import { regroupQualifiedRows } from './outline-qualified-regroup'
 

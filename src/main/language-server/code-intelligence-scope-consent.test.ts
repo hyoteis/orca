@@ -5,9 +5,9 @@ import {
   hasCurrentCodeIntelligenceConsent
 } from './code-intelligence-scope-consent'
 import {
-  codeIntelligenceConfigurationSnapshot,
   type CodeIntelligenceScope
 } from '../../shared/code-intelligence-scope'
+import { codeIntelligenceConfigurationSnapshot } from '../../shared/code-intelligence-consent-staleness'
 const scope = (): CodeIntelligenceScope => ({
   id: 'scope',
   name: 'Engine',

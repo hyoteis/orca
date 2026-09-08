@@ -22,7 +22,7 @@ import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence
 import {
   countChangedCodeIntelligenceMembers,
   isCodeIntelligenceConsentStale
-} from '../../../../shared/code-intelligence-scope'
+} from '../../../../shared/code-intelligence-consent-staleness'
 import {
   removeCodeIntelligenceMembers,
   setCodeIntelligenceMemberVisibility,

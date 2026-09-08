@@ -6,9 +6,11 @@ import type {
 import {
   canonicalConfigurationJson,
   codeIntelligenceConfigurationSnapshot,
-  hasLegacyCodeIntelligenceMembers,
-  normalizeCodeIntelligenceScope,
   scopeConfigurationPayload
+} from '../../shared/code-intelligence-consent-staleness'
+import {
+  hasLegacyCodeIntelligenceMembers,
+  normalizeCodeIntelligenceScope
 } from '../../shared/code-intelligence-scope'
 import type {
   LanguageServerKind,

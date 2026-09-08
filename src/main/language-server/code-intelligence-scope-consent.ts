@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
+import { codeIntelligenceConfigurationSnapshot } from '../../shared/code-intelligence-consent-staleness'
 import {
-  codeIntelligenceConfigurationSnapshot,
   normalizeCodeIntelligenceScope,
   type CodeIntelligenceScope,
   type CodeIntelligenceScopeConsent

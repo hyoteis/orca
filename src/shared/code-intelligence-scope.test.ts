@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
-  codeIntelligenceConfigurationSnapshot,
   codeIntelligenceScopeConfigurationMode,
-  countChangedCodeIntelligenceMembers,
   getCodeIntelligenceScopeId,
-  isCodeIntelligenceConsentStale,
   getCppScopeIdForRepo,
   normalizeCodeIntelligenceScope,
   type CodeIntelligenceScope
 } from './code-intelligence-scope'
+import {
+  codeIntelligenceConfigurationSnapshot,
+  countChangedCodeIntelligenceMembers,
+  isCodeIntelligenceConsentStale
+} from './code-intelligence-consent-staleness'
 
 const scope = (overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligenceScope => ({
   id: 'scope',

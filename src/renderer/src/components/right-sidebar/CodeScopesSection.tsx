@@ -44,6 +44,9 @@ export function CodeScopesSection({
   const folderGap = folderWorkspace !== null && linkedFolderRepo === null
   const sectionHidden = scopes.length === 0 && !bridged && !folderGap && configureRepoId === null
 
+  const settings = useAppStore((s) => s.settings)
+  const updateSettings = useAppStore((s) => s.updateSettings)
+
   // Whole-folder scopes ('.') drop their root-name row: children render directly
   // at indent level 1, so the root expands itself instead of showing its name.
   const wholeFolderRows = rows.filter((row) => row.path === '.' && !row.browseBlocked)
@@ -62,8 +65,6 @@ export function CodeScopesSection({
     return null
   }
 
-  const settings = useAppStore((s) => s.settings)
-  const updateSettings = useAppStore((s) => s.updateSettings)
   // One-time (#128 armed it): covers the python removal + BASIC migration;
   // dismissal persists through the flag flip, never returns.
   const upgradeNoticePending = settings?.codeIntelligenceModelUpgradeNoticePending === true
