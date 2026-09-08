@@ -117,11 +117,19 @@ export class CodeIntelligenceScopeStore {
           ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
           : normalizeCodeIntelligenceScope(scope)
       )
-    if (migratedLegacyMembers || needsModelMigration) {
-      this.persist(
-        scopes,
-        needsModelMigration ? { codeIntelligenceModelUpgradeNoticePending: true } : {}
-      )
+    // Scope ids end with their language segment (#128), so python declisions
+    // prune by suffix; cpp declisions keep blocking Outline auto-recreation.
+    const declined = settings.codeIntelligenceDeclinedAutoScopes?.filter(
+      (scopeId) => !scopeId.endsWith(':python')
+    )
+    const prunedDeclined =
+      declined !== undefined &&
+      declined.length !== settings.codeIntelligenceDeclinedAutoScopes?.length
+    if (migratedLegacyMembers || needsModelMigration || prunedDeclined) {
+      this.persist(scopes, {
+        ...(needsModelMigration ? { codeIntelligenceModelUpgradeNoticePending: true } : {}),
+        ...(prunedDeclined ? { codeIntelligenceDeclinedAutoScopes: declined! } : {})
+      })
     }
     return scopes.map((scope) => structuredClone(scope))
   }

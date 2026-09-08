@@ -18,8 +18,12 @@ const scope = (overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligence
   ...overrides
 })
 
-function createStore(initial: CodeIntelligenceScope[] = [], repoExecutionHostId = 'ssh:box') {
-  let settings = { codeIntelligenceScopes: initial } as GlobalSettings
+function createStore(
+  initial: CodeIntelligenceScope[] = [],
+  repoExecutionHostId = 'ssh:box',
+  initialSettings: Partial<GlobalSettings> = {}
+) {
+  let settings = { codeIntelligenceScopes: initial, ...initialSettings } as GlobalSettings
   return {
     getRepos: vi.fn(() => [
       {
@@ -334,11 +338,17 @@ describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
     }
     const cpp = scope({ consent })
     const python = scope({
-      id: 'py',
+      id: 'ssh%3Abox:folder:w:python',
       language: 'python',
       members: [{ path: 'scripts', visibleResults: true }]
     })
-    const store = createStore([cpp, python])
+    const store = createStore(
+      [cpp, python],
+      'ssh:box',
+      {
+        codeIntelligenceDeclinedAutoScopes: ['ssh%3Abox:folder:w:python', 'ssh%3Abox:folder:w:cpp']
+      }
+    )
     const catalog = new CodeIntelligenceScopeStore(store)
 
     const scopes = catalog.list()
@@ -348,6 +358,10 @@ describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
     expect(JSON.stringify(store.getSettings().codeIntelligenceScopes![0])).toBe(
       JSON.stringify({ ...cpp, consent })
     )
+    // Python declisions prune; cpp declisions keep blocking auto-recreation.
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([
+      'ssh%3Abox:folder:w:cpp'
+    ])
     expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBe(true)
     expect(store.updateSettings).toHaveBeenCalledTimes(1)
 
@@ -402,5 +416,20 @@ describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
         })
       )
     ).toThrow('overlap')
+  })
+})
+
+describe('declined-auto-scope pruning (#130)', () => {
+  it('prunes orphaned python declisions without arming the notice', () => {
+    const store = createStore(
+      [scope()],
+      'ssh:box',
+      { codeIntelligenceDeclinedAutoScopes: ['ssh%3Abox:folder:w:python'] }
+    )
+    const catalog = new CodeIntelligenceScopeStore(store)
+    expect(catalog.list()).toHaveLength(1)
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([])
+    // No python scope was dropped, so no upgrade notice is owed.
+    expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBeUndefined()
   })
 })
