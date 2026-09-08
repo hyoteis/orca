@@ -574,9 +574,15 @@ describe('Electron runtime package contract', () => {
     expect(releaseGoldenJob.strategy.matrix.include.map(({ platform }) => platform).sort()).toEqual(
       goldenPlatforms
     )
-    expect(releaseGoldenJob.steps.map((step) => step.run ?? '')).toContain(
-      'xvfb-run --auto-servernum env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-golden'
-    )
+    // The lane may share a step with sibling goldens; require the line itself,
+    // not a step whose whole run equals it.
+    expect(
+      releaseGoldenJob.steps.some((step) =>
+        (step.run ?? '').includes(
+          'xvfb-run --auto-servernum env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run test:e2e:terminal-rendering-golden'
+        )
+      )
+    ).toBe(true)
     const releaseLinuxRunStep = releaseGoldenJob.steps.find(
       (step) => step.name === 'Run terminal rendering golden on Linux'
     )

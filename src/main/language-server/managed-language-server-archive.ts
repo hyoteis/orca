@@ -59,6 +59,9 @@ export async function writeVerifiedManagedArchive(args: {
       { signal: args.signal ?? new AbortController().signal }
     )
     if (!response.ok || !response.body) {
+      // Unread undici bodies can crash the process (orca#8695); cancel first.
+      // The fetch seam returns a body-only wrapper, so cancel it directly.
+      await response.body?.cancel().catch(() => {})
       throw new Error(`Archive download failed with HTTP ${String(response.status)}`)
     }
     source = Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0])
