@@ -24,6 +24,17 @@ import {
 } from '../language-server/code-intelligence-ssh-setup-exec'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 import { getSshConnectionManager, getRegisteredSshState } from './ssh'
+import type { AggregateDriftProbe } from '../language-server/code-intelligence-aggregate-refresh'
+import {
+  getAggregateRefreshCoordinator,
+  localAggregateDriftProbe,
+  LocalAggregateWatchSet,
+  syncAggregateRefreshTracking
+} from '../language-server/code-intelligence-aggregate-refresh-wiring'
+import { buildAggregateCompileDatabase } from '../language-server/code-intelligence-aggregate-cdb'
+import { createLocalCppSetupHost } from '../language-server/code-intelligence-cpp-setup-local-host'
+import { createSshCppSetupHost } from '../language-server/code-intelligence-cpp-setup-ssh-host'
+import { registerAggregateSessionOpenDriftCheck } from './language-server-sessions'
 import { subscribeSshTransportConnected } from './ssh-transport-connected'
 import { registerManagedLanguageServerInstallHandlers } from './code-intelligence-managed-install'
 
@@ -130,6 +141,61 @@ export function registerCodeIntelligenceHandlers(
     // carries it, so the enriched registered state is the only truthful source.
     getPlatform: (targetId) => getRegisteredSshState(targetId)?.remotePlatform
   })
+  // ── Aggregate refresh chain (#135): watch + drift re-merge per scope. ──
+  const aggregateWatch = new LocalAggregateWatchSet()
+  const coordinator = getAggregateRefreshCoordinator()
+  const sshSetupDependencies = {
+    getConnection: (targetId: string) => getSshConnectionManager()?.getConnection(targetId),
+    getPlatform: (targetId: string) => getRegisteredSshState(targetId)?.remotePlatform
+  }
+  const rebuildAggregate = async (scope: CodeIntelligenceScope): Promise<void> => {
+    const host = parseExecutionHostId(scope.executionHostId)?.kind === 'ssh'
+      ? createSshCppSetupHost(sshSetupDependencies)
+      : createLocalCppSetupHost({ cacheRoot: cppCacheRoot })
+    const repo = store.getRepos().find((candidate) => candidate.id === scope.workspaceKey.split(':').slice(1).join(':'))
+    const scopeDirectory = repo ? await host.scopeDirectoryFor(repo) : cppScopeDirectoryPath(cppCacheRoot, scope.id)
+    await buildAggregateCompileDatabase({
+      host,
+      workspaceRoot: scope.workspaceRoot,
+      members: scope.members,
+      basicOptions: scope.basicOptions,
+      scopeDirectory,
+      initial: false
+    })
+    const databases = scope.members
+      .map((member) => member.compileDatabase)
+      .filter((path): path is string => path !== undefined)
+    if (databases.length > 0) {
+      const mtimes = (await host.statMtimes(databases)) ?? []
+      coordinator.noteMerged(scope.id, mtimes.join('|'))
+    }
+  }
+  const syncAggregateTracking = (): void => {
+    void syncAggregateRefreshTracking({ scopes, watch: aggregateWatch, rebuild: rebuildAggregate })
+  }
+  syncAggregateTracking()
+  const driftProbeFor = (scope: CodeIntelligenceScope): AggregateDriftProbe =>
+    parseExecutionHostId(scope.executionHostId)?.kind === 'ssh'
+      ? async (paths) => {
+          const mtimes = (await createSshCppSetupHost(sshSetupDependencies).statMtimes(paths)) ?? []
+          return mtimes.map((mtime) => (mtime === null ? null : String(mtime)))
+        }
+      : localAggregateDriftProbe
+  /** Session-open drift re-check (spec §2 Step 3): out-of-band database edits
+   * the watch missed trigger one single-flight re-merge before the session
+   * reads the aggregate. Best-effort — a dead transport retries next open. */
+  const refreshAggregateIfDrifted = async (scopeId: string): Promise<void> => {
+    const scope = scopes.list().find((candidate) => candidate.id === scopeId)
+    if (!scope) {
+      return
+    }
+    try {
+      await coordinator.refreshIfDrifted(scopeId, driftProbeFor(scope))
+    } catch {
+      // Probe failures are invisible: the next open retries.
+    }
+  }
+  registerAggregateSessionOpenDriftCheck(refreshAggregateIfDrifted)
   // Reconnect sweep = deferred delete for scopes removed while offline.
   subscribeSshTransportConnected((targetId) => {
     void sweepRemoteOrphanCppScopeDirectories(scopes, targetId)
@@ -148,6 +214,7 @@ export function registerCodeIntelligenceHandlers(
         removed: false
       })
     }
+    syncAggregateTracking()
     return result.scope
   })
   ipcMain.handle('codeIntelligence:removeScope', async (_event, scopeId: string) => {
@@ -155,6 +222,7 @@ export function registerCodeIntelligenceHandlers(
     const scope = scopes.list().find((candidate) => candidate.id === scopeId)
     const result = scopes.remove(scopeId)
     if (result.removed) {
+      getAggregateRefreshCoordinator().untrack(scopeId)
       // Deleting an Outline-born scope means "don't recreate" (ADR 0003).
       if (scope?.origin === 'outline-auto') {
         const declined = store.getSettings().codeIntelligenceDeclinedAutoScopes ?? []
