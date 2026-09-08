@@ -98,18 +98,30 @@ export class CodeIntelligenceScopeStore {
   ) {}
 
   list(): readonly CodeIntelligenceScope[] {
-    const raw = this.store.getSettings().codeIntelligenceScopes ?? []
+    const settings = this.store.getSettings()
+    const raw = settings.codeIntelligenceScopes ?? []
     // Lazy no-compat migration: map legacy {relativePath} members to {path},
     // drop the setupStatus (its compileCommandsDir points at a swept hash dir),
     // and persist once so later reads never see the old shape again.
-    const migrated = raw.some(hasLegacyCodeIntelligenceMembers)
-    const scopes = raw.map((scope) =>
-      hasLegacyCodeIntelligenceMembers(scope)
-        ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
-        : normalizeCodeIntelligenceScope(scope)
-    )
-    if (migrated) {
-      this.persist(scopes)
+    const migratedLegacyMembers = raw.some(hasLegacyCodeIntelligenceMembers)
+    // One-shot model migration (#128 spec §2 Step 1): drop persisted python
+    // scopes, blank legacy setupStatus, keep cpp consents, arm the one-time
+    // notice. The notice flag doubles as the ran-once guard (undefined = never).
+    const needsModelMigration =
+      settings.codeIntelligenceModelUpgradeNoticePending === undefined &&
+      raw.some((scope) => scope.language === 'python' || scope.setupStatus !== undefined)
+    const scopes = raw
+      .filter((scope) => scope.language !== 'python')
+      .map((scope) =>
+        hasLegacyCodeIntelligenceMembers(scope) || (needsModelMigration && scope.setupStatus)
+          ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
+          : normalizeCodeIntelligenceScope(scope)
+      )
+    if (migratedLegacyMembers || needsModelMigration) {
+      this.persist(
+        scopes,
+        needsModelMigration ? { codeIntelligenceModelUpgradeNoticePending: true } : {}
+      )
     }
     return scopes.map((scope) => structuredClone(scope))
   }
@@ -187,6 +199,15 @@ export class CodeIntelligenceScopeStore {
   }
 
   private requireScope(scopeId: string): CodeIntelligenceScope {
+    // Raw-first python check (#128): wire kinds keep tolerating python, so an
+    // old renderer holding a pre-migration python scope gets an explicit
+    // refusal here — before list()'s migration wipes the evidence away.
+    const persisted = (this.store.getSettings().codeIntelligenceScopes ?? []).find(
+      (candidate) => candidate.id === scopeId
+    )
+    if (persisted?.language === 'python') {
+      throw new Error('Python code intelligence is no longer supported on this Host')
+    }
     const scope = this.list().find((candidate) => candidate.id === scopeId)
     if (!scope) {
       throw new Error(`Unknown code intelligence scope: ${scopeId}`)
@@ -255,9 +276,12 @@ export class CodeIntelligenceScopeStore {
     }
   }
 
-  private persist(scopes: readonly CodeIntelligenceScope[]): void {
+  private persist(
+    scopes: readonly CodeIntelligenceScope[],
+    extra: Partial<GlobalSettings> = {}
+  ): void {
     this.store.updateSettings(
-      { codeIntelligenceScopes: scopes.map((scope) => structuredClone(scope)) },
+      { codeIntelligenceScopes: scopes.map((scope) => structuredClone(scope)), ...extra },
       { notifyListeners: true }
     )
   }

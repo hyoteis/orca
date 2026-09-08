@@ -1,6 +1,6 @@
 import type {
-  CodeIntelligenceConfigurationMode,
-  CodeIntelligenceSetupStatus
+  CodeIntelligenceSetupStatus,
+  CodeIntelligenceSetupSystemMode
 } from './code-intelligence-scope'
 
 /** Single writer/reader source for the clangd spawn arg; extraction must match (spec §2 M17). */
@@ -34,7 +34,7 @@ export type CodeIntelligenceCppSetupResult = {
   installedTools: string[]
   clangdExecutable?: string
   compileCommandsDir?: string
-  configurationMode?: CodeIntelligenceConfigurationMode
+  configurationMode?: CodeIntelligenceSetupSystemMode
   healthState?: CodeIntelligenceSetupStatus['state']
   compileCommandCount?: number
   warnings?: string[]

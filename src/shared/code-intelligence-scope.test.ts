@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   codeIntelligenceConfigurationSnapshot,
+  codeIntelligenceScopeConfigurationMode,
   countChangedCodeIntelligenceMembers,
   getCodeIntelligenceScopeId,
   isCodeIntelligenceConsentStale,
@@ -301,5 +302,126 @@ describe('consent staleness with authorizedConfiguration snapshot', () => {
     })
     // Members identical, serverSource drifted — legacy data cannot tell; unchanged behavior.
     expect(isCodeIntelligenceConsentStale(legacy)).toBe(false)
+  })
+})
+
+describe('mapped compile databases (#128 spec §2 Step 1)', () => {
+  const mapped = (path: string, database: string) => ({
+    path,
+    visibleResults: true,
+    compileDatabase: database
+  })
+
+  it('normalizes compile database paths through the member policy', () => {
+    const normalized = normalizeCodeIntelligenceScope(
+      scope({
+        members: [mapped('engine', '/home/me/build/compile_commands.json/')]
+      })
+    )
+    expect(normalized.members[0].compileDatabase).toBe(
+      '/home/me/build/compile_commands.json'
+    )
+    expect(() =>
+      normalizeCodeIntelligenceScope(scope({ members: [mapped('engine', '~/cdb.json')] }))
+    ).toThrow('~')
+    expect(() =>
+      normalizeCodeIntelligenceScope(scope({ members: [mapped('engine', 'build/cdb.json')] }))
+    ).toThrow('Host-absolute')
+    expect(
+      normalizeCodeIntelligenceScope(
+        scope({ members: [mapped('engine', 'D:\\b\\compile_commands.json')] })
+      ).members[0].compileDatabase
+    ).toBe('D:/b/compile_commands.json')
+  })
+
+  it('rejects a mapped folder intersecting any other configured folder', () => {
+    const cases: CodeIntelligenceScope['members'][] = [
+      // mapped ∩ basic, either nesting direction
+      [mapped('engine', '/b/cdb.json'), { path: 'engine/src', visibleResults: true }],
+      [{ path: 'engine/src', visibleResults: true }, mapped('engine', '/b/cdb.json')],
+      // mapped ∩ mapped
+      [mapped('engine', '/a/cdb.json'), mapped('engine/tests', '/b/cdb.json')]
+    ]
+    for (const members of cases) {
+      expect(() => normalizeCodeIntelligenceScope(scope({ members }))).toThrow('overlap')
+    }
+    // win32 drive workspaces fold case into one comparison key
+    expect(() =>
+      normalizeCodeIntelligenceScope(
+        scope({
+          workspaceRoot: 'C:\\workspace',
+          members: [mapped('engine', '/b/cdb.json'), { path: 'Engine\\sub', visibleResults: true }]
+        })
+      )
+    ).toThrow('overlap')
+  })
+
+  it('keeps BASIC∩BASIC nesting on longest-match and allows disjoint mapped folders', () => {
+    const normalized = normalizeCodeIntelligenceScope(
+      scope({
+        members: [
+          { path: 'engine', visibleResults: true },
+          { path: 'engine/src', visibleResults: false },
+          mapped('third_party', '/cdb/vendor.json'),
+          mapped('tools', '/cdb/tools.json')
+        ]
+      })
+    )
+    expect(normalized.members).toHaveLength(4)
+  })
+
+  it('derives the scope configuration mode from members', () => {
+    expect(
+      codeIntelligenceScopeConfigurationMode(
+        scope({ members: [{ path: 'engine', visibleResults: true }] })
+      )
+    ).toBe('basic')
+    expect(
+      codeIntelligenceScopeConfigurationMode(scope({ members: [mapped('a', '/c.json')] }))
+    ).toBe('mapped')
+    expect(
+      codeIntelligenceScopeConfigurationMode(
+        scope({
+          members: [mapped('a', '/c.json'), { path: 'b', visibleResults: true }]
+        })
+      )
+    ).toBe('mixed')
+  })
+
+  it('round-trips legacy members byte-identically without explicit edit', () => {
+    const legacy = scope()
+    const normalized = normalizeCodeIntelligenceScope(legacy)
+    expect(JSON.stringify(normalized.members)).toBe(
+      JSON.stringify(legacy.members)
+    )
+    expect('compileDatabase' in normalized.members[0]).toBe(false)
+    // No basicOptions key materializes for a scope that never had any.
+    expect('basicOptions' in normalized).toBe(false)
+    expect(codeIntelligenceConfigurationSnapshot(legacy)).toBe(
+      codeIntelligenceConfigurationSnapshot(normalized)
+    )
+  })
+
+  it('omits empty basicOptions and joins non-empty ones into the consent payload', () => {
+    const emptied = normalizeCodeIntelligenceScope(
+      scope({ basicOptions: { includeDirectories: [], defines: [''] } })
+    )
+    expect('basicOptions' in emptied).toBe(false)
+    expect(codeIntelligenceConfigurationSnapshot(emptied)).toBe(
+      codeIntelligenceConfigurationSnapshot(scope())
+    )
+    const filled = normalizeCodeIntelligenceScope(
+      scope({
+        basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [] }
+      })
+    )
+    expect(filled.basicOptions).toEqual({
+      includeDirectories: ['/opt/sdk/include'],
+      defines: []
+    })
+    // Editing BASIC options is a configuration change: consent must go stale.
+    expect(codeIntelligenceConfigurationSnapshot(filled)).not.toBe(
+      codeIntelligenceConfigurationSnapshot(scope())
+    )
   })
 })

@@ -198,7 +198,7 @@ describe('CodeIntelligenceScopeStore', () => {
       ).rejects.toThrow('consent')
   })
 
-  it('keeps setupStatus for scopes that already use {path} members', async () => {
+  it('blanks setupStatus on the one-shot model migration, then keeps new ones', async () => {
     const setupStatus: CodeIntelligenceScope['setupStatus'] = {
       state: 'ready',
       mode: 'cmake',
@@ -207,6 +207,17 @@ describe('CodeIntelligenceScopeStore', () => {
     const store = createStore([scope({ setupStatus })])
     const catalog = new CodeIntelligenceScopeStore(store)
 
+    // #128 spec §2 Step 1: the first read blanks legacy setupStatus and arms the
+    // one-time upgrade notice.
+    expect(catalog.list()[0].setupStatus).toBeUndefined()
+    expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBe(true)
+
+    // After the migration ran, a freshly generated setupStatus survives reads.
+    store.updateSettings({
+      codeIntelligenceScopes: [scope({ setupStatus })],
+      codeIntelligenceModelUpgradeNoticePending: false
+    })
+    store.updateSettings.mockClear()
     expect(catalog.list()[0].setupStatus).toEqual(setupStatus)
     expect(store.updateSettings).not.toHaveBeenCalled()
   })
@@ -311,5 +322,85 @@ describe('CodeIntelligenceScopeStore', () => {
     })
     expect(launch.command).toBeUndefined()
     expect(launch.managed).toEqual({ tool: 'clangd' })
+  })
+})
+
+describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
+  it('drops python scopes, keeps cpp consents byte-identically, and arms the notice once', () => {
+    const consent = {
+      configurationFingerprint: 'f',
+      grantedAt: 1,
+      authorizedMembers: [{ path: 'engine', visibleResults: true }]
+    }
+    const cpp = scope({ consent })
+    const python = scope({
+      id: 'py',
+      language: 'python',
+      members: [{ path: 'scripts', visibleResults: true }]
+    })
+    const store = createStore([cpp, python])
+    const catalog = new CodeIntelligenceScopeStore(store)
+
+    const scopes = catalog.list()
+
+    expect(scopes.map((entry) => entry.id)).toEqual(['scope'])
+    // Zero-rewrite: the cpp member bytes and consent survive untouched.
+    expect(JSON.stringify(store.getSettings().codeIntelligenceScopes![0])).toBe(
+      JSON.stringify({ ...cpp, consent })
+    )
+    expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBe(true)
+    expect(store.updateSettings).toHaveBeenCalledTimes(1)
+
+    // Second read: already migrated, nothing further persists.
+    store.updateSettings.mockClear()
+    catalog.list()
+    expect(store.updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('rejects a pre-migration python scope at authorizeSession', async () => {
+    const store = createStore([
+      scope({ language: 'python', members: [{ path: 'scripts', visibleResults: true }] })
+    ])
+    // Simulate the window before list()'s migration persists: raw settings keep
+    // the python scope, so the launch path itself must refuse it explicitly.
+    store.updateSettings = vi.fn()
+    const catalog = new CodeIntelligenceScopeStore(store)
+    await expect(
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+    ).rejects.toThrow('Python code intelligence is no longer supported')
+  })
+
+  it('persists mapped members and derived options through upsert', () => {
+    const catalog = new CodeIntelligenceScopeStore(createStore())
+    const { scope: saved } = catalog.upsert(
+      scope({
+        members: [
+          { path: 'engine', visibleResults: true, compileDatabase: '/b/cdb.json' },
+          { path: 'third_party', visibleResults: true }
+        ],
+        basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: ['USE_GPU=1'] }
+      })
+    )
+    expect(saved.members[0].compileDatabase).toBe('/b/cdb.json')
+    expect(saved.basicOptions).toEqual({
+      includeDirectories: ['/opt/sdk/include'],
+      defines: ['USE_GPU=1']
+    })
+    // Adding a disjoint member is a plain configuration change: revision moves.
+    expect(
+      catalog.upsert(scope({ ...saved, members: [...saved.members, { path: 'tools', visibleResults: true }] }))
+        .scope.revision
+    ).toBe(2)
+    // The overlap guard fires through upsert too.
+    expect(() =>
+      catalog.upsert(
+        scope({
+          members: [
+            { path: 'engine', visibleResults: true, compileDatabase: '/b/cdb.json' },
+            { path: 'engine/sub', visibleResults: true }
+          ]
+        })
+      )
+    ).toThrow('overlap')
   })
 })
