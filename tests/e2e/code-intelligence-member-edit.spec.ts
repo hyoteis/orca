@@ -231,8 +231,13 @@ test('folder workspace session bridges tree membership to the linked folder repo
 
   await expect(row('engine')).toBeVisible({ timeout: 10_000 })
 
-  // Member row carries the in-scope marker through the bridge.
-  await expect(row('engine').locator('[title="In Code Intelligence"]')).toBeVisible()
+  // Member row carries its membership through the bridge: the context menu
+  // offers Remove (the row badge died with the #73 content-search explorer).
+  await row('engine').click({ button: 'right' })
+  await expect(
+    orcaPage.getByRole('menuitem', { name: 'Remove from Code Intelligence' })
+  ).toBeVisible()
+  await orcaPage.keyboard.press('Escape')
 
   // Non-member Add writes to the linked folder repo's scope, not nowhere.
   await row('tools').click({ button: 'right' })
@@ -288,8 +293,10 @@ test('dark theme and Chinese render the bridged surfaces and fingerprint-only re
 
   await expect(row('engine')).toBeVisible({ timeout: 10_000 })
   await expect(orcaPage.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/)
-  // Bridged membership renders the row marker and menu in Chinese.
-  await expect(row('engine').locator('[title="已在代码智能中"]')).toBeVisible()
+  // Bridged membership renders the member's menu in Chinese.
+  await row('engine').click({ button: 'right' })
+  await expect(orcaPage.getByRole('menuitem', { name: '从代码智能中移除' })).toBeVisible()
+  await orcaPage.keyboard.press('Escape')
   await row('tools').click({ button: 'right' })
   await expect(orcaPage.getByRole('menuitem', { name: '添加到代码智能' })).toBeVisible()
   await orcaPage.keyboard.press('Escape')

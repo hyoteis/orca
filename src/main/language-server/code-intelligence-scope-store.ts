@@ -1,17 +1,16 @@
 import { posix, win32 } from 'node:path'
-import type {
-  CodeIntelligenceScope,
-  CodeIntelligenceScopeConsent
+import {
+  hasLegacyCodeIntelligenceMembers,
+  languageServerKindForScope,
+  normalizeCodeIntelligenceScope,
+  type CodeIntelligenceScope,
+  type CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
 import {
   canonicalConfigurationJson,
   codeIntelligenceConfigurationSnapshot,
   scopeConfigurationPayload
 } from '../../shared/code-intelligence-consent-staleness'
-import {
-  hasLegacyCodeIntelligenceMembers,
-  normalizeCodeIntelligenceScope
-} from '../../shared/code-intelligence-scope'
 import type {
   LanguageServerKind,
   LanguageServerLaunchRequest,
@@ -24,7 +23,6 @@ import {
   grantCodeIntelligenceConsent,
   hasCurrentCodeIntelligenceConsent
 } from './code-intelligence-scope-consent'
-import { languageServerKindForScope } from '../../shared/code-intelligence-scope'
 
 type ScopeSettingsStore = {
   getRepos: () => Repo[]

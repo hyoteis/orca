@@ -3,12 +3,12 @@ import type { GlobalSettings } from '../../shared/types'
 import type { CodeIntelligenceScope } from '../../shared/code-intelligence-scope'
 import { CodeIntelligenceScopeStore } from './code-intelligence-scope-store'
 import {
+  getAggregateRefreshCoordinator,
   LocalAggregateWatchSet,
   localAggregateDriftProbe,
   syncAggregateRefreshTracking,
   type LocalWatchSubscribe
 } from './code-intelligence-aggregate-refresh-wiring'
-import { getAggregateRefreshCoordinator } from './code-intelligence-aggregate-refresh-wiring'
 
 const scope = (overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligenceScope => ({
   id: 'local:worktree:w:cpp',

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { posix } from 'node:path'
-import type { AggregateCdbEntry } from './code-intelligence-aggregate-cdb'
 import {
   aggregateMappingId,
   buildAggregateCompileDatabase,
@@ -9,6 +8,7 @@ import {
   mergeAggregateEntries,
   normalizeSuppliedCdbEntries,
   parseSuppliedCdbText,
+  type AggregateCdbEntry,
   type AggregateCdbHost
 } from './code-intelligence-aggregate-cdb'
 

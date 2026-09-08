@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { ManagedLanguageServerInstallEvent } from '../../../../shared/managed-language-server'
-import type { ManagedLanguageServerInstallState } from '../../../../shared/managed-language-server'
+import type {
+  ManagedLanguageServerInstallEvent,
+  ManagedLanguageServerInstallState
+} from '../../../../shared/managed-language-server'
 import {
   deriveManagedServerSheetView,
   managedInstallProgressPercent,

@@ -27,9 +27,9 @@ import {
   refreshSemanticEditDrawer,
   semanticWorkspaceEditDrawerStore,
   undoSemanticEditDrawerCompletion,
+  type DrawerSession,
   type SemanticEditDrawerPhase
 } from '@/lib/language-server/semantic-workspace-edit-drawer-store'
-import type { DrawerSession } from '@/lib/language-server/semantic-workspace-edit-drawer-store'
 import { buildWorkspaceEditStepPreviews } from '@/lib/language-server/workspace-edit-step-preview'
 import { SemanticWorkspaceEditRecoveryDialog } from './SemanticWorkspaceEditRecoveryDialog'
 

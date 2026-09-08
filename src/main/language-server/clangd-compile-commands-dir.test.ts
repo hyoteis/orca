@@ -2,10 +2,10 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { clangdCompileCommandsDirArg } from './clangd-compile-commands-dir'
 import type { LanguageServerLaunchRequest } from '../../shared/language-server-session'
 import {
   assertClangdCompileCommandsDirExists,
+  clangdCompileCommandsDirArg,
   clangdCompileCommandsDirFromArgs,
   localDirectoryExists
 } from './clangd-compile-commands-dir'
