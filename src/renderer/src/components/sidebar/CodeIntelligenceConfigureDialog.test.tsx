@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   configureAggregate: vi.fn(),
   revalidateAggregate: vi.fn(),
   pickCompileDatabase: vi.fn(),
+  pickDirectory: vi.fn(),
   browseDir: vi.fn(),
   fetchSettings: vi.fn(async () => {}),
   toastSuccess: vi.fn(),
@@ -39,6 +40,7 @@ beforeEach(() => {
   mocks.configureAggregate.mockReset()
   mocks.revalidateAggregate.mockReset()
   mocks.pickCompileDatabase.mockReset()
+  mocks.pickDirectory.mockReset()
   mocks.toastSuccess.mockClear()
   mocks.toastError.mockClear()
   globalThis.window.api = {
@@ -46,7 +48,7 @@ beforeEach(() => {
       configureAggregate: mocks.configureAggregate,
       revalidateAggregate: mocks.revalidateAggregate
     },
-    shell: { pickCompileDatabase: mocks.pickCompileDatabase },
+    shell: { pickCompileDatabase: mocks.pickCompileDatabase, pickDirectory: mocks.pickDirectory },
     ssh: { browseDir: mocks.browseDir }
   } as unknown as typeof window.api
   useAppStore.setState({
@@ -93,6 +95,7 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
     expect(mocks.configureAggregate).toHaveBeenCalledWith({
       repoId: 'repo-1',
       mode: 'basic',
+      folders: ['.'],
       basicOptions: { includeDirectories: ['-I /opt/sdk'], defines: ['USE_GPU=1'], cppStandard: 'c++20' }
     })
     await waitFor(() => expect(mocks.fetchSettings).toHaveBeenCalled())
@@ -136,6 +139,7 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
     await waitFor(() => expect(mocks.configureAggregate).toHaveBeenCalledWith({
       repoId: 'repo-1',
       mode: 'cdb',
+      folders: ['.'],
       compileDatabase: 'D:/build/compile_commands.json'
     }))
   })
@@ -184,5 +188,88 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
       )
     )
     expect(mocks.pickCompileDatabase).not.toHaveBeenCalled()
+  })
+
+  it('seeds folder rows from the persisted scope members', () => {
+    useAppStore.setState({
+      settings: {
+        codeIntelligenceScopes: [
+          scopeFixture({ members: [{ path: 'src', visibleResults: true }, { path: 'tests', visibleResults: true }] })
+        ]
+      }
+    } as never)
+    renderDialog()
+    expect(screen.getByText('src')).toBeInTheDocument()
+    expect(screen.getByText('tests')).toBeInTheDocument()
+  })
+
+  it('adds a local folder through the native picker and saves the folder set', async () => {
+    mocks.pickDirectory.mockResolvedValue('D:/ws/repo-1/graphics')
+    mocks.configureAggregate.mockResolvedValue({
+      scope: scopeFixture(),
+      mappings: [],
+      entryCount: 0
+    })
+    renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: /Add folder/ }))
+    await waitFor(() => expect(screen.getByText('graphics')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Save and authorize' }))
+    await waitFor(() =>
+      expect(mocks.configureAggregate).toHaveBeenCalledWith({
+        repoId: 'repo-1',
+        mode: 'basic',
+        folders: ['.', 'graphics'],
+        basicOptions: { includeDirectories: [], defines: [] }
+      })
+    )
+  })
+
+  it('rejects folders outside the workspace root', async () => {
+    mocks.pickDirectory.mockResolvedValue('D:/elsewhere/other')
+    renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: /Add folder/ }))
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalled())
+    expect(screen.queryByText('other')).toBeNull()
+    expect(
+      screen.getAllByRole('listitem').filter((item) => item.textContent?.includes('(whole workspace)'))
+    ).toHaveLength(1)
+  })
+
+  it('flags folder changes as a structure change and blocks save on an empty set', async () => {
+    renderDialog()
+    expect(screen.queryByText(/Structure changed/i)).toBeNull()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove folder' })[0])
+    expect(screen.getByText(/Structure changed — saving will request reauthorization/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save and authorize' })).toBeDisabled()
+  })
+
+  it('picks an SSH folder through the remote directory browser', async () => {
+    mocks.browseDir
+      .mockResolvedValueOnce({
+        resolvedPath: '/home/dev/ws',
+        pathFlavor: 'posix',
+        entries: [{ name: 'src', isDirectory: true }]
+      })
+      .mockResolvedValueOnce({
+        resolvedPath: '/home/dev/ws/src',
+        pathFlavor: 'posix',
+        entries: []
+      })
+    useAppStore.setState({
+      modalData: { repoId: 'repo-2' },
+      repos: [
+        { id: 'repo-2', path: '/home/dev/ws', displayName: 'ws', connectionId: 'tgt-9', executionHostId: null, kind: 'git' }
+      ],
+      settings: { codeIntelligenceScopes: [] },
+      sshTargetLabels: new Map([['tgt-9', 'buildbox']])
+    } as never)
+    renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: /Add folder/ }))
+    await waitFor(() => expect(mocks.browseDir).toHaveBeenCalledWith({ targetId: 'tgt-9', dirPath: '/home/dev/ws' }))
+    fireEvent.click(screen.getByText('src'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }))
+    await waitFor(() => expect(screen.getByText('src')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Use this folder' })).toBeNull()
   })
 })

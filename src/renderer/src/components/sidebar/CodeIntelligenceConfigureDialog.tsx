@@ -12,12 +12,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { SettingsSegmentedControl } from '../settings/SettingsFormControls'
 import { SshCompileDatabasePicker } from './SshCompileDatabasePicker'
+import { ConfigureCodeFolders } from './ConfigureCodeFolders'
 import { parentPath } from './remote-file-browser-helpers'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { getCppScopeIdForRepo } from '../../../../shared/code-intelligence-scope'
+import { relativePathInsideRoot } from '../../../../shared/cross-platform-path'
 import type {
   AggregateMappingHealthSnapshot,
   CodeIntelligenceBasicOptions,
@@ -66,7 +68,12 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
   const [mappings, setMappings] = useState<readonly AggregateMappingHealthSnapshot[] | null>(null)
   const [entryCount, setEntryCount] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
-  const [sshBrowsing, setSshBrowsing] = useState(false)
+  // #141: inline SSH browser target — the CDB picker or the directory picker.
+  const [sshBrowsing, setSshBrowsing] = useState<'database' | 'directory' | null>(null)
+  // #141: member folders the dialog manages; '.' = whole workspace.
+  const [folders, setFolders] = useState<string[]>(
+    existingScope?.members.map((member) => member.path) ?? ['.']
+  )
 
   useEffect(() => {
     if (!open) {
@@ -75,16 +82,50 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
     setMappings(null)
     setEntryCount(null)
     setBusy(false)
+    setSshBrowsing(null)
+    setFolders(existingScope?.members.map((member) => member.path) ?? ['.'])
+    // existingScope intentionally omitted: only a repo switch re-seeds the rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, repo?.id])
 
   const setupHost = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
   const hostLabel = setupHost?.kind === 'ssh' ? (sshTargetLabels.get(setupHost.targetId) ?? setupHost.targetId) : 'local'
   const isSsh = setupHost?.kind === 'ssh'
 
-  // Structure change = mode flip or a different database: saving it demands
-  // reauthorization (the consent fingerprint covers exactly these fields).
+  // Structure change = mode flip, a different database, or a different folder
+  // set: saving it demands reauthorization (the consent fingerprint covers
+  // exactly these fields).
+  const persistedFolders = existingScope?.members.map((member) => member.path) ?? ['.']
+  const foldersChanged =
+    folders.length !== persistedFolders.length ||
+    folders.slice().sort().join('|') !== persistedFolders.slice().sort().join('|')
   const structureChanged =
-    mode !== persistedMode || (mode === 'cdb' && cdbPath !== (existingScope?.members[0]?.compileDatabase ?? ''))
+    foldersChanged ||
+    mode !== persistedMode ||
+    (mode === 'cdb' && cdbPath !== (existingScope?.members[0]?.compileDatabase ?? ''))
+
+  // #141: picked folders must live inside the workspace (spec §1).
+  const addPickedFolder = (absolutePath: string): void => {
+    const relative = relativePathInsideRoot(repo!.path, absolutePath)
+    if (relative === null) {
+      toast.error(
+        translate(
+          'settings.codeIntelligence.folderOutsideWorkspace',
+          'Code folders must live inside the workspace'
+        )
+      )
+      return
+    }
+    const folder = relative === '' ? '.' : relative.replace(/\\/g, '/')
+    setFolders((current) => (current.includes(folder) ? current : [...current, folder]))
+  }
+
+  const pickLocalFolder = async (): Promise<void> => {
+    const picked = await window.api.shell.pickDirectory({ defaultPath: repo!.path })
+    if (picked) {
+      addPickedFolder(picked)
+    }
+  }
 
   const save = async (): Promise<void> => {
     if (!repo || busy) {
@@ -103,6 +144,7 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
       const result = await window.api.codeIntelligence.configureAggregate({
         repoId: repo.id,
         mode,
+        folders,
         ...(mode === 'cdb' ? { compileDatabase: cdbPath.trim() } : {}),
         ...(basicOptions ? { basicOptions } : {})
       })
@@ -140,7 +182,7 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
   const browse = async (): Promise<void> => {
     // SSH browses the remote host (spec §2 Step 5); local keeps the native pick.
     if (isSsh) {
-      setSshBrowsing(true)
+      setSshBrowsing('database')
       return
     }
     const picked = await window.api.shell.pickCompileDatabase()
@@ -217,6 +259,27 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
             ) : null}
           </div>
 
+          {/* #141: member folder management — the mode applies to every folder. */}
+          <ConfigureCodeFolders
+            folders={folders}
+            onChange={setFolders}
+            onAddFolder={() => (isSsh ? setSshBrowsing('directory') : void pickLocalFolder())}
+            sshPicker={
+              sshBrowsing === 'directory' && isSsh && setupHost ? (
+                <SshCompileDatabasePicker
+                  select="directory"
+                  targetId={setupHost.targetId}
+                  initialPath={repo.path}
+                  onPick={(path) => {
+                    addPickedFolder(path)
+                    setSshBrowsing(null)
+                  }}
+                  onCancel={() => setSshBrowsing(null)}
+                />
+              ) : null
+            }
+          />
+
           {mode === 'cdb' ? (
             <div className="space-y-2 px-3 py-2.5">
               <div className="flex items-center gap-2">
@@ -233,7 +296,7 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
                   {translate('settings.codeIntelligence.cdbBrowse', 'Browse…')}
                 </Button>
               </div>
-              {sshBrowsing && isSsh && setupHost ? (
+              {sshBrowsing === 'database' && isSsh && setupHost ? (
                 <SshCompileDatabasePicker
                   targetId={setupHost.targetId}
                   initialPath={
@@ -243,9 +306,9 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
                   }
                   onPick={(path) => {
                     setCdbPath(path)
-                    setSshBrowsing(false)
+                    setSshBrowsing(null)
                   }}
-                  onCancel={() => setSshBrowsing(false)}
+                  onCancel={() => setSshBrowsing(null)}
                 />
               ) : null}
               {mappings?.length ? (
@@ -344,7 +407,7 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
           </Button>
           <Button
             type="button"
-            disabled={busy || (mode === 'cdb' && cdbPath.trim() === '')}
+            disabled={busy || folders.length === 0 || (mode === 'cdb' && cdbPath.trim() === '')}
             onClick={() => void save()}
           >
             {translate('settings.codeIntelligence.saveAndAuthorize', 'Save and authorize')}

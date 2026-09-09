@@ -206,9 +206,18 @@
       "mappingDegradedDismiss": "Dismiss",
       "upgradeNoticeTitle": "C++ code intelligence was upgraded",
       "upgradeNoticeBody": "Python code intelligence was removed, and existing C++ scopes moved to the new mapped-database and BASIC model. Open Configure Code to review your folders.",
-      "upgradeNoticeDismiss": "Got it"
-    }
-,
+      "upgradeNoticeDismiss": "Got it",
+      "foldersLabel": "Code folders",
+      "addFolder": "Add folder…",
+      "removeFolder": "Remove folder",
+      "wholeWorkspace": "(whole workspace)",
+      "noFolders": "No code folders — add one to enable indexing",
+      "folderOutsideWorkspace": "Code folders must live inside the workspace",
+      "sshDirectoryPickerTitle": "Select a folder",
+      "sshDirectoryPickerDescription": "Navigate the Host and pick a code folder inside the workspace.",
+      "sshDirectoryPickerNote": "The folder must live inside the workspace on this Host.",
+      "selectThisDirectory": "Use this folder"
+    },
     "appearance": {
       "language": {
         "title": "Language",
@@ -11759,7 +11768,7 @@
             "fc3095d2ed": "explorer",
             "folderWorkspaces": "Attached worktrees",
             "parentPrChecks": "PR Checks",
-            "searchTab": "Search",
+            "searchTab": "Search",
             "outlineTab": "Outline"
           },
           "right": {
@@ -15736,4 +15745,4 @@
       "settingsLink": "Settings → Voice"
     }
   }
-}
+}
