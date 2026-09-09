@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Database, Folder, FolderSearch, PauseCircle, RefreshCw, Server, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, Database, Folder, FolderSearch, PauseCircle, RefreshCw, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -43,7 +43,6 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
   const repos = useAppStore((state) => state.repos)
   const settings = useAppStore((state) => state.settings)
   const fetchSettings = useAppStore((state) => state.fetchSettings)
-  const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)
   const repo = repos.find((candidate) => candidate.id === modalData.repoId) ?? null
   const open = activeModal === 'code-intelligence-cpp-setup'
 
@@ -89,7 +88,6 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
   }, [open, repo?.id])
 
   const setupHost = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
-  const hostLabel = setupHost?.kind === 'ssh' ? (sshTargetLabels.get(setupHost.targetId) ?? setupHost.targetId) : 'local'
   const isSsh = setupHost?.kind === 'ssh'
 
   // Structure change = mode flip, a different database, or a different folder
@@ -223,13 +221,6 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
                 )}
           </DialogDescription>
         </DialogHeader>
-
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-medium">
-            {isSsh ? <Server className="size-3" aria-hidden /> : null}
-            {hostLabel}
-          </span>
-        </div>
 
         <div className="rounded-md border border-border">
           <div className="flex items-center gap-2 border-b border-border px-3 py-2">
