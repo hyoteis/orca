@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { ManagedLanguageServerActivationRecord } from '../../shared/managed-language-server'
 import type {
+  ManagedLanguageServerActivationRecord,
   ManagedLanguageServerManifest,
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'

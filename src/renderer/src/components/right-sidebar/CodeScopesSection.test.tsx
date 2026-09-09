@@ -19,6 +19,7 @@ const mockState = vi.hoisted(() => ({
   sshConnectionStates: new Map<string, { supportsFolderDownload?: boolean }>(),
   sshStateByEnvironment: new Map<string, unknown>(),
   openFiles: [] as unknown[],
+  updateSettings: vi.fn(async () => {}) as unknown as (updates: Partial<GlobalSettings>) => Promise<void>,
   closeFile: vi.fn(),
   showRightSidebarSearch: vi.fn(),
   openModal: vi.fn(),
@@ -216,24 +217,6 @@ describe('CodeScopesSection shell', () => {
     })
   })
 
-  it('keeps the gear usable for a python-only scope by falling back to the session repo', () => {
-    setupState({
-      scopes: [
-        scope({
-          id: 'local:worktree:repo-1:python',
-          language: 'python',
-          members: [{ path: 'src', visibleResults: true }]
-        })
-      ]
-    })
-    render(<CodeScopesHarness listDirectory={vi.fn()} />)
-    const gear = screen.getByRole('button', { name: 'Configure Code' }) as HTMLButtonElement
-    expect(gear.disabled).toBe(false)
-    fireEvent.click(gear)
-    expect(mockState.openModal).toHaveBeenCalledWith('code-intelligence-cpp-setup', {
-      repoId: 'repo-1'
-    })
-  })
 })
 
 describe('CodeScopesSection member rows', () => {
@@ -242,8 +225,7 @@ describe('CodeScopesSection member rows', () => {
       scopes: [
         scope({ language: 'cpp', members: [{ path: 'src/core', visibleResults: true }] }),
         scope({
-          id: 'local:worktree:repo-1:python',
-          language: 'python',
+          id: 'local:worktree:repo-1:cpp2',
           members: [{ path: 'src/core', visibleResults: true }],
           consent: {
             configurationFingerprint: 'fp',
@@ -257,7 +239,6 @@ describe('CodeScopesSection member rows', () => {
     const rows = screen.getAllByRole('button', { name: /src\/core/ })
     expect(rows).toHaveLength(1)
     expect(rows[0]?.textContent).toContain('C++')
-    expect(rows[0]?.textContent).toContain('Py')
   })
 
   it('blocks browsing for members of unconsented scopes', () => {
@@ -483,22 +464,6 @@ describe('CodeScopesSection member context menu', () => {
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
   })
 
-  it('hides Configure Code… on python-only rows', () => {
-    setupState({
-      scopes: [
-        scope({
-          id: 'local:worktree:repo-1:python',
-          language: 'python',
-          members: [{ path: 'src', visibleResults: true }]
-        })
-      ]
-    })
-    render(<CodeScopesHarness listDirectory={vi.fn()} />)
-    openMemberMenu()
-    expect(screen.queryByRole('menuitem', { name: 'Configure Code…' })).toBeNull()
-    expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeTruthy()
-  })
-
   it('removes the member through the single writer and keeps the emptied scope', async () => {
     setupState({ scopes: [scope({ members: [{ path: 'src', visibleResults: true }] })] })
     render(<CodeScopesHarness listDirectory={vi.fn()} />)
@@ -517,8 +482,7 @@ describe('CodeScopesSection member context menu', () => {
       scopes: [
         scope({ members: [{ path: 'src', visibleResults: true }] }),
         scope({
-          id: 'local:worktree:repo-1:python',
-          language: 'python',
+          id: 'local:worktree:repo-1:cpp2',
           members: [
             { path: 'src', visibleResults: true },
             { path: 'tools', visibleResults: true }
@@ -535,7 +499,7 @@ describe('CodeScopesSection member context menu', () => {
     )
     expect(edited.map((s) => ({ id: s.id, members: s.members.map((m) => m.path) }))).toEqual([
       { id: 'local:worktree:repo-1:cpp', members: [] },
-      { id: 'local:worktree:repo-1:python', members: ['tools'] }
+      { id: 'local:worktree:repo-1:cpp2', members: ['tools'] }
     ])
   })
 
@@ -582,5 +546,31 @@ describe('CodeScopesSection member context menu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in File Manager' }))
     expect(windowApi.shell.openPath).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalled()
+  })
+})
+
+describe('CodeScopesSection one-time upgrade notice (#137)', () => {
+  it('shows while pending and persists dismissal through the flag', async () => {
+    const mockUpdateSettings = vi.fn(async () => {})
+    ;(mockState as { updateSettings?: unknown }).updateSettings = mockUpdateSettings
+    mockState.settings = {
+      codeIntelligenceScopes: [],
+      codeIntelligenceModelUpgradeNoticePending: true
+    } as unknown as GlobalSettings
+    const { rerender } = render(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.getByRole('status').textContent).toContain('C++ code intelligence was upgraded')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }))
+    await waitFor(() =>
+      expect(mockUpdateSettings).toHaveBeenCalledWith({ codeIntelligenceModelUpgradeNoticePending: false })
+    )
+
+    // Dismissal persisted: the flag reads false and the notice never returns.
+    mockState.settings = {
+      codeIntelligenceScopes: [],
+      codeIntelligenceModelUpgradeNoticePending: false
+    } as unknown as GlobalSettings
+    rerender(<CodeScopesHarness listDirectory={vi.fn()} />)
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

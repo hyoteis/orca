@@ -12,7 +12,7 @@ export const scripted = {
   serverRequestRoutes: {} as Record<string, (params: unknown) => unknown>,
   notificationRoutes: {} as Record<string, (params: unknown) => void>,
   requestCalls: [] as string[],
-  initializeParams: null as unknown | null,
+  initializeParams: null as unknown,
   opens: [] as LanguageServerClientKey[],
   closes: [] as LanguageServerClientKey[],
   sessionOverrides: [] as Record<string, RequestHandler>[],

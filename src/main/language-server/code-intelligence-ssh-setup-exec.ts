@@ -2,17 +2,13 @@ import { posix } from 'node:path'
 import type { ClientChannel } from 'ssh2'
 import { shellEscape } from '../ssh/ssh-connection-utils'
 import type { SshConnection } from '../ssh/ssh-connection'
-import { buildPosixLanguageServerCommand } from '../ssh/ssh-language-server-session-manager'
-import {
-  COMMAND_TIMEOUT_MS,
-  MAX_LOG_BYTES,
-  type CppSetupCommandRunner
-} from './code-intelligence-cpp-setup-tools'
-import type { CppBuildRootDetection } from './code-intelligence-cmake-root-selection'
+import type { CppSetupPathDetection } from './code-intelligence-cpp-setup-host'
 import {
   IGNORED_DIRECTORIES,
   SOURCE_EXTENSIONS
 } from './code-intelligence-compilation-database'
+
+const COMMAND_TIMEOUT_MS = 10 * 60 * 1000
 
 export type SshSetupExecResult = { code: number | null; stdout: string; stderr: string }
 
@@ -35,16 +31,6 @@ export function buildRemoteAtomicWriteCommand(directory: string, fileName: strin
 /** clangd spawn-time --compile-commands-dir existence probe. */
 export function buildRemoteDirectoryExistsCommand(directory: string): string {
   return `test -d ${shellEscape(directory)}`
-}
-
-/** Single-path readability probe (build-root detection). */
-export function buildRemoteReadablePathCommand(path: string): string {
-  return `test -r ${shellEscape(path)}`
-}
-
-/** PATH lookup for a setup tool executable. */
-export function buildRemoteToolLookupCommand(tool: string): string {
-  return `command -v ${shellEscape(tool)}`
 }
 
 /** Shard readback for the local single-source merge. */
@@ -112,35 +98,10 @@ export function buildRemoteMtimesCommand(paths: readonly string[], uname: string
   return `for p in ${list}; do stat ${flag} "$p" 2>/dev/null || printf '0\\n'; done`
 }
 
-/** Remote filesystem surface for build-root classification and GN output scans. */
-export function sshBuildRootDetection(queue: SshSetupExecQueue): CppBuildRootDetection {
-  return {
-    join: posix.join,
-    resolve: posix.resolve,
-    relative: posix.relative,
-    dirname: posix.dirname,
-    basename: posix.basename,
-    isAbsolute: posix.isAbsolute,
-    isReadablePath: async (path) =>
-      (await queue.exec(buildRemoteReadablePathCommand(path))).code === 0,
-    listSubdirectories: async (directory) => {
-      const result = await queue.exec(buildRemoteListSubdirectoriesCommand(directory))
-      return result.code === 0 ? parseRemoteListing(result.stdout) : []
-    }
-  }
-}
-
-/** CppSetupCommandRunner over SSH; `env` is ignored (spec §4.2: no MSVC capture remotely). */
-export function sshCommandRunner(queue: SshSetupExecQueue): CppSetupCommandRunner {
-  return async (executable, args, cwd) => {
-    const result = await queue.exec(buildPosixLanguageServerCommand({ executable, args, cwd }))
-    if (result.code === null) {
-      // Channel died mid-command: not an install failure, a disconnect.
-      throw new SshSetupConnectionError('SSH connection was interrupted')
-    }
-    const output = `${result.stdout}${result.stderr}`.slice(0, MAX_LOG_BYTES)
-    return { code: result.code, output }
-  }
+/** POSIX path flavor of the Host detection seam (local parity: node path). */
+export const sshPathDetection: CppSetupPathDetection = {
+  resolve: posix.resolve,
+  isAbsolute: posix.isAbsolute
 }
 
 /** Line-wise parsing of remote `find`/stat listings (trimmed, blank-free). */

@@ -2,9 +2,7 @@ import React, { useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Braces,
-  CheckCircle2,
   Folder,
-  FolderOpen,
   ShieldCheck,
   X
 } from 'lucide-react'
@@ -19,11 +17,12 @@ import { useWorktreeMap } from '@/store/selectors'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import { getFolderWorkspaceExecutionHostId } from '../../../../shared/folder-workspace-repo-link'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { LANGUAGE_DISPLAY } from '../right-sidebar/code-panel-language-badge'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import {
   countChangedCodeIntelligenceMembers,
   isCodeIntelligenceConsentStale
-} from '../../../../shared/code-intelligence-scope'
+} from '../../../../shared/code-intelligence-consent-staleness'
 import {
   removeCodeIntelligenceMembers,
   setCodeIntelligenceMemberVisibility,
@@ -91,30 +90,6 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
     (count, scope) => count + countChangedCodeIntelligenceMembers(scope),
     0
   )
-  const setupStatus = scopes.find((scope) => scope.language === 'cpp')?.setupStatus
-  const healthLabel =
-    setupStatus?.state === 'ready'
-      ? translate('settings.codeIntelligence.healthReady', 'Ready')
-      : setupStatus?.state === 'limited'
-        ? translate('settings.codeIntelligence.healthLimited', 'Limited')
-        : setupStatus?.state === 'error'
-          ? translate('settings.codeIntelligence.healthError', 'Error')
-          : translate('settings.codeIntelligence.healthUnknown', 'Status unavailable')
-  const statusMessage =
-    setupStatus?.state === 'limited' && setupStatus.mode === 'basic'
-      ? translate(
-          'settings.codeIntelligence.basicLimitedWarning',
-          'BASIC indexing infers include paths and may miss SDK headers, generated files, or build macros.'
-        )
-      : setupStatus?.message
-  const healthColor =
-    setupStatus?.state === 'ready'
-      ? 'text-status-success'
-      : setupStatus?.state === 'limited'
-        ? 'text-amber-500'
-        : setupStatus?.state === 'error'
-          ? 'text-destructive'
-          : 'text-muted-foreground'
   const projectName = activeRepo?.displayName ?? scopes[0].name
   const handleMemberVisibilityChange = (
     scope: CodeIntelligenceScope,
@@ -182,7 +157,7 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
               type="button"
               {...STATUS_BAR_CONTEXT_MENU_EXEMPT_PROPS}
               className={`inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-0.5 transition-colors hover:bg-accent/70 hover:text-foreground ${
-                pendingReconsent || installFailure ? 'text-amber-500' : healthColor
+                pendingReconsent || installFailure ? 'text-amber-500' : 'text-muted-foreground'
               }`}
               aria-label={triggerLabel}
             >
@@ -282,48 +257,12 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
               {scopes[0].workspaceRoot}
             </div>
           </div>
-          <div className="border-b border-border/60 px-3 py-2">
-            <div className="flex items-center justify-between gap-3">
-              <div className={`flex items-center gap-1.5 text-xs font-medium ${healthColor}`}>
-                {setupStatus?.state === 'ready' ? (
-                  <CheckCircle2 className="size-3.5" />
-                ) : (
-                  <AlertTriangle className="size-3.5" />
-                )}
-                <span>{healthLabel}</span>
-              </div>
-              {setupStatus ? (
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
-                  {setupStatus.mode}
-                </span>
-              ) : null}
-            </div>
-            {setupStatus ? (
-              <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-                <span>
-                  {translate(
-                    'settings.codeIntelligence.compileCommandCount',
-                    '{{value0}} compile commands',
-                    { value0: setupStatus.compileCommandCount ?? 0 }
-                  )}
-                </span>
-                <span className="text-right">
-                  {new Date(setupStatus.generatedAt).toLocaleString()}
-                </span>
-              </div>
-            ) : null}
-            {statusMessage ? (
-              <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                {statusMessage}
-              </p>
-            ) : null}
-          </div>
           <ManagedLanguageServerStatusSection scopes={scopes} executionHostId={executionHostId} />
           <div className="max-h-[24rem] overflow-y-auto p-1.5 scrollbar-sleek">
             {scopes.map((scope) => (
               <section key={scope.id} className="rounded-md px-1.5 py-1.5">
                 <div className="flex items-center justify-between gap-2 px-1 pb-1 text-[10px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
-                  <span>{scope.language === 'cpp' ? 'C++' : 'Python'}</span>
+                  <span>{LANGUAGE_DISPLAY[scope.language]}</span>
                   <span>{scope.members.length}</span>
                 </div>
                 <div className="space-y-0.5">
@@ -371,19 +310,6 @@ export function CodeIntelligenceStatusSegment({ iconOnly }: Props): React.JSX.El
                 </div>
               </section>
             ))}
-          </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border/60 px-3 py-2">
-            {setupStatus?.compileCommandsDir ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                onClick={() => void window.api.shell.openPath(setupStatus.compileCommandsDir!)}
-              >
-                <FolderOpen className="size-3.5" />
-                {translate('settings.codeIntelligence.openDatabase', 'Open database')}
-              </Button>
-            ) : null}
           </div>
         </SelectedTextCopyMenu>
       </PopoverContent>

@@ -9,7 +9,7 @@ import type {
   ManagedLanguageServerManifest,
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
-import type { CppSetupCommandRunner } from './code-intelligence-cpp-setup-tools'
+import type { CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
 import { buildManagedExtractionCommands } from './managed-language-server-extraction'
 import type { FetchManagedArchive } from './managed-language-server-archive'
 import { writeVerifiedManagedArchive } from './managed-language-server-archive'
@@ -49,20 +49,6 @@ export type ManagedAcquisitionSeams = {
   ) => void
 }
 
-/** Runtime version root for entries that carry a private Node dependency. */
-export function managedRuntimeRoot(
-  root: string,
-  manifest: ManagedLanguageServerManifest,
-  entry: ManagedLanguageServerManifestEntry
-): string | undefined {
-  const runtimeEntry = entry.runtimeEntryId
-    ? manifest.entries.find((candidate) => candidate.id === entry.runtimeEntryId)
-    : undefined
-  return runtimeEntry
-    ? managedVersionDirectory(root, runtimeEntry.tool, runtimeEntry.version)
-    : undefined
-}
-
 /**
  * Stage → hash-verify → extract → smoke-test → atomic adopt of one immutable
  * version directory (#15 transaction). Staging is removed in every outcome;
@@ -72,7 +58,6 @@ export async function acquireManagedVersion(args: {
   root: string
   manifest: ManagedLanguageServerManifest
   entry: ManagedLanguageServerManifestEntry
-  runtimeEntry?: ManagedLanguageServerManifestEntry
   route: ManagedLanguageServerInstallRoute
   signal: AbortSignal
   seams: ManagedAcquisitionSeams
@@ -85,9 +70,6 @@ export async function acquireManagedVersion(args: {
     const extractDirectory = join(staging, 'extract')
     await mkdir(extractDirectory, { recursive: true })
     const archivePath = join(staging, entry.archiveFileName)
-    const runtimeRoot = args.runtimeEntry
-      ? managedVersionDirectory(args.root, args.runtimeEntry.tool, args.runtimeEntry.version)
-      : managedRuntimeRoot(args.root, args.manifest, entry)
     await writeVerifiedManagedArchive({
       entry,
       route: args.route,
@@ -105,9 +87,9 @@ export async function acquireManagedVersion(args: {
     args.seams.emit(entry, 'extract')
     const extracted = await extractManagedArchive(entry, archivePath, extractDirectory, args.seams.run)
     assertInsideStaging(extractDirectory, extracted)
-    await prepareProbeExecutable(entry, extracted, runtimeRoot)
+    await prepareProbeExecutable(entry, extracted)
     args.seams.emit(entry, 'probe')
-    await probeManagedEntry(args.root, args.manifest, entry, extracted, args.seams.run)
+    await probeManagedEntry(entry, extracted, args.seams.run)
     args.seams.emit(entry, 'activate')
     const destination = managedVersionDirectory(args.root, entry.tool, entry.version)
     try {
@@ -115,7 +97,7 @@ export async function acquireManagedVersion(args: {
     } catch {
       // Version directory already present from a prior install: verify it
       // instead of replacing it (immutability beats re-extraction).
-      if (!(await isProbingManagedVersion(args.root, args.manifest, entry, args.seams.run))) {
+      if (!(await isProbingManagedVersion(args.root, entry, args.seams.run))) {
         throw new Error(`Existing managed ${entry.tool} ${entry.version} failed its smoke test`)
       }
     }
@@ -151,16 +133,11 @@ async function extractManagedArchive(
 
 /** Smoke test an installed (or freshly extracted) version; non-zero exit aborts. */
 export async function probeManagedEntry(
-  root: string,
-  manifest: ManagedLanguageServerManifest,
   entry: ManagedLanguageServerManifestEntry,
   rootDirectory: string,
   run: CppSetupCommandRunner
 ): Promise<void> {
-  const command = resolveManagedLanguageServerCommand(entry.probe, {
-    root: rootDirectory,
-    runtimeRoot: managedRuntimeRoot(root, manifest, entry)
-  })
+  const command = resolveManagedLanguageServerCommand(entry.probe, { root: rootDirectory })
   const result = await run(command.executable, command.args, rootDirectory)
   if (result.code !== 0) {
     throw new Error(
@@ -171,7 +148,6 @@ export async function probeManagedEntry(
 
 export async function isProbingManagedVersion(
   root: string,
-  manifest: ManagedLanguageServerManifest,
   entry: ManagedLanguageServerManifestEntry,
   run: CppSetupCommandRunner
 ): Promise<boolean> {
@@ -182,7 +158,7 @@ export async function isProbingManagedVersion(
     return false
   }
   try {
-    await probeManagedEntry(root, manifest, entry, versionDirectory, run)
+    await probeManagedEntry(entry, versionDirectory, run)
     return true
   } catch {
     return false
@@ -193,16 +169,12 @@ export async function isProbingManagedVersion(
  * the smoke test measures the archive, not the extractor's mode handling. */
 async function prepareProbeExecutable(
   entry: ManagedLanguageServerManifestEntry,
-  rootDirectory: string,
-  runtimeRoot: string | undefined
+  rootDirectory: string
 ): Promise<void> {
   if (process.platform === 'win32') {
     return
   }
-  const command = resolveManagedLanguageServerCommand(entry.probe, {
-    root: rootDirectory,
-    runtimeRoot
-  })
+  const command = resolveManagedLanguageServerCommand(entry.probe, { root: rootDirectory })
   if (isAbsolute(command.executable)) {
     await chmod(command.executable, 0o755)
   }

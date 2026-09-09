@@ -149,30 +149,6 @@ export function gnOverrideRange(tuCount: number): { from: number; to: number } {
 }
 
 // ---------------------------------------------------------------------------
-// Python: deterministic 100k-file monorepo.
-// ---------------------------------------------------------------------------
-
-export function pythonModulePath(root: string, index: number): string {
-  return join(root, 'packages', `pkg-${index % 50}`, `module_${index}.py`)
-}
-
-export function pythonModuleText(index: number): string {
-  return `def nightly_func_${index}():\n    return ${index}\n`
-}
-
-export async function generatePythonMonorepoFixture(
-  root: string,
-  fileCount = 100_000
-): Promise<{ fileCount: number }> {
-  const files: FixtureFile[] = Array.from({ length: fileCount }, (_, index) => ({
-    path: pythonModulePath(root, index),
-    content: pythonModuleText(index)
-  }))
-  await writeAll(files)
-  return { fileCount }
-}
-
-// ---------------------------------------------------------------------------
 // Dependent repositories, multi-scope layout: repo A exposes include/a-lib.h;
 // repo B's TUs depend on it. Two member shards merge into one scope CDB.
 // ---------------------------------------------------------------------------

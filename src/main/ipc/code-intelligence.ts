@@ -8,8 +8,6 @@ import type {
 import type { LanguageServerSessionOpenRequest } from '../../shared/language-server-session'
 import type { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 import type { Store } from '../persistence'
-import { CodeIntelligenceCppSetup } from '../language-server/code-intelligence-cpp-setup'
-import { CodeIntelligenceSshCppSetup } from '../language-server/code-intelligence-ssh-cpp-setup'
 import {
   cppScopeDirectoryName,
   cppScopeDirectoryPath,
@@ -22,10 +20,12 @@ import {
   buildRemoteListSubdirectoriesCommand,
   SshSetupExecQueue
 } from '../language-server/code-intelligence-ssh-setup-exec'
-import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
+import { parseExecutionHostId } from '../../shared/execution-host'
 import { getSshConnectionManager, getRegisteredSshState } from './ssh'
 import { subscribeSshTransportConnected } from './ssh-transport-connected'
 import { registerManagedLanguageServerInstallHandlers } from './code-intelligence-managed-install'
+import { registerAggregateCodeIntelligenceHandlers } from './code-intelligence-aggregate-ipc'
+import { getAggregateRefreshCoordinator as getAggregateRefreshCoordinatorForCleanup } from '../language-server/code-intelligence-aggregate-refresh-wiring'
 
 function broadcastScopeChange(change: CodeIntelligenceScopeChange): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -116,7 +116,6 @@ export function registerCodeIntelligenceHandlers(
   store: Store
 ): void {
   const cppCacheRoot = join(app.getPath('userData'), 'code-intelligence', 'cpp')
-  const cppSetup = new CodeIntelligenceCppSetup(store, cppCacheRoot)
   void sweepOrphanCppScopeDirectories(
     cppCacheRoot,
     scopes
@@ -124,20 +123,20 @@ export function registerCodeIntelligenceHandlers(
       .filter((scope) => scope.language === 'cpp' && scope.executionHostId === 'local')
       .map((scope) => scope.id)
   )
-  const sshCppSetup = new CodeIntelligenceSshCppSetup(store, {
-    getConnection: (targetId) => getSshConnectionManager()?.getConnection(targetId),
-    // Why: remotePlatform lives on the relay session; the raw manager state never
-    // carries it, so the enriched registered state is the only truthful source.
-    getPlatform: (targetId) => getRegisteredSshState(targetId)?.remotePlatform
-  })
+  const { syncAggregateTracking } = registerAggregateCodeIntelligenceHandlers(
+    scopes,
+    store,
+    cppCacheRoot,
+    {
+      getConnection: (targetId: string) => getSshConnectionManager()?.getConnection(targetId),
+      // Why: remotePlatform lives on the relay session; the raw manager state never
+      // carries it, so the enriched registered state is the only truthful source.
+      getPlatform: (targetId: string) => getRegisteredSshState(targetId)?.remotePlatform
+    }
+  )
   // Reconnect sweep = deferred delete for scopes removed while offline.
   subscribeSshTransportConnected((targetId) => {
     void sweepRemoteOrphanCppScopeDirectories(scopes, targetId)
-  })
-  ipcMain.handle('codeIntelligence:setupCpp', async (_event, request) => {
-    const repo = store.getRepo(request.repoId)
-    const host = repo ? parseExecutionHostId(getRepoExecutionHostId(repo)) : null
-    return host?.kind === 'ssh' ? sshCppSetup.run(request) : cppSetup.run(request)
   })
   ipcMain.handle('codeIntelligence:upsertScope', (_event, scope: CodeIntelligenceScope) => {
     const result = scopes.upsert(scope)
@@ -148,6 +147,7 @@ export function registerCodeIntelligenceHandlers(
         removed: false
       })
     }
+    syncAggregateTracking()
     return result.scope
   })
   ipcMain.handle('codeIntelligence:removeScope', async (_event, scopeId: string) => {
@@ -155,6 +155,7 @@ export function registerCodeIntelligenceHandlers(
     const scope = scopes.list().find((candidate) => candidate.id === scopeId)
     const result = scopes.remove(scopeId)
     if (result.removed) {
+      getAggregateRefreshCoordinatorForCleanup().untrack(scopeId)
       // Deleting an Outline-born scope means "don't recreate" (ADR 0003).
       if (scope?.origin === 'outline-auto') {
         const declined = store.getSettings().codeIntelligenceDeclinedAutoScopes ?? []

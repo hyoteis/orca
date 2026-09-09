@@ -155,7 +155,7 @@ export function OutlinePanel(): React.JSX.Element {
         ),
         subtitle: translate(
           'auto.components.right.sidebar.OutlinePanel.2b8019ac88',
-          'Supports Python and C++ files'
+          'Supports C++ family files'
         )
       }
     }

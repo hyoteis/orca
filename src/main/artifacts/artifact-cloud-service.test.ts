@@ -43,7 +43,11 @@ const cloudB: OrcaProfileCloudSummary = {
   linkedAt: 2
 }
 
-function createResponse(slug = 'artifact-a', expiresAt = '2026-09-06T00:00:00.000Z'): Response {
+// Clock-stale hazard: hardcoded expiry dates silently read as already-expired
+// once real time passes them; always derive a future instant instead.
+const futureIsoDate = (): string => new Date(Date.now() + 86_400_000).toISOString()
+
+function createResponse(slug = 'artifact-a', expiresAt = futureIsoDate()): Response {
   return new Response(
     JSON.stringify({
       artifact: {

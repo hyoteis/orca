@@ -181,23 +181,6 @@ describe('codeIntelligence:removeScope directory cleanup', () => {
     connectionManagerMock.mockReturnValue(undefined)
     await expect(handlers.get('codeIntelligence:removeScope')!(null, scope.id)).resolves.toBe(true)
   })
-
-  it('leaves python scopes untouched', async () => {
-    const scope = localCppScope({ language: 'python' })
-    const handlers = await register([scope])
-    const scopeDir = join(
-      tempRoot,
-      'code-intelligence',
-      'cpp',
-      'scopes',
-      cppScopeDirectoryName(scope.id)
-    )
-    await mkdir(scopeDir, { recursive: true })
-    await handlers.get('codeIntelligence:removeScope')!(null, scope.id)
-    expect(await readdir(join(tempRoot, 'code-intelligence', 'cpp', 'scopes'))).toEqual([
-      cppScopeDirectoryName(scope.id)
-    ])
-  })
 })
 
 describe('codeIntelligence:removeScope declined-auto-scope memory (#101)', () => {
@@ -278,14 +261,20 @@ describe('SSH reconnect orphan sweep', () => {
     await expect(
       handlersForCall.get('codeIntelligence:managedInstallState')!(undefined, {
         executionHostId: 'local',
-        tool: 'pyright'
+        tool: 'clangd'
       })
     ).resolves.toMatchObject({
-      tool: 'pyright',
+      tool: 'clangd',
       supported: true,
       activeVersion: null,
-      latestEntry: { tool: 'pyright' }
+      latestEntry: { tool: 'clangd' }
     })
+    await expect(
+      handlersForCall.get('codeIntelligence:managedInstallState')!(undefined, {
+        executionHostId: 'local',
+        tool: 'pyright'
+      })
+    ).rejects.toThrow('no longer supported')
   })
 
   it('rejects managed installs on Runtime Hosts', async () => {
@@ -293,7 +282,7 @@ describe('SSH reconnect orphan sweep', () => {
     await expect(
       handlersForCall.get('codeIntelligence:installManagedLanguageServer')!(undefined, {
         executionHostId: 'runtime:env',
-        tool: 'pyright',
+        tool: 'clangd',
         route: { type: 'host-download' }
       })
     ).rejects.toThrow('Runtime Hosts')
@@ -304,13 +293,13 @@ describe('SSH reconnect orphan sweep', () => {
     const handlersForCall = await register([], commands)
     const state = (await handlersForCall.get('codeIntelligence:managedInstallState')!(undefined, {
       executionHostId: 'ssh:box',
-      tool: 'pyright'
+      tool: 'clangd'
     })) as { supported: boolean; unsupportedReason?: unknown }
     if (!state.supported) {
       throw new Error(`SSH state unsupported: ${JSON.stringify(state.unsupportedReason)}`)
     }
     expect(state).toMatchObject({
-      tool: 'pyright',
+      tool: 'clangd',
       activeVersion: null,
       installedVersions: []
     })

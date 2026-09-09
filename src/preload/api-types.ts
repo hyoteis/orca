@@ -1,8 +1,4 @@
-import type {
-  CodeIntelligenceCppSetupRequest,
-  CodeIntelligenceCppSetupResult
-} from '../shared/code-intelligence-cpp-setup'
-import type {
+import type { CodeIntelligenceConfigureAggregateRequest, CodeIntelligenceConfigureAggregateResult, CodeIntelligenceRevalidateAggregateResult,
   CodeIntelligenceScope,
   CodeIntelligenceScopeChange
 } from '../shared/code-intelligence-scope'
@@ -1135,7 +1131,6 @@ export type PluginMarketplaceHostInstallPreview = {
 
 export type PreloadApi = {
   codeIntelligence: {
-    setupCpp: (request: CodeIntelligenceCppSetupRequest) => Promise<CodeIntelligenceCppSetupResult>
     upsertScope: (scope: CodeIntelligenceScope) => Promise<CodeIntelligenceScope>
     removeScope: (scopeId: string) => Promise<boolean>
     grantConsent: (
@@ -1144,6 +1139,12 @@ export type PreloadApi = {
     authorizeSession: (
       request: LanguageServerSessionOpenRequest
     ) => Promise<LanguageServerLaunchRequest>
+    configureAggregate: (
+      request: CodeIntelligenceConfigureAggregateRequest
+    ) => Promise<CodeIntelligenceConfigureAggregateResult>
+    revalidateAggregate: (
+      request: { repoId: string }
+    ) => Promise<CodeIntelligenceRevalidateAggregateResult>
     managedInstallState: (request: {
       executionHostId: ExecutionHostId
       tool: LanguageServerKind
@@ -2613,6 +2614,8 @@ export type PreloadApi = {
     openFileUri: (uri: string) => Promise<void>
     pathExists: (path: string) => Promise<boolean>
     pickAttachment: () => Promise<string | null>
+    /** Native picker for a local-host compile_commands.json (#138). */
+    pickCompileDatabase: () => Promise<string | null>
     pickImage: () => Promise<string | null>
     pickRepoIconImage: () => Promise<{ dataUrl: string; fileName: string } | null>
     pickAudio: () => Promise<string | null>

@@ -9,6 +9,7 @@ import type {
   ManagedLanguageServerRollbackResult
 } from '../../shared/managed-language-server'
 import { MANAGED_LANGUAGE_SERVER_MANIFEST } from '../../shared/managed-language-server-manifest-data'
+import { assertManagedLanguageServerTool } from '../../shared/managed-language-server'
 import type {
   CodeIntelligenceScope
 } from '../../shared/code-intelligence-scope'
@@ -133,7 +134,7 @@ export function registerManagedLanguageServerInstallHandlers(store: Store): void
     const version = 'version' in result ? result.version : ''
     broadcastManagedInstallEvent({
       executionHostId: request.executionHostId,
-      tool: request.tool,
+      tool: assertManagedLanguageServerTool(request.tool),
       version,
       phase: result.status === 'installed' ? 'complete' : 'error',
       ...(result.status === 'failed' ? { message: result.error } : {}),

@@ -30,7 +30,7 @@ const repo: Repo = {
   addedAt: 1
 }
 
-const scope = (language: 'python' | 'cpp'): CodeIntelligenceScope => ({
+const scope = (language: 'cpp'): CodeIntelligenceScope => ({
   id: `local:worktree:demo:${language}`,
   name: `demo ${language}`,
   executionHostId: 'local',
@@ -51,24 +51,13 @@ beforeEach(() => {
 })
 
 describe('findCodeIntelligenceScope', () => {
-  it('finds a python scope for a python document', () => {
-    const settings = { codeIntelligenceScopes: [scope('python')] } as GlobalSettings
-    const found = findCodeIntelligenceScope(request, 'python', { repos: [repo], settings })
-    expect(found?.language).toBe('python')
-  })
-
-  it('does not match a cpp scope when python is requested', () => {
-    const settings = { codeIntelligenceScopes: [scope('cpp')] } as GlobalSettings
-    expect(findCodeIntelligenceScope(request, 'python', { repos: [repo], settings })).toBeNull()
-  })
-
   it('skips scopes whose members exclude the document', () => {
     const narrow: CodeIntelligenceScope = {
-      ...scope('python'),
+      ...scope('cpp'),
       members: [{ path: 'pkg', visibleResults: true }]
     }
     const settings = { codeIntelligenceScopes: [narrow] } as GlobalSettings
-    expect(findCodeIntelligenceScope(request, 'python', { repos: [repo], settings })).toBeNull()
+    expect(findCodeIntelligenceScope({ ...request, filePath: '/repo/a.cc', relativePath: 'a.cc' }, 'cpp', { repos: [repo], settings })).toBeNull()
   })
 })
 
@@ -82,7 +71,7 @@ describe('openDefinitionTargetInWorkspace', () => {
   }
 
   it('opens in-workspace targets with a workspace-relative path', () => {
-    expect(openDefinitionTargetInWorkspace(request, target, scope('python'))).toBe(true)
+    expect(openDefinitionTargetInWorkspace(request, target, scope('cpp'))).toBe(true)
     expect(openFile).toHaveBeenCalledWith(
       expect.objectContaining({ filePath: '/repo/b.py', relativePath: 'b.py' }),
       expect.objectContaining({ focusEditor: true })
@@ -91,7 +80,7 @@ describe('openDefinitionTargetInWorkspace', () => {
 
   it('opens external dependency targets labelled with the host path', () => {
     const external = { ...target, uri: 'file:///usr/lib/python3/site-packages/c.py' }
-    expect(openDefinitionTargetInWorkspace(request, external, scope('python'))).toBe(true)
+    expect(openDefinitionTargetInWorkspace(request, external, scope('cpp'))).toBe(true)
     expect(openFile).toHaveBeenCalledWith(
       expect.objectContaining({
         filePath: '/usr/lib/python3/site-packages/c.py',
@@ -102,7 +91,7 @@ describe('openDefinitionTargetInWorkspace', () => {
   })
 
   it('rejects non-file uris', () => {
-    expect(openDefinitionTargetInWorkspace(request, { ...target, uri: 'mailto:x' }, scope('python'))).toBe(
+    expect(openDefinitionTargetInWorkspace(request, { ...target, uri: 'mailto:x' }, scope('cpp'))).toBe(
       false
     )
     expect(openFile).not.toHaveBeenCalled()

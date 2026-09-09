@@ -33,12 +33,12 @@ vi.mock('@/store/selectors', () => ({
 const stateRef: { current: Record<string, unknown> } = { current: {} }
 
 const localScope = (members: CodeIntelligenceScope['members']): CodeIntelligenceScope => ({
-  id: 'local:worktree:repo-a:python',
-  name: 'Python',
+  id: 'local:worktree:repo-a:cpp',
+  name: 'C++',
   executionHostId: 'local',
   workspaceKey: 'worktree:repo-a',
   workspaceRoot: '/repo',
-  language: 'python',
+  language: 'cpp',
   members,
   serverSource: { type: 'automatic' },
   enabled: true,

@@ -18,8 +18,12 @@ const scope = (overrides: Partial<CodeIntelligenceScope> = {}): CodeIntelligence
   ...overrides
 })
 
-function createStore(initial: CodeIntelligenceScope[] = [], repoExecutionHostId = 'ssh:box') {
-  let settings = { codeIntelligenceScopes: initial } as GlobalSettings
+function createStore(
+  initial: CodeIntelligenceScope[] = [],
+  repoExecutionHostId = 'ssh:box',
+  initialSettings: Partial<GlobalSettings> = {}
+) {
+  let settings = { codeIntelligenceScopes: initial, ...initialSettings } as GlobalSettings
   return {
     getRepos: vi.fn(() => [
       {
@@ -103,22 +107,17 @@ describe('CodeIntelligenceScopeStore', () => {
     ).toBe(false)
   })
 
-  it('restarts on a re-run setup without burning a revision or consent', () => {
-    // Identical configuration, but the setup regenerated the compile database
-    // the launch consumes — the session must restart; the consent chain must not.
+  it('keeps the session alive across an aggregate re-merge (#134)', () => {
+    // The re-merge rewrote the compile database behind the launch — the
+    // running clangd re-reads it lazily; the session must not restart. A
+    // basicOptions content edit stands in: it reshapes aggregate *content*
+    // (revision bumps, consent goes stale) yet never restarts the launch.
     const result = new CodeIntelligenceScopeStore(createStore([scope()])).upsert({
       ...scope(),
-      setupStatus: {
-        state: 'ready',
-        mode: 'cmake',
-        generatedAt: 1234,
-        compileCommandCount: 561,
-        warningCount: 0,
-        compileCommandsDir: 'C:/cache/scope'
-      }
+      basicOptions: { includeDirectories: ['/other/include'], defines: [] }
     })
-    expect(result.restartRequired).toBe(true)
-    expect(result.scope.revision).toBe(1)
+    expect(result.restartRequired).toBe(false)
+    expect(result.scope.revision).toBe(2)
   })
 
   it('keeps a member-emptied scope alive without a session restart', async () => {
@@ -167,27 +166,24 @@ describe('CodeIntelligenceScopeStore', () => {
       ).rejects.toThrow('disabled')
   })
 
-  it('lazily migrates legacy {relativePath} members on read and drops setupStatus', async () => {
-    const setupStatus: CodeIntelligenceScope['setupStatus'] = {
-      state: 'ready',
-      mode: 'cmake',
-      generatedAt: 1
-    }
+  it('lazily migrates legacy {relativePath} members on read and strips setupStatus', async () => {
     const legacy = {
       ...scope(),
       members: [
         { relativePath: 'engine', visibleResults: true }
       ] as unknown as CodeIntelligenceScope['members'],
-      setupStatus,
+      // Pre-#139 persisted scopes carried the setup pipeline result; the type
+      // no longer has it, so the fixture spells the raw disk shape.
+      setupStatus: { state: 'ready', mode: 'cmake', generatedAt: 1 },
       consent: { configurationFingerprint: 'stale', grantedAt: 1 }
-    } as CodeIntelligenceScope
+    } as unknown as CodeIntelligenceScope
     const store = createStore([legacy])
     const catalog = new CodeIntelligenceScopeStore(store)
 
     const scopes = catalog.list()
 
     expect(scopes[0].members).toEqual([{ path: 'engine', visibleResults: true }])
-    expect(scopes[0].setupStatus).toBeUndefined()
+    expect((scopes[0] as { setupStatus?: unknown }).setupStatus).toBeUndefined()
     // Migration persists the new shape so later reads never re-migrate.
     const persisted = store.getSettings().codeIntelligenceScopes
     expect(persisted?.[0].members).toEqual([{ path: 'engine', visibleResults: true }])
@@ -198,17 +194,15 @@ describe('CodeIntelligenceScopeStore', () => {
       ).rejects.toThrow('consent')
   })
 
-  it('keeps setupStatus for scopes that already use {path} members', async () => {
-    const setupStatus: CodeIntelligenceScope['setupStatus'] = {
-      state: 'ready',
-      mode: 'cmake',
-      generatedAt: 1
-    }
-    const store = createStore([scope({ setupStatus })])
+  it('strips setupStatus on the one-shot model migration', async () => {
+    const persisted = { ...scope(), setupStatus: { state: 'ready', mode: 'cmake', generatedAt: 1 } }
+    const store = createStore([persisted as unknown as CodeIntelligenceScope])
     const catalog = new CodeIntelligenceScopeStore(store)
 
-    expect(catalog.list()[0].setupStatus).toEqual(setupStatus)
-    expect(store.updateSettings).not.toHaveBeenCalled()
+    // #128 spec §2 Step 1: the first read blanks legacy setupStatus and arms the
+    // one-time upgrade notice.
+    expect((catalog.list()[0] as { setupStatus?: unknown }).setupStatus).toBeUndefined()
+    expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBe(true)
   })
 
   it('round-trips a scope with mixed relative and absolute members', async () => {
@@ -311,5 +305,213 @@ describe('CodeIntelligenceScopeStore', () => {
     })
     expect(launch.command).toBeUndefined()
     expect(launch.managed).toEqual({ tool: 'clangd' })
+  })
+})
+
+describe('one-shot mapped-model migration (#128 spec §2 Step 1)', () => {
+  it('drops python scopes, keeps cpp consents byte-identically, and arms the notice once', () => {
+    const consent = {
+      configurationFingerprint: 'f',
+      grantedAt: 1,
+      authorizedMembers: [{ path: 'engine', visibleResults: true }]
+    }
+    const cpp = scope({ consent })
+    const python = {
+      ...scope(),
+      id: 'ssh%3Abox:folder:w:python',
+      language: 'python',
+      members: [{ path: 'scripts', visibleResults: true }]
+    } as unknown as CodeIntelligenceScope
+    const store = createStore(
+      [cpp, python],
+      'ssh:box',
+      {
+        codeIntelligenceDeclinedAutoScopes: ['ssh%3Abox:folder:w:python', 'ssh%3Abox:folder:w:cpp']
+      }
+    )
+    const catalog = new CodeIntelligenceScopeStore(store)
+
+    const scopes = catalog.list()
+
+    expect(scopes.map((entry) => entry.id)).toEqual(['scope'])
+    // Zero-rewrite: the cpp member bytes and consent survive untouched.
+    expect(JSON.stringify(store.getSettings().codeIntelligenceScopes![0])).toBe(
+      JSON.stringify({ ...cpp, consent })
+    )
+    // Python declisions prune; cpp declisions keep blocking auto-recreation.
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([
+      'ssh%3Abox:folder:w:cpp'
+    ])
+    expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBe(true)
+    expect(store.updateSettings).toHaveBeenCalledTimes(1)
+
+    // Second read: already migrated, nothing further persists.
+    store.updateSettings.mockClear()
+    catalog.list()
+    expect(store.updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('rejects a pre-migration python scope at authorizeSession', async () => {
+    const store = createStore([
+      {
+        ...scope(),
+        language: 'python',
+        members: [{ path: 'scripts', visibleResults: true }]
+      } as unknown as CodeIntelligenceScope
+    ])
+    // Simulate the window before list()'s migration persists: raw settings keep
+    // the python scope, so the launch path itself must refuse it explicitly.
+    store.updateSettings = vi.fn()
+    const catalog = new CodeIntelligenceScopeStore(store)
+    await expect(
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })
+    ).rejects.toThrow('Python code intelligence is no longer supported')
+  })
+
+  it('persists mapped members and derived options through upsert', () => {
+    const catalog = new CodeIntelligenceScopeStore(createStore())
+    const { scope: saved } = catalog.upsert(
+      scope({
+        members: [
+          { path: 'engine', visibleResults: true, compileDatabase: '/b/cdb.json' },
+          { path: 'third_party', visibleResults: true }
+        ],
+        basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: ['USE_GPU=1'] }
+      })
+    )
+    expect(saved.members[0].compileDatabase).toBe('/b/cdb.json')
+    expect(saved.basicOptions).toEqual({
+      includeDirectories: ['/opt/sdk/include'],
+      defines: ['USE_GPU=1']
+    })
+    // Adding a disjoint member is a plain configuration change: revision moves.
+    expect(
+      catalog.upsert(scope({ ...saved, members: [...saved.members, { path: 'tools', visibleResults: true }] }))
+        .scope.revision
+    ).toBe(2)
+    // The overlap guard fires through upsert too.
+    expect(() =>
+      catalog.upsert(
+        scope({
+          members: [
+            { path: 'engine', visibleResults: true, compileDatabase: '/b/cdb.json' },
+            { path: 'engine/sub', visibleResults: true }
+          ]
+        })
+      )
+    ).toThrow('overlap')
+  })
+})
+
+describe('declined-auto-scope pruning (#130)', () => {
+  it('prunes orphaned python declisions without arming the notice', () => {
+    const store = createStore(
+      [scope()],
+      'ssh:box',
+      { codeIntelligenceDeclinedAutoScopes: ['ssh%3Abox:folder:w:python'] }
+    )
+    const catalog = new CodeIntelligenceScopeStore(store)
+    expect(catalog.list()).toHaveLength(1)
+    expect(store.getSettings().codeIntelligenceDeclinedAutoScopes).toEqual([])
+    // No python scope was dropped, so no upgrade notice is owed.
+    expect(store.getSettings().codeIntelligenceModelUpgradeNoticePending).toBeUndefined()
+  })
+})
+
+describe('single aggregate session (#134 spec §2 Step 3)', () => {
+  it('restarts only on genuine launch-config changes', () => {
+    const upsert = (next: CodeIntelligenceScope): boolean =>
+      new CodeIntelligenceScopeStore(createStore([scope()])).upsert(next).restartRequired
+    // Real launch changes restart.
+    expect(upsert({ ...scope(), enabled: false })).toBe(true)
+    expect(
+      upsert({ ...scope(), serverSource: { type: 'custom', executable: '/opt/clangd', args: [] } })
+    ).toBe(true)
+    // Mapping edits (compileDatabase) are member-only: no restart.
+    expect(
+      upsert({
+        ...scope(),
+        members: [{ path: 'engine', visibleResults: true, compileDatabase: '/b/cdb.json' }]
+      })
+    ).toBe(false)
+    // basicOptions edits synthesize different entries — still no restart.
+    expect(
+      upsert({
+        ...scope(),
+        basicOptions: { includeDirectories: ['/opt/sdk/include'], defines: [] }
+      })
+    ).toBe(false)
+  })
+
+  it('serves mapped and BASIC folders of one scope from a single launch', async () => {
+    const store = createStore()
+    const catalog = new CodeIntelligenceScopeStore(store)
+    const mixed = scope({
+      members: [
+        { path: 'engine', visibleResults: true, compileDatabase: '/b/engine-cdb.json' },
+        { path: 'third_party', visibleResults: true, compileDatabase: '/b/vendor-cdb.json' },
+        { path: 'tools', visibleResults: true }
+      ]
+    })
+    const saved = catalog.upsert(mixed)
+    catalog.grantConsent('scope', saved.scope.revision)
+    // One authorizeSession call describes the whole scope: one clangd, one
+    // --compile-commands-dir over the aggregate, every member riding along.
+    const launch = await catalog.authorizeSession({
+      sessionId: 's',
+      scopeId: 'scope',
+      revision: saved.scope.revision
+    })
+    expect(launch).toMatchObject({ kind: 'clangd', workspaceRoot: '/workspace' })
+    expect(launch.members).toHaveLength(3)
+  })
+})
+
+describe('consent evolution and reauthorization (#137 spec §2 Step 4)', () => {
+  it('reauthorizes on a mode/database change at save', async () => {
+    const store = createStore([scope()])
+    const catalog = new CodeIntelligenceScopeStore(store)
+    const granted = catalog.grantConsent('scope', 1, 10)
+    expect(await catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 1 })).toBeDefined()
+
+    // Save flips the folder from BASIC to a supplied database.
+    const saved = catalog.upsert(
+      scope({
+        ...granted,
+        members: [{ path: 'engine', visibleResults: true, compileDatabase: '/cdb/one.json' }]
+      })
+    )
+    expect(saved.scope.revision).toBe(2)
+    // Stale consent refuses the launch…
+    await expect(
+      catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
+    ).rejects.toThrow('consent')
+    // …the reauthorize on save restores it.
+    catalog.grantConsent('scope', 2, 11)
+    const launch = await catalog.authorizeSession({ sessionId: 's', scopeId: 'scope', revision: 2 })
+    expect(launch.members[0]).toMatchObject({ compileDatabase: '/cdb/one.json' })
+  })
+
+  it('auto-syncs folder evolution into members inheriting the workspace BASIC mode', () => {
+    const store = createStore([scope()])
+    const catalog = new CodeIntelligenceScopeStore(store)
+    const granted = catalog.grantConsent('scope', 1, 10)
+
+    // A new workspace folder joins through the same save path: it inherits the
+    // workspace's BASIC mode (no compileDatabase), riding the stale-consent banner.
+    const evolved = catalog.upsert(
+      scope({
+        ...granted,
+        members: [
+          { path: 'engine', visibleResults: true },
+          { path: 'newly-added', visibleResults: true }
+        ]
+      })
+    )
+    expect(evolved.scope.revision).toBe(2)
+    expect(evolved.scope.members.map((member) => member.path)).toEqual(['engine', 'newly-added'])
+    expect(evolved.scope.members.every((member) => member.compileDatabase === undefined)).toBe(true)
+    // The prior consent survived but is stale — the banner diff shows the new folder.
+    expect(evolved.scope.consent?.authorizedMembers).toEqual([{ path: 'engine', visibleResults: true }])
   })
 })

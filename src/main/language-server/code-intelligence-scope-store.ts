@@ -1,15 +1,16 @@
 import { posix, win32 } from 'node:path'
-import type {
-  CodeIntelligenceScope,
-  CodeIntelligenceScopeConsent
+import {
+  hasLegacyCodeIntelligenceMembers,
+  languageServerKindForScope,
+  normalizeCodeIntelligenceScope,
+  type CodeIntelligenceScope,
+  type CodeIntelligenceScopeConsent
 } from '../../shared/code-intelligence-scope'
 import {
   canonicalConfigurationJson,
   codeIntelligenceConfigurationSnapshot,
-  hasLegacyCodeIntelligenceMembers,
-  normalizeCodeIntelligenceScope,
   scopeConfigurationPayload
-} from '../../shared/code-intelligence-scope'
+} from '../../shared/code-intelligence-consent-staleness'
 import type {
   LanguageServerKind,
   LanguageServerLaunchRequest,
@@ -22,7 +23,6 @@ import {
   grantCodeIntelligenceConsent,
   hasCurrentCodeIntelligenceConsent
 } from './code-intelligence-scope-consent'
-import { languageServerKindForScope } from '../../shared/code-intelligence-scope'
 
 type ScopeSettingsStore = {
   getRepos: () => Repo[]
@@ -51,15 +51,14 @@ function sameConfiguration(left: CodeIntelligenceScope, right: CodeIntelligenceS
 }
 
 /** Config payload without members — member-only edits keep the clangd session
- * alive (spec §5: the atomic CDB rewrite is picked up lazily), while any other
- * change alters the launch and must restart it. */
+ * alive (spec §5), while any other change alters the launch and must restart
+ * it. basicOptions stays out too (#134): it shapes the aggregate's *content*,
+ * which the running session re-reads lazily; only a real launch-config change
+ * restarts. */
 function launchConfigurationPayload(scope: CodeIntelligenceScope): Record<string, unknown> {
-  const { members: _members, ...payload } = scopeConfigurationPayload(
-    scope
-  ) as Record<string, unknown>
-  // A setup regeneration rewrote the compile database this launch consumes:
-  // identical everything else still restarts the server (dialog re-run).
-  return { ...payload, setupGeneratedAt: scope.setupStatus?.generatedAt ?? null }
+  const { members: _members, basicOptions: _basicOptions, ...payload } =
+    scopeConfigurationPayload(scope) as Record<string, unknown>
+  return payload
 }
 
 function sameLaunchConfiguration(
@@ -70,6 +69,17 @@ function sameLaunchConfiguration(
     canonicalConfigurationJson(launchConfigurationPayload(left)) ===
     canonicalConfigurationJson(launchConfigurationPayload(right))
   )
+}
+
+/** Pre-#131 persisted scopes may still say python and pre-#139 ones may carry
+ * a setup pipeline result — the type no longer carries either, so raw
+ * comparisons read through these widened views. */
+function isPersistedPythonScope(scope: CodeIntelligenceScope): boolean {
+  return (scope as { language?: string }).language === 'python'
+}
+
+function hasPersistedSetupStatus(scope: CodeIntelligenceScope): boolean {
+  return (scope as { setupStatus?: unknown }).setupStatus !== undefined
 }
 
 function languageServerKind(scope: CodeIntelligenceScope): LanguageServerKind {
@@ -98,18 +108,42 @@ export class CodeIntelligenceScopeStore {
   ) {}
 
   list(): readonly CodeIntelligenceScope[] {
-    const raw = this.store.getSettings().codeIntelligenceScopes ?? []
+    const settings = this.store.getSettings()
+    const raw = settings.codeIntelligenceScopes ?? []
     // Lazy no-compat migration: map legacy {relativePath} members to {path},
     // drop the setupStatus (its compileCommandsDir points at a swept hash dir),
     // and persist once so later reads never see the old shape again.
-    const migrated = raw.some(hasLegacyCodeIntelligenceMembers)
-    const scopes = raw.map((scope) =>
-      hasLegacyCodeIntelligenceMembers(scope)
-        ? normalizeCodeIntelligenceScope({ ...scope, setupStatus: undefined })
-        : normalizeCodeIntelligenceScope(scope)
+    const migratedLegacyMembers = raw.some(hasLegacyCodeIntelligenceMembers)
+    // One-shot model migration (#128 spec §2 Step 1): drop persisted python
+    // scopes, blank legacy setupStatus, keep cpp consents, arm the one-time
+    // notice. The notice flag doubles as the ran-once guard (undefined = never).
+    const needsModelMigration =
+      settings.codeIntelligenceModelUpgradeNoticePending === undefined &&
+      raw.some((scope) => isPersistedPythonScope(scope) || hasPersistedSetupStatus(scope))
+    const scopes = raw
+      .filter((scope) => !isPersistedPythonScope(scope))
+      .map((scope) => {
+        if (!hasLegacyCodeIntelligenceMembers(scope) && !hasPersistedSetupStatus(scope)) {
+          return normalizeCodeIntelligenceScope(scope)
+        }
+        const { setupStatus: _legacy, ...rest } = scope as CodeIntelligenceScope & {
+          setupStatus?: unknown
+        }
+        return normalizeCodeIntelligenceScope(rest)
+      })
+    // Scope ids end with their language segment (#128), so python declisions
+    // prune by suffix; cpp declisions keep blocking Outline auto-recreation.
+    const declined = settings.codeIntelligenceDeclinedAutoScopes?.filter(
+      (scopeId) => !scopeId.endsWith(':python')
     )
-    if (migrated) {
-      this.persist(scopes)
+    const prunedDeclined =
+      declined !== undefined &&
+      declined.length !== settings.codeIntelligenceDeclinedAutoScopes?.length
+    if (migratedLegacyMembers || needsModelMigration || prunedDeclined) {
+      this.persist(scopes, {
+        ...(needsModelMigration ? { codeIntelligenceModelUpgradeNoticePending: true } : {}),
+        ...(prunedDeclined ? { codeIntelligenceDeclinedAutoScopes: declined! } : {})
+      })
     }
     return scopes.map((scope) => structuredClone(scope))
   }
@@ -121,10 +155,9 @@ export class CodeIntelligenceScopeStore {
     const index = scopes.findIndex((scope) => scope.id === next.id)
     const prior = index !== -1 ? scopes[index] : null
     const configurationChanged = prior ? !sameConfiguration(prior, next) : false
-    // Restart when the launch itself changed; member-only changes bump the
-    // revision (consent chain) while the running clangd session stays up.
-    // setupGeneratedAt rides in the launch payload, so a re-run setup
-    // restarts without touching the consent chain.
+    // Restart when the launch itself changed; member-only changes and
+    // aggregate re-merges (setupStatus/generatedAt) keep the running clangd
+    // session up — it re-reads the rewritten compile database lazily.
     const restartRequired = prior ? !sameLaunchConfiguration(prior, next) : false
     next = prior
       ? {
@@ -187,6 +220,15 @@ export class CodeIntelligenceScopeStore {
   }
 
   private requireScope(scopeId: string): CodeIntelligenceScope {
+    // Raw-first python check (#128): wire kinds keep tolerating python, so an
+    // old renderer holding a pre-migration python scope gets an explicit
+    // refusal here — before list()'s migration wipes the evidence away.
+    const persisted = (this.store.getSettings().codeIntelligenceScopes ?? []).find(
+      (candidate) => candidate.id === scopeId
+    )
+    if (persisted && isPersistedPythonScope(persisted)) {
+      throw new Error('Python code intelligence is no longer supported on this Host')
+    }
     const scope = this.list().find((candidate) => candidate.id === scopeId)
     if (!scope) {
       throw new Error(`Unknown code intelligence scope: ${scopeId}`)
@@ -255,9 +297,12 @@ export class CodeIntelligenceScopeStore {
     }
   }
 
-  private persist(scopes: readonly CodeIntelligenceScope[]): void {
+  private persist(
+    scopes: readonly CodeIntelligenceScope[],
+    extra: Partial<GlobalSettings> = {}
+  ): void {
     this.store.updateSettings(
-      { codeIntelligenceScopes: scopes.map((scope) => structuredClone(scope)) },
+      { codeIntelligenceScopes: scopes.map((scope) => structuredClone(scope)), ...extra },
       { notifyListeners: true }
     )
   }

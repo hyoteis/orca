@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings, Repo } from '../../shared/types'
 import type { CodeIntelligenceScope } from '../../shared/code-intelligence-scope'
-import { clangdCompileCommandsDirArg } from '../../shared/code-intelligence-cpp-setup'
+import { clangdCompileCommandsDirArg } from '../language-server/clangd-compile-commands-dir'
 import type { SshConnection } from '../ssh/ssh-connection'
 import { CodeIntelligenceScopeStore } from '../language-server/code-intelligence-scope-store'
 
@@ -82,7 +82,10 @@ function scopeFixture(
   }
 }
 
-function registerWith(scopes: CodeIntelligenceScope[]): {
+function registerWith(
+  scopes: CodeIntelligenceScope[],
+  options?: { skipConsent?: boolean }
+): {
   open: (scopeId: string) => Promise<unknown>
 } {
   let settings = { codeIntelligenceScopes: scopes } as GlobalSettings
@@ -105,8 +108,10 @@ function registerWith(scopes: CodeIntelligenceScope[]): {
     }
   }
   const store = new CodeIntelligenceScopeStore(settingsStore)
-  for (const scope of scopes) {
-    store.grantConsent(scope.id, 1, Date.now())
+  if (!options?.skipConsent) {
+    for (const scope of scopes) {
+      store.grantConsent(scope.id, 1, Date.now())
+    }
   }
   registerLanguageServerSessionHandlers(store)
   const open = handleMock.mock.calls
@@ -175,15 +180,16 @@ describe('registerLanguageServerSessionHandlers clangd compile-commands wiring',
     await expect(open('scope')).rejects.toThrow('SSH connection was interrupted')
   })
 
-  it('leaves python launches untouched', async () => {
-    const python: CodeIntelligenceScope = {
+  it('refuses python launches explicitly (#131 wire tolerance)', async () => {
+    const python = {
       ...scopeFixture('scope', 'local'),
       language: 'python',
       members: [{ path: 'engine', visibleResults: true }]
-    }
-    const { open } = registerWith([python])
-    await expect(open('scope')).resolves.toEqual({ sessionId: 's:scope' })
-    expect(spawnMock).toHaveBeenCalledTimes(1)
-    expect(spawnMock.mock.calls[0][0]).toBe('basedpyright-langserver')
+    } as unknown as CodeIntelligenceScope
+    // Python scopes cannot hold consent anymore — register the handler with the
+    // raw scope persisted, then prove the launch path refuses it.
+    const { open } = registerWith([python], { skipConsent: true })
+    await expect(open('scope')).rejects.toThrow('no longer supported')
+    expect(spawnMock).not.toHaveBeenCalled()
   })
 })

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
-import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-scope'
+import { isCodeIntelligenceConsentStale } from '../../../../shared/code-intelligence-consent-staleness'
 import {
   CPP_LANGUAGES,
   findCppCodeIntelligenceScope

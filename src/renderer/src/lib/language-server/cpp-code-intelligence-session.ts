@@ -129,6 +129,11 @@ export class CppCodeIntelligenceSession {
     if (options.capability && !active.semanticCapabilities[options.capability]) {
       return null
     }
+    // #20: per-request refinement of the coarse capability flag (e.g. the
+    // server-declared executeCommand list) — inherited from the python stack.
+    if (options.satisfies && !options.satisfies(active.semanticCapabilities)) {
+      return null
+    }
     const uri = toServerFileUri(request.filePath)
     active.client.sync.reconcile([
       {

@@ -188,7 +188,7 @@ export function createSemanticEditingRequests(getSession: () => SemanticEditingS
     command: string,
     commandArguments: readonly unknown[],
     token?: CancellationToken
-  ): Promise<unknown | null> {
+  ): Promise<unknown> {
     const prepared = await getSession().semanticRequest<unknown>(
       request,
       ExecuteCommandRequest.type,

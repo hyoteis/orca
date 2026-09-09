@@ -20,7 +20,6 @@ import {
   resolveWorkspaceEditOperationHostId
 } from './workspace-edit-editor-ports'
 import { CPP_LANGUAGES, findCppCodeIntelligenceScope } from './cpp-code-intelligence-workspace'
-import { findCodeIntelligenceScope } from './code-intelligence-workspace'
 
 export type SemanticEditLandingResult =
   | 'applied' // tier-1: one monaco undo group on the open draft
@@ -250,9 +249,7 @@ export async function runSemanticCodeAction(args: {
 export async function undoLatestSemanticEditForRequest(
   request: CodeIntelligenceDocumentRequest
 ): Promise<'committed' | 'cancelled' | 'blocked' | 'failed' | 'nothing-to-undo'> {
-  const scope = CPP_LANGUAGES.has(request.language)
-    ? findCppCodeIntelligenceScope(request)
-    : findCodeIntelligenceScope(request, 'python')
+  const scope = CPP_LANGUAGES.has(request.language) ? findCppCodeIntelligenceScope(request) : null
   if (!scope) {
     return 'nothing-to-undo'
   }
@@ -277,7 +274,7 @@ export async function undoLatestSemanticEditForRequest(
       return 'committed'
     case 'blocked':
       return 'blocked'
-    default:
+    case 'failed':
       return 'failed'
   }
 }

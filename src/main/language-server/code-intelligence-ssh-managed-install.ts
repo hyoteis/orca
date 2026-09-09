@@ -1,4 +1,7 @@
-import { resolveManagedLanguageServerEntry } from '../../shared/managed-language-server'
+import {
+  assertManagedLanguageServerTool,
+  resolveManagedLanguageServerEntry
+} from '../../shared/managed-language-server'
 import type {
   ManagedLanguageServerInstallResult,
   ManagedLanguageServerInstallRoute,
@@ -18,7 +21,6 @@ import {
 import {
   acquireSshManagedVersion,
   probeSshManagedEntry,
-  probeSshManagedVersion,
   probeTail
 } from './code-intelligence-ssh-managed-acquisition'
 
@@ -45,7 +47,7 @@ export function resolveSshManagedEntry(
   }
   return resolveManagedLanguageServerEntry(
     manifest,
-    { tool, version },
+    { tool: assertManagedLanguageServerTool(tool), version },
     { platform: ctx.remotePlatform, arch: ctx.remoteArch, glibcVersion: ctx.remoteGlibc }
   )
 }
@@ -70,24 +72,12 @@ export async function installSshManagedLanguageServer(args: {
     return { status: 'unsupported', reason: resolved.unsupported }
   }
   try {
-    const { entry, runtimeEntry } = resolved
+    const { entry } = resolved
     args.signal?.throwIfAborted()
-    if (runtimeEntry && !(await probeSshManagedVersion(ctx, args.manifest, runtimeEntry))) {
-      await acquireSshManagedVersion({
-        ctx,
-        manifest: args.manifest,
-        entry: runtimeEntry,
-        route: { type: 'host-download' },
-        signal: args.signal
-      })
-      await writeSshManagedActivation(ctx, runtimeEntry.tool, {
-        active: { version: runtimeEntry.version, entryId: runtimeEntry.id, activatedAt: Date.now() }
-      })
-    }
     const record = await readSshManagedActivation(ctx, entry.tool)
     const versionDirectory = remoteManagedVersionDirectory(ctx.home, entry.tool, entry.version)
     if (record?.active.version === entry.version) {
-      const smoke = await probeSshManagedEntry(ctx, args.manifest, entry, versionDirectory)
+      const smoke = await probeSshManagedEntry(ctx, entry, versionDirectory)
       if (smoke.code !== 0) {
         throw new Error(
           `Active managed ${entry.tool} ${entry.version} failed its smoke test: ${probeTail(smoke)}`
@@ -96,7 +86,7 @@ export async function installSshManagedLanguageServer(args: {
       return { status: 'already-active', version: entry.version }
     }
     if ((await listSshManagedVersions(ctx, entry.tool)).includes(entry.version)) {
-      const smoke = await probeSshManagedEntry(ctx, args.manifest, entry, versionDirectory)
+      const smoke = await probeSshManagedEntry(ctx, entry, versionDirectory)
       if (smoke.code !== 0) {
         throw new Error(
           `Managed ${entry.tool} ${entry.version} failed its smoke test: ${probeTail(smoke)}`

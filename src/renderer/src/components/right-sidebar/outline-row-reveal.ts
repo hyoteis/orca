@@ -1,8 +1,7 @@
-import type { OpenFile } from '@/store/slices/editor'
+import type { OpenFile, PendingEditorReveal } from '@/store/slices/editor'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import { openDefinitionTargetInWorkspace } from '@/lib/language-server/code-intelligence-workspace'
 import { toServerFileUri } from '@/lib/language-server/language-server-document-uri'
-import type { PendingEditorReveal } from '@/store/slices/editor'
 import type { OutlineSymbolRow } from './outline-model'
 
 /** Semantic rows reveal through the shared symbol-open path (reuses the open

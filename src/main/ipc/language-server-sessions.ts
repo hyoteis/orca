@@ -24,6 +24,14 @@ import {
   SshSetupExecQueue
 } from '../language-server/code-intelligence-ssh-setup-exec'
 
+/** Session-open drift re-check hook (#135): ipc/code-intelligence registers
+ * the aggregate refresh here; sessions stay decoupled from the store wiring. */
+type AggregateDriftCheck = (scopeId: string) => Promise<void>
+let aggregateDriftCheck: AggregateDriftCheck | null = null
+export function registerAggregateSessionOpenDriftCheck(check: AggregateDriftCheck): void {
+  aggregateDriftCheck = check
+}
+
 type SessionRoute = {
   send: (bytes: Uint8Array<ArrayBufferLike>) => boolean
   close: () => void
@@ -66,6 +74,11 @@ export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceSc
         throw new Error('Runtime language-server sessions must use the Runtime adapter')
       }
       owners.set(request.sessionId, event.sender)
+      // Drift re-check before the session reads the aggregate (spec §2 Step 3);
+      // failures are best-effort — the next open retries.
+      if (aggregateDriftCheck) {
+        void aggregateDriftCheck(launch.scopeId).catch(() => {})
+      }
       try {
         if (host.kind === 'ssh') {
           const connectionManager = getSshConnectionManager()

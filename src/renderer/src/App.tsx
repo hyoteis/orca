@@ -363,8 +363,8 @@ const AddProjectFromFolderDialog = lazy(
 )
 const ProjectAddedDialog = lazy(() => import('./components/sidebar/ProjectAddedDialog'))
 const DeleteWorktreeDialog = lazy(() => import('./components/sidebar/DeleteWorktreeDialog'))
-const CodeIntelligenceCppSetupDialog = lazy(
-  () => import('./components/sidebar/CodeIntelligenceCppSetupDialog')
+const CodeIntelligenceConfigureDialog = lazy(
+  () => import('./components/sidebar/CodeIntelligenceConfigureDialog')
 )
 const PreservedBranchBatchReviewModal = lazy(
   () => import('./components/sidebar/PreservedBranchBatchReviewModal')
@@ -2695,7 +2695,7 @@ function App(): React.JSX.Element {
                   resetKey
                   compact
                 >
-                  <CodeIntelligenceCppSetupDialog />
+                  <CodeIntelligenceConfigureDialog />
                 </RecoverableRenderErrorBoundary>
               ) : null}
               {activeModal === 'delete-worktree' ? (

@@ -202,9 +202,12 @@ export function materializeReleaseCheckout(ref: string): ReleaseCheckout {
   try {
     // `git archive | tar -x` keeps the extraction independent of the working tree,
     // so an injected violation in the working tree cannot leak into the old side.
+    // Why forward slashes: MSYS sh mangles drive-letter backslashes inside the
+    // quoted -C argument, so hand it a POSIX-spelled path.
+    const stagingForShell = staging.replace(/\\/g, '/')
     execFileSync(
       'sh',
-      ['-c', `git archive ${commit} ${ARCHIVE_PATHS.join(' ')} | tar -x -C "${staging}"`],
+      ['-c', `git archive ${commit} ${ARCHIVE_PATHS.join(' ')} | tar -x -C "${stagingForShell}"`],
       { cwd: REPO_ROOT, stdio: ['ignore', 'ignore', 'pipe'] }
     )
     prepareExtractedTree(staging)

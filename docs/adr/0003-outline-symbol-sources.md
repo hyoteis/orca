@@ -4,7 +4,7 @@ The Outline view (symbol tree of the active editor file) gets its data in
 tiers: a code-intelligence scope's LSP session when one covers the file;
 otherwise an auto-created default scope (whole worktree root) on local hosts
 so outline works zero-config; otherwise a regex-based heuristic extraction —
-C++/Python only, marked "approximate" — when no LSP can run (SSH host
+C++ family only, marked "approximate" — when no LSP can run (SSH host
 unconfigured, scope creation failed, or the user deleted the auto scope).
 This keeps the one-session-per-scope model (#12) intact instead of a second
 session track, and honors the product promise that outline shows something

@@ -2809,6 +2809,10 @@ export type GlobalSettings = {
   appFontFamily: string
   /** User-authorized semantic scopes; absent for profiles created before code intelligence. */
   codeIntelligenceScopes?: CodeIntelligenceScope[]
+  /** One-shot (#128 spec §2 Step 1): undefined = migration never ran; true =
+   *  scopes were lazily migrated (python dropped, legacy setupStatus blanked) and
+   *  the renderer owes the user a one-time notice; false = notice shown. */
+  codeIntelligenceModelUpgradeNoticePending?: boolean
   /** Scope ids whose Outline auto default scope the user deleted (#101) — main-owned,
    * so the Outline never silently recreates them. */
   codeIntelligenceDeclinedAutoScopes?: string[]

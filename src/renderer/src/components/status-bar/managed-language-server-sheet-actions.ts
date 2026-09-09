@@ -5,8 +5,10 @@ import { extractIpcErrorMessage } from '@/lib/ipc-error'
 import { useAppStore } from '@/store'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import type { ManagedLanguageServerInstallResult } from '../../../../shared/managed-language-server'
-import type { useManagedLanguageServerInstall } from './use-managed-language-server-install'
-import type { ManagedInstallActionRoute } from './use-managed-language-server-install'
+import type {
+  ManagedInstallActionRoute,
+  useManagedLanguageServerInstall
+} from './use-managed-language-server-install'
 
 type ManagedInstallController = ReturnType<typeof useManagedLanguageServerInstall>
 

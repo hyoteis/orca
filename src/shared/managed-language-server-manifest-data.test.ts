@@ -17,35 +17,9 @@ describe('MANAGED_LANGUAGE_SERVER_MANIFEST', () => {
     }
   })
 
-  it('resolves every runtime dependency on the same platform', () => {
-    const byId = new Map(MANAGED_LANGUAGE_SERVER_MANIFEST.entries.map((entry) => [entry.id, entry]))
-    for (const entry of MANAGED_LANGUAGE_SERVER_MANIFEST.entries) {
-      if (!entry.runtimeEntryId) {
-        continue
-      }
-      const runtime = byId.get(entry.runtimeEntryId)
-      expect(runtime, `${entry.id} -> ${entry.runtimeEntryId}`).toBeDefined()
-      expect(runtime?.tool).toBe('node')
-      expect(runtime?.platform).toBe(entry.platform)
-      expect(runtime?.arch).toBe(entry.arch)
-    }
-  })
-
-  it('covers all six Host targets for the Python servers and node', () => {
-    const targets = new Set(
-      MANAGED_LANGUAGE_SERVER_MANIFEST.entries.map((entry) => `${entry.platform}-${entry.arch}`)
-    )
-    expect([...targets].sort()).toEqual([
-      'darwin-arm64',
-      'darwin-x64',
-      'linux-arm64',
-      'linux-x64',
-      'win32-arm64',
-      'win32-x64'
-    ])
-    for (const tool of ['node', 'pyright', 'basedpyright'] as const) {
-      expect(MANAGED_LANGUAGE_SERVER_MANIFEST.entries.filter((entry) => entry.tool === tool)).toHaveLength(6)
-    }
+  it('ships clangd-only entries after the python removal (#131)', () => {
+    const tools = new Set(MANAGED_LANGUAGE_SERVER_MANIFEST.entries.map((entry) => entry.tool))
+    expect([...tools]).toEqual(['clangd'])
   })
 
   it('pins clangd for the supported Hosts with a universal mac artifact', () => {

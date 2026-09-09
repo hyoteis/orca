@@ -725,11 +725,18 @@ describe('file RPC methods', () => {
       makeRequest('files.rename', {
         worktree: 'id:wt-1',
         oldRelativePath: 'old.ts',
-        newRelativePath: 'new.ts'
+        newRelativePath: 'new.ts',
+        overwrite: true
       })
     )
 
-    expect(runtime.renameFileExplorerPath).toHaveBeenCalledWith('id:wt-1', 'old.ts', 'new.ts')
+    // overwrite rides along positionally after the (absent here) SSH guards.
+    expect(runtime.renameFileExplorerPath).toHaveBeenCalledWith(
+      'id:wt-1',
+      'old.ts',
+      'new.ts',
+      true
+    )
     expect(response).toMatchObject({ ok: true, result: { ok: true } })
   })
 

@@ -27,11 +27,6 @@ import {
   resetCppCodeIntelligenceSession,
   type CppCodeIntelligenceRequest
 } from './cpp-code-intelligence-session'
-import {
-  getPythonCodeIntelligenceSession,
-  resetPythonCodeIntelligenceSession,
-  type PythonCodeIntelligenceRequest
-} from './python-code-intelligence-session'
 
 const cppScope: CodeIntelligenceScope = {
   id: 'local:worktree:demo:cpp',
@@ -46,8 +41,6 @@ const cppScope: CodeIntelligenceScope = {
   revision: 1
 }
 
-const pythonScope: CodeIntelligenceScope = { ...cppScope, id: 'local:worktree:demo:python', name: 'Demo Python', language: 'python' }
-
 const cppRequest: CppCodeIntelligenceRequest = {
   fileId: 'f1',
   filePath: '/repo/main.cpp',
@@ -60,10 +53,7 @@ const cppRequest: CppCodeIntelligenceRequest = {
   column: 1
 }
 
-const pythonRequest: PythonCodeIntelligenceRequest = { ...cppRequest, filePath: '/repo/main.py', relativePath: 'main.py', language: 'python', text: 'x = 1' }
-
 const cppRequests = createSemanticEditingRequests(getCppSession)
-const pythonRequests = createSemanticEditingRequests(getPythonCodeIntelligenceSession)
 
 beforeEach(() => {
   resetScriptedLanguageServerClient()
@@ -73,9 +63,8 @@ beforeEach(() => {
     documentFormattingProvider: true
   }
   resetCppCodeIntelligenceSession()
-  resetPythonCodeIntelligenceSession()
   ;(window as unknown as { api: unknown }).api = { languageServers: {} }
-  settings = { codeIntelligenceScopes: [cppScope, pythonScope] } as GlobalSettings
+  settings = { codeIntelligenceScopes: [cppScope] } as GlobalSettings
   repos = [
     {
       id: 'demo',
@@ -94,7 +83,7 @@ describe('semantic editing requests', () => {
   it('returns completion items from a CompletionList', async () => {
     const item: CompletionItem = { label: 'sqrt' }
     scripted.requestHandlers['textDocument/completion'] = () => ({ items: [item] })
-    expect(await pythonRequests.getCompletion(pythonRequest, { triggerKind: 1 })).toEqual([item])
+    expect(await cppRequests.getCompletion(cppRequest, { triggerKind: 1 })).toEqual([item])
   })
 
   it('returns completion items from a bare array (clangd shape)', async () => {
@@ -105,10 +94,10 @@ describe('semantic editing requests', () => {
 
   it('sends no request when the server lacks the capability', async () => {
     scripted.capabilities = {}
-    expect(await pythonRequests.getCompletion(pythonRequest, { triggerKind: 1 })).toBeNull()
-    expect(await pythonRequests.getRenameEdit(pythonRequest, 'renamed')).toBeNull()
+    expect(await cppRequests.getCompletion(cppRequest, { triggerKind: 1 })).toBeNull()
+    expect(await cppRequests.getRenameEdit(cppRequest, 'renamed')).toBeNull()
     expect(
-      await pythonRequests.getFormattingEdits(pythonRequest, { tabSize: 4, insertSpaces: true })
+      await cppRequests.getFormattingEdits(cppRequest, { tabSize: 4, insertSpaces: true })
     ).toBeNull()
     expect(scripted.requestCalls).toEqual([])
   })
@@ -116,16 +105,16 @@ describe('semantic editing requests', () => {
   it('rejects server commands the server never declared (#20)', async () => {
     scripted.capabilities = { executeCommandProvider: { commands: ['allowed.command'] } }
     scripted.requestHandlers['workspace/executeCommand'] = () => 'ran'
-    expect(await pythonRequests.executeServerCommand(pythonRequest, 'unknown.command', [])).toBeNull()
-    expect(await pythonRequests.executeServerCommand(pythonRequest, 'allowed.command', [])).toBe('ran')
+    expect(await cppRequests.executeServerCommand(cppRequest, 'unknown.command', [])).toBeNull()
+    expect(await cppRequests.executeServerCommand(cppRequest, 'allowed.command', [])).toBe('ran')
   })
 
   it('drops empty rename and formatting results', async () => {
     scripted.requestHandlers['textDocument/rename'] = () => ({ changes: {} })
     scripted.requestHandlers['textDocument/formatting'] = () => []
-    expect(await pythonRequests.getRenameEdit(pythonRequest, 'renamed')).toBeNull()
+    expect(await cppRequests.getRenameEdit(cppRequest, 'renamed')).toBeNull()
     expect(
-      await pythonRequests.getFormattingEdits(pythonRequest, { tabSize: 4, insertSpaces: true })
+      await cppRequests.getFormattingEdits(cppRequest, { tabSize: 4, insertSpaces: true })
     ).toBeNull()
   })
 
@@ -137,7 +126,7 @@ describe('semantic editing requests', () => {
         ]
       }
     })
-    expect(await pythonRequests.getRenameEdit(pythonRequest, 'y')).toMatchObject({ changes: {} })
+    expect(await cppRequests.getRenameEdit(cppRequest, 'y')).toMatchObject({ changes: {} })
   })
 })
 
@@ -176,9 +165,9 @@ describe('workspace/applyEdit interception', () => {
 
   it('answers declined and never commits when the user rejects the proposal', async () => {
     const confirm = vi.fn(async () => false)
-    pythonRequests.installWorkspaceApplyEditInterceptor(() => guardedContext(confirm))
+    cppRequests.installWorkspaceApplyEditInterceptor(() => guardedContext(confirm))
     // Open a client so the interceptor installs on it.
-    await pythonRequests.getCompletion(pythonRequest, { triggerKind: 1 })
+    await cppRequests.getCompletion(cppRequest, { triggerKind: 1 })
     const handler = scripted.serverRequestRoutes['workspace/applyEdit']
     expect(handler).toBeDefined()
     const result = (await handler!(applyEditParams)) as { applied: boolean }
@@ -187,8 +176,8 @@ describe('workspace/applyEdit interception', () => {
   })
 
   it('reports a missing context without confirming', async () => {
-    pythonRequests.installWorkspaceApplyEditInterceptor(() => null)
-    await pythonRequests.getCompletion(pythonRequest, { triggerKind: 1 })
+    cppRequests.installWorkspaceApplyEditInterceptor(() => null)
+    await cppRequests.getCompletion(cppRequest, { triggerKind: 1 })
     const handler = scripted.serverRequestRoutes['workspace/applyEdit']!
     const result = (await handler(applyEditParams)) as {
       applied: boolean

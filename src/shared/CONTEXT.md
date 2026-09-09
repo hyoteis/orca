@@ -4,39 +4,40 @@ Terms shared across Main, renderer, and remote clients. Implementation-free.
 
 ## Code intelligence scope
 
-The single unit of C++/Python indexing: a named set of scope members bound to
+The single unit of C++ indexing: a named set of scope members bound to
 one workspace and one execution Host. There is no distinct "aggregate scope"
 kind — a workspace-relative-only scope is the degenerate case of the same
-concept, not a variant. One scope, one code path.
+concept, not a variant. One scope, one code path. Python code intelligence
+was removed (#131); ordinary Python editing stays.
 
 ## Scope member
 
 A single filesystem path in one of two forms: relative to the workspace root,
 or absolute on the execution Host. The form is a property of the path string
-itself (is-absolute), not a tag. Python scopes accept the relative form only.
+itself (is-absolute), not a tag.
 
 ## C++ setup pipeline
 
-The one step sequence every C++ setup run follows: normalize scope members,
-classify build roots, provision tools, generate compile-command shards
-(cmake, gn, or basic), merge, and record the cached result. One
-implementation for all Hosts — a Host never carries its own copy of the
-sequence.
+The one step sequence every C++ setup run follows: validate each supplied
+compile database, normalize entries, synthesize BASIC shards, first-wins merge
+into the Orca-owned aggregate, and record per-mapping last-valid snapshots.
+Orca never runs cmake or gn (#139) — cross-compile workflows generate their
+database outside Orca and attach it. One implementation for all Hosts — a
+Host never carries its own copy of the sequence.
 
 ## CppSetupHost
 
-The execution surface a setup step runs against: run a command, read and
-atomically write a file, stat mtimes, list directories, resolve the scope
-directory. The local filesystem and the SSH exec queue are the two
-realizations; the differences between them (mtime precision, cache re-checks,
-transport errors) belong to each realization, not to the pipeline.
+The execution surface the aggregate pipeline runs against: read and
+atomically write a file, stat mtimes, walk sources and include directories,
+resolve the scope directory. The local filesystem and the SSH exec queue are
+the two realizations; the differences between them (path flavor, transport
+errors) belong to each realization, not to the pipeline.
 
 ## Managed language server
 
 An Orca-supplied language server installed per execution Host from a trusted,
 shipped manifest. Clients request manifest entry ids — never URLs or hashes.
-Managed Python servers carry a private managed Node runtime instead of the
-user's Node; system package managers and PATH are never touched.
+System package managers and PATH are never touched.
 
 ## Manifest entry
 
@@ -70,7 +71,7 @@ _Avoid_: Struct panel, member tree (that is a Scope member directory tree), Symb
 ## Heuristic symbols
 
 Outline's degraded symbol tier: regex-extracted names and line ranges
-(C++/Python only) shown when no language server can run. Approximate by
+(C++ family only) shown when no language server can run. Approximate by
 definition — distinct from the semantic symbols a scope's LSP session
 returns, and marked as approximate in the UI.
 _Avoid_: fallback symbols

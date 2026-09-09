@@ -8,11 +8,13 @@ import {
   resolveRuntimePath
 } from './cross-platform-path'
 
-export type CodeIntelligenceLanguage = 'python' | 'cpp'
+/** Python code intelligence is gone (#131); the wire kind union keeps
+ * tolerating python kinds for mixed-version remote pairs. */
+export type CodeIntelligenceLanguage = 'cpp'
 
-/** The server a scope's language launches; Python scopes use basedpyright. */
-export function languageServerKindForScope(language: CodeIntelligenceLanguage): LanguageServerKind {
-  return language === 'cpp' ? 'clangd' : 'basedpyright'
+/** The server a scope's language launches — clangd since python removal (#131). */
+export function languageServerKindForScope(_language: CodeIntelligenceLanguage): LanguageServerKind {
+  return 'clangd'
 }
 
 export function getCodeIntelligenceWorkspaceKey(
@@ -43,7 +45,21 @@ export type CodeIntelligenceServerSource =
   | { type: 'automatic' }
   | { type: 'managed'; version?: string }
   | { type: 'custom'; executable: string; args: string[] }
-export type CodeIntelligenceScopeMember = { path: string; visibleResults: boolean }
+/** Per-scope BASIC synthesis options (#128): shared include directories, defines,
+ * and C++ standard applied to every BASIC member. Empty options are omitted from
+ * the scope entirely so legacy consents never go stale over a no-op field. */
+export type CodeIntelligenceBasicOptions = {
+  includeDirectories: string[]
+  defines: string[]
+  cppStandard?: 'c++17' | 'c++20' | 'c++23'
+}
+/** Absent `compileDatabase` = BASIC indexing (spec §2 Step 1); the host-absolute
+ * path may live anywhere on the Host, unlike `path` which stays in-workspace. */
+export type CodeIntelligenceScopeMember = {
+  path: string
+  visibleResults: boolean
+  compileDatabase?: string
+}
 export type CodeIntelligenceScopeConsent = {
   configurationFingerprint: string
   grantedAt: number
@@ -53,20 +69,56 @@ export type CodeIntelligenceScopeConsent = {
    * staleness without node:crypto; absent on pre-snapshot consents. */
   authorizedConfiguration?: string
 }
-export type CodeIntelligenceConfigurationMode = 'cmake' | 'gn' | 'basic' | 'mixed'
-export type CodeIntelligenceSetupStatus = {
-  state: 'ready' | 'limited' | 'error'
-  mode: CodeIntelligenceConfigurationMode
-  generatedAt: number
-  compileCommandCount?: number
-  warningCount?: number
-  message?: string
-  compileCommandsDir?: string
+/** Scope configuration mode derived from members (#128): `basic` when every
+ * member self-indexes, `mapped` when every member maps a supplied database,
+ * `mixed` otherwise. */
+export type CodeIntelligenceConfigurationMode = 'basic' | 'mapped' | 'mixed'
+export function codeIntelligenceScopeConfigurationMode(
+  scope: Pick<CodeIntelligenceScope, 'members'>
+): CodeIntelligenceConfigurationMode {
+  const hasMapped = scope.members.some((member) => member.compileDatabase !== undefined)
+  if (!hasMapped) {
+    return 'basic'
+  }
+  return scope.members.some((member) => member.compileDatabase === undefined) ? 'mixed' : 'mapped'
 }
+/** Ephemeral scope-snapshot change events; see CodeIntelligenceScopeStore. */
 export type CodeIntelligenceScopeChange = {
   scopeId: string
   revision: number | null
   removed: boolean
+  /** Ephemeral mapping health (#136 spec §2 Step 4): rides this push, never
+   * persisted into settings — absent on ordinary scope changes. */
+  mappingHealth?: readonly AggregateMappingHealthSnapshot[]
+}
+
+/** Per-mapping health as of the latest aggregate rebuild. */
+export type AggregateMappingHealthSnapshot = {
+  id: string
+  memberPath: string
+  compileDatabase: string
+  state: 'ok' | 'degraded' | 'warning'
+  failure?: 'not-found' | 'invalid-json' | 'invalid-shape' | 'no-in-folder-commands'
+}
+
+/** Workspace-level Configure Code save (#138): one row, one mode. */
+export type CodeIntelligenceConfigureAggregateRequest = {
+  repoId: string
+  mode: 'cdb' | 'basic'
+  /** Host-absolute; required in cdb mode. */
+  compileDatabase?: string
+  basicOptions?: CodeIntelligenceBasicOptions
+}
+
+export type CodeIntelligenceConfigureAggregateResult = {
+  scope: CodeIntelligenceScope
+  mappings: readonly AggregateMappingHealthSnapshot[]
+  entryCount: number
+}
+
+export type CodeIntelligenceRevalidateAggregateResult = {
+  mappings: readonly AggregateMappingHealthSnapshot[]
+  entryCount: number
 }
 export type CodeIntelligenceScope = {
   id: string
@@ -76,9 +128,10 @@ export type CodeIntelligenceScope = {
   workspaceRoot: string
   language: CodeIntelligenceLanguage
   members: CodeIntelligenceScopeMember[]
+  /** BASIC synthesis options shared by every member without a compileDatabase. */
+  basicOptions?: CodeIntelligenceBasicOptions
   serverSource: CodeIntelligenceServerSource
   consent?: CodeIntelligenceScopeConsent
-  setupStatus?: CodeIntelligenceSetupStatus
   /** Provenance: scopes born from the Outline's zero-config default (ADR 0003).
    * Metadata only — deliberately outside scopeConfigurationPayload so flipping
    * it never touches consent staleness. */
@@ -152,27 +205,83 @@ export function normalizeScopeMemberPath(value: string): string {
   return normalized
 }
 
+/** Host-absolute file path, may live anywhere on the Host (spec §2 Step 1). */
+export function normalizeCompileDatabasePath(value: string): string {
+  const normalized = value.replace(/\\/g, '/').replace(/\/+$/, '')
+  if (normalized.startsWith('~')) {
+    throw new Error(
+      'Code intelligence compile database paths must not start with ~; pass the expanded Host path'
+    )
+  }
+  if (!isRuntimePathAbsolute(normalized)) {
+    throw new Error('Code intelligence compile database must be a Host-absolute path')
+  }
+  return normalized
+}
+
+/** Directory intersection on comparison keys — equal or nested either way. */
+function comparisonKeysIntersect(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)
+}
+
+/** Empty options carry no meaning — dropping them keeps legacy scopes (and their
+ * consents) byte-identical after normalization. */
+function normalizeBasicOptions(
+  options: CodeIntelligenceBasicOptions | undefined
+): CodeIntelligenceBasicOptions | undefined {
+  if (!options) {
+    return undefined
+  }
+  const includeDirectories = options.includeDirectories.filter((directory) => directory !== '')
+  const defines = options.defines.filter((define) => define !== '')
+  if (includeDirectories.length === 0 && defines.length === 0 && !options.cppStandard) {
+    return undefined
+  }
+  return {
+    includeDirectories,
+    defines,
+    ...(options.cppStandard ? { cppStandard: options.cppStandard } : {})
+  }
+}
+
 export function normalizeCodeIntelligenceScope(
   scope: CodeIntelligenceScope
 ): CodeIntelligenceScope {
   const seen = new Set<string>(),
     members: CodeIntelligenceScopeMember[] = []
+  // Directory keys with their mapped flag — the overlap guard runs here, the
+  // single normalization point every write path (upsert, migration, consent)
+  // routes through.
+  const configured: { key: string; mapped: boolean }[] = []
   for (const input of scope.members) {
     const path = normalizeScopeMemberPath(readScopeMemberPath(input))
-    if (scope.language === 'python' && isRuntimePathAbsolute(path)) {
-      throw new Error('Python code intelligence members must stay relative to the workspace')
-    }
+    const compileDatabase =
+      typeof input.compileDatabase === 'string'
+        ? normalizeCompileDatabasePath(input.compileDatabase)
+        : undefined
     // Directory-equivalence key: relative members resolve against the workspace
-    // root; win32 drive/UNC forms fold case, posix stays exact. Nested members
-    // deliberately survive — result visibility relies on longest-match semantics.
+    // root; win32 drive/UNC forms fold case, posix stays exact.
     const key = normalizeRuntimePathForComparison(
       isRuntimePathAbsolute(path) ? path : resolveRuntimePath(scope.workspaceRoot, path)
     )
     if (seen.has(key)) {
       continue
     }
+    // A mapped folder intersecting any other configured folder is rejected
+    // (spec §1); only BASIC∩BASIC nesting survives, on longest-match.
+    for (const entry of configured) {
+      if (
+        (compileDatabase !== undefined || entry.mapped) &&
+        comparisonKeysIntersect(key, entry.key)
+      ) {
+        throw new Error(
+          'Mapped code intelligence folders must not overlap other configured folders'
+        )
+      }
+    }
     seen.add(key)
-    members.push({ path, visibleResults: input.visibleResults })
+    configured.push({ key, mapped: compileDatabase !== undefined })
+    members.push({ path, visibleResults: input.visibleResults, ...(compileDatabase ? { compileDatabase } : {}) })
   }
   // Empty member lists are legal (#63 decision 6): removing the last member
   // keeps the scope so consent history and kept-empty hints survive.
@@ -182,77 +291,13 @@ export function normalizeCodeIntelligenceScope(
   if (scope.serverSource.type === 'custom' && !scope.serverSource.executable.trim()) {
     throw new Error('Custom language server executable is required')
   }
-  return { ...scope, id: scope.id.trim(), name: scope.name.trim(), members }
-}
-/** Ordered member compare — mirrors the fingerprint's members coverage, so the
- * banner and authorizeSession agree on when consent went stale. Consents with
- * an authorizedConfiguration snapshot compare the whole payload instead, so
- * fingerprint-only drift (serverSource, workspaceRoot) still lights the UI. */
-export function isCodeIntelligenceConsentStale(scope: CodeIntelligenceScope): boolean {
-  if (!scope.consent) {
-    return false
-  }
-  if (scope.consent.authorizedConfiguration !== undefined) {
-    return scope.consent.authorizedConfiguration !== codeIntelligenceConfigurationSnapshot(scope)
-  }
-  return JSON.stringify(scope.consent.authorizedMembers) !== JSON.stringify(scope.members)
-}
-
-/** Symmetric difference of member paths since authorization (0 = config-only change). */
-export function countChangedCodeIntelligenceMembers(
-  scope: Pick<CodeIntelligenceScope, 'members' | 'consent'>
-): number {
-  // A snapshot-less consent (pre-upgrade data) has no diff to count; the banner
-  // falls back to its configuration-changed line instead of guessing.
-  if (!scope.consent?.authorizedMembers) {
-    return 0
-  }
-  const before = new Set(scope.consent.authorizedMembers.map((member) => member.path))
-  const after = new Set(scope.members.map((member) => member.path))
-  let changed = 0
-  for (const path of before) {
-    if (!after.has(path)) {
-      changed++
-    }
-  }
-  for (const path of after) {
-    if (!before.has(path)) {
-      changed++
-    }
-  }
-  return changed
-}
-
-export function scopeConfigurationPayload(scope: CodeIntelligenceScope): unknown {
+  const basicOptions = normalizeBasicOptions(scope.basicOptions)
+  const { basicOptions: _inputBasicOptions, ...rest } = scope
   return {
-    executionHostId: scope.executionHostId,
-    workspaceKey: scope.workspaceKey,
-    workspaceRoot: scope.workspaceRoot,
-    language: scope.language,
-    members: scope.members,
-    serverSource: scope.serverSource,
-    enabled: scope.enabled
+    ...rest,
+    id: scope.id.trim(),
+    name: scope.name.trim(),
+    members,
+    ...(basicOptions ? { basicOptions } : {})
   }
-}
-
-/** Key-sorted canonical JSON — one serialization both the Host-side hash and
- * the renderer-side staleness compare agree on. */
-export function canonicalConfigurationJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalConfigurationJson).join(',')}]`
-  }
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalConfigurationJson(item)}`)
-      .join(',')}}`
-  }
-  return JSON.stringify(value) ?? 'null'
-}
-
-/** What `configurationFingerprint` hashes — comparable verbatim in the renderer. */
-export function codeIntelligenceConfigurationSnapshot(scope: CodeIntelligenceScope): string {
-  return canonicalConfigurationJson(
-    scopeConfigurationPayload(normalizeCodeIntelligenceScope(scope))
-  )
 }

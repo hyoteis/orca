@@ -47,9 +47,20 @@ export class LanguageServerClientRegistry {
     private readonly scopeAuthority: Pick<
       NonNullable<Window['api']>['codeIntelligence'],
       'authorizeSession' | 'onScopeChanged'
-    > = window.api.codeIntelligence
+    > = window.api.codeIntelligence,
+    /** Health-only pushes (#136): surfaced, never a restart trigger. */
+    private readonly onMappingHealth?: (change: {
+      scopeId: string
+      mappingHealth: readonly unknown[]
+    }) => void
   ) {
     this.unsubscribeScopeChanges = scopeAuthority.onScopeChanged((change) => {
+      if (change.mappingHealth !== undefined && change.revision === null && !change.removed) {
+        this.onMappingHealth?.(
+          change as { scopeId: string; mappingHealth: readonly unknown[] }
+        )
+        return
+      }
       if (change.revision !== null) {
         this.restartScope(change.scopeId, change.revision)
       } else {

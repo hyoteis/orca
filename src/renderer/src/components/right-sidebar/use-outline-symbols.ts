@@ -10,7 +10,6 @@ import {
   findCodeIntelligenceRepo,
   findCodeIntelligenceScope
 } from '@/lib/language-server/code-intelligence-workspace'
-import { getPythonDocumentSymbols } from '@/lib/language-server/python-definition-navigation'
 import { getCppDocumentSymbols } from '@/lib/language-server/cpp-definition-navigation'
 import {
   semanticDocumentEditorFor,
@@ -135,7 +134,7 @@ export function useOutlineSymbols(): {
           '{{value0}} {{value1}} — Outline default',
           {
             value0: repo?.displayName ?? '',
-            value1: family === 'python' ? 'Python' : 'C++'
+            value1: 'C++'
           }
         ),
         scopes: settings?.codeIntelligenceScopes ?? [],
@@ -296,7 +295,7 @@ export function useOutlineSymbols(): {
     setState((prev) => (prev.status === 'ready' && !fileSwitched ? prev : { status: 'loading' }))
     // Why no text-deps: the debounced edit re-query lands via contentTick; the
     // version here only keys the shared navigation cache.
-    const querySymbols = family === 'cpp' ? getCppDocumentSymbols : getPythonDocumentSymbols
+    const querySymbols = getCppDocumentSymbols
     void querySymbols({
       fileId: activeFile.id,
       filePath: activeFile.filePath,

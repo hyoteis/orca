@@ -7,13 +7,8 @@ import type * as WorkspaceModule from '@/lib/language-server/code-intelligence-w
 import { useSymbolSearch, openSymbolSearchResult } from './use-symbol-search'
 
 const mocks = vi.hoisted(() => ({
-  searchPythonWorkspaceSymbols: vi.fn(),
   searchCppWorkspaceSymbols: vi.fn(),
   openDefinitionTargetInWorkspace: vi.fn()
-}))
-
-vi.mock('@/lib/language-server/python-definition-navigation', () => ({
-  searchPythonWorkspaceSymbols: mocks.searchPythonWorkspaceSymbols
 }))
 
 vi.mock('@/lib/language-server/cpp-definition-navigation', () => ({
@@ -29,13 +24,13 @@ vi.mock('@/lib/language-server/code-intelligence-workspace', async (importOrigin
   }
 })
 
-const pythonScope: CodeIntelligenceScope = {
-  id: 'local:worktree:repo-a:python',
-  name: 'Python',
+const cppScope: CodeIntelligenceScope = {
+  id: 'local:worktree:repo-a:cpp',
+  name: 'C++',
   executionHostId: 'local',
   workspaceKey: 'worktree:repo-a',
   workspaceRoot: '/repo',
-  language: 'python',
+  language: 'cpp',
   members: [{ path: '.', visibleResults: true }],
   serverSource: { type: 'automatic' },
   enabled: true,
@@ -44,13 +39,13 @@ const pythonScope: CodeIntelligenceScope = {
 
 // Stable identity like the real caller's memoized scopes — unstable props would
 // re-run the effect every render.
-const SCOPES = [pythonScope]
+const SCOPES = [cppScope]
 
 const symbolResult = (name: string) => ({
   results: [
     {
-      scopeId: pythonScope.id,
-      scopeName: pythonScope.name,
+      scopeId: cppScope.id,
+      scopeName: cppScope.name,
       symbols: [
         {
           name,
@@ -69,7 +64,7 @@ const symbolResult = (name: string) => ({
 describe('useSymbolSearch', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    // C++ fan-out defaults to silent-empty so Python-only tests stay focused.
+    // C++ fan-out is the only stack since the python removal.
     mocks.searchCppWorkspaceSymbols.mockResolvedValue({ results: [], partial: false })
   })
 
@@ -79,7 +74,7 @@ describe('useSymbolSearch', () => {
   })
 
   it('searches after the debounce once the query settles', async () => {
-    mocks.searchPythonWorkspaceSymbols.mockResolvedValue(symbolResult('main'))
+    mocks.searchCppWorkspaceSymbols.mockResolvedValue(symbolResult('main'))
     const { result, rerender } = renderHook(
       ({ query }: { query: string }) => useSymbolSearch({ query, symbolMode: true, scopes: SCOPES }),
       { initialProps: { query: '' } }
@@ -88,20 +83,20 @@ describe('useSymbolSearch', () => {
     rerender({ query: 'ma' })
     rerender({ query: 'mai' })
     // Debounced: neither keystroke has fired yet.
-    expect(mocks.searchPythonWorkspaceSymbols).not.toHaveBeenCalled()
+    expect(mocks.searchCppWorkspaceSymbols).not.toHaveBeenCalled()
 
     await act(async () => {
       vi.advanceTimersByTimeAsync(300)
     })
 
-    expect(mocks.searchPythonWorkspaceSymbols).toHaveBeenCalledTimes(1)
-    expect(mocks.searchPythonWorkspaceSymbols).toHaveBeenLastCalledWith('mai')
+    expect(mocks.searchCppWorkspaceSymbols).toHaveBeenCalledTimes(1)
+    expect(mocks.searchCppWorkspaceSymbols).toHaveBeenLastCalledWith('mai')
     expect(result.current.rows.map((row) => row.name)).toEqual(['main'])
     expect(result.current.loading).toBe(false)
   })
 
   it('stays idle while symbol mode is off and clears on empty query', async () => {
-    mocks.searchPythonWorkspaceSymbols.mockResolvedValue(symbolResult('main'))
+    mocks.searchCppWorkspaceSymbols.mockResolvedValue(symbolResult('main'))
     const { result, rerender } = renderHook(
       ({ query, symbolMode }: { query: string; symbolMode: boolean }) =>
         useSymbolSearch({ query, symbolMode, scopes: SCOPES }),
@@ -112,7 +107,7 @@ describe('useSymbolSearch', () => {
     await act(async () => {
       vi.advanceTimersByTimeAsync(300)
     })
-    expect(mocks.searchPythonWorkspaceSymbols).not.toHaveBeenCalled()
+    expect(mocks.searchCppWorkspaceSymbols).not.toHaveBeenCalled()
 
     rerender({ query: 'main', symbolMode: true })
     await act(async () => {
@@ -129,7 +124,7 @@ describe('useSymbolSearch', () => {
 
   it('keeps loading true until the latest query resolves and drops stale responses', async () => {
     let resolveSlow: (value: unknown) => void = () => {}
-    mocks.searchPythonWorkspaceSymbols
+    mocks.searchCppWorkspaceSymbols
       .mockImplementationOnce(
         () => new Promise((resolve) => { resolveSlow = resolve })
       )
@@ -159,8 +154,7 @@ describe('useSymbolSearch', () => {
     expect(result.current.loading).toBe(false)
   })
 
-  it('merges C++ symbols into the same result list', async () => {
-    mocks.searchPythonWorkspaceSymbols.mockResolvedValue(symbolResult('main'))
+  it('lists C++ workspace symbols in the result rows', async () => {
     mocks.searchCppWorkspaceSymbols.mockResolvedValue(symbolResult('Widget'))
     const { result } = renderHook(() =>
       useSymbolSearch({ query: 'x', symbolMode: true, scopes: SCOPES })
@@ -170,11 +164,11 @@ describe('useSymbolSearch', () => {
       vi.advanceTimersByTimeAsync(300)
     })
 
-    expect(result.current.rows.map((row) => row.name).sort()).toEqual(['Widget', 'main'])
+    expect(result.current.rows.map((row) => row.name)).toEqual(['Widget'])
   })
 
   it('marks partial when either stack rejects a scope', async () => {
-    mocks.searchPythonWorkspaceSymbols.mockResolvedValue({ results: [], partial: false })
+    mocks.searchCppWorkspaceSymbols.mockResolvedValue({ results: [], partial: false })
     mocks.searchCppWorkspaceSymbols.mockResolvedValue({ results: [], partial: true })
     const { result } = renderHook(() =>
       useSymbolSearch({ query: 'x', symbolMode: true, scopes: SCOPES })
@@ -188,7 +182,7 @@ describe('useSymbolSearch', () => {
   })
 
   it('surfaces the partial flag from a rejected fan-out', async () => {
-    mocks.searchPythonWorkspaceSymbols.mockResolvedValue({ results: [], partial: true })
+    mocks.searchCppWorkspaceSymbols.mockResolvedValue({ results: [], partial: true })
     const { result } = renderHook(() =>
       useSymbolSearch({ query: 'x', symbolMode: true, scopes: SCOPES })
     )
@@ -209,7 +203,7 @@ describe('openSymbolSearchResult', () => {
       name: 'main',
       containerName: '',
       kindLabel: 'Function',
-      scopeId: pythonScope.id,
+      scopeId: cppScope.id,
       scopeName: 'Python',
       uri: 'file:///repo/app/main.py',
       displayPath: 'app/main.py',
@@ -217,13 +211,13 @@ describe('openSymbolSearchResult', () => {
       range: { start: { line: 3, character: 0 }, end: { line: 3, character: 4 } }
     }
 
-    const opened = openSymbolSearchResult(row, 'repo-a::/repo', [pythonScope])
+    const opened = openSymbolSearchResult(row, 'repo-a::/repo', [cppScope])
 
     expect(opened).toBe(true)
     expect(mocks.openDefinitionTargetInWorkspace).toHaveBeenCalledWith(
       { filePath: 'app/main.py', relativePath: 'app/main.py', worktreeId: 'repo-a::/repo' },
       { uri: row.uri, range: row.range },
-      pythonScope
+      cppScope
     )
   })
 })

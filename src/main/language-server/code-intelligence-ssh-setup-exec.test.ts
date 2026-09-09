@@ -6,7 +6,6 @@ import {
   SshSetupExecQueue,
   buildRemoteAtomicWriteCommand,
   buildRemoteDirectoryExistsCommand,
-  buildRemoteGnDiscoveryCommand,
   buildRemoteMtimesCommand
 } from './code-intelligence-ssh-setup-exec'
 
@@ -189,16 +188,6 @@ describe('buildRemoteDirectoryExistsCommand', () => {
       "test -d '/home/dev/.orca/cdb'"
     )
     expect(buildRemoteDirectoryExistsCommand("/path/it's")).toBe("test -d '/path/it'\\''s'")
-  })
-})
-
-describe('buildRemoteGnDiscoveryCommand', () => {
-  it('falls back from the PATH lookup to bundled candidate probes', () => {
-    expect(
-      buildRemoteGnDiscoveryCommand(['/srv/buildtools/linux64/gn', '/srv/buildtools/gn'])
-    ).toBe(
-      "command -v gn || { for c in '/srv/buildtools/linux64/gn' '/srv/buildtools/gn'; do [ -x \"$c\" ] && printf '%s\\n' \"$c\" && exit 0; done; exit 1; }"
-    )
   })
 })
 

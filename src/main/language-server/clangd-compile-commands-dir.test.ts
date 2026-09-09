@@ -2,10 +2,10 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { clangdCompileCommandsDirArg } from '../../shared/code-intelligence-cpp-setup'
 import type { LanguageServerLaunchRequest } from '../../shared/language-server-session'
 import {
   assertClangdCompileCommandsDirExists,
+  clangdCompileCommandsDirArg,
   clangdCompileCommandsDirFromArgs,
   localDirectoryExists
 } from './clangd-compile-commands-dir'
@@ -61,8 +61,11 @@ describe('assertClangdCompileCommandsDirExists', () => {
     ).resolves.toBeUndefined()
   })
 
-  it('skips validation for python launches and clangd without the arg', async () => {
+  it('skips validation for clangd without the arg and refuses python kinds (#131)', async () => {
     const directoryExists = vi.fn(async () => false)
+    await expect(
+      assertClangdCompileCommandsDirExists(launch(), directoryExists)
+    ).resolves.toBeUndefined()
     await expect(
       assertClangdCompileCommandsDirExists(
         launch({
@@ -71,10 +74,7 @@ describe('assertClangdCompileCommandsDirExists', () => {
         }),
         directoryExists
       )
-    ).resolves.toBeUndefined()
-    await expect(
-      assertClangdCompileCommandsDirExists(launch(), directoryExists)
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow('no longer supported')
     expect(directoryExists).not.toHaveBeenCalled()
   })
 })
