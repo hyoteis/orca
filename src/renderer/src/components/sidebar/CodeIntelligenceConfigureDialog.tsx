@@ -229,7 +229,6 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
             {isSsh ? <Server className="size-3" aria-hidden /> : null}
             {hostLabel}
           </span>
-          <span className="truncate font-mono text-[11px]">{repo.path}</span>
         </div>
 
         <div className="rounded-md border border-border">
