@@ -107,6 +107,8 @@ export type CodeIntelligenceConfigureAggregateRequest = {
   mode: 'cdb' | 'basic'
   /** Host-absolute; required in cdb mode. */
   compileDatabase?: string
+  /** Member folder paths (workspace-relative or '.'; #141). Default ['.']. */
+  folders?: string[]
   basicOptions?: CodeIntelligenceBasicOptions
 }
 

@@ -140,6 +140,7 @@ export function registerAggregateCodeIntelligenceHandlers(
     repoId: string
     mode: 'cdb' | 'basic'
     compileDatabase?: string
+    folders?: string[]
     basicOptions?: CodeIntelligenceBasicOptions
   }): Promise<CodeIntelligenceScope> => {
     const repo = store.getRepo(request.repoId)
@@ -160,17 +161,17 @@ export function registerAggregateCodeIntelligenceHandlers(
         enabled: true,
         revision: 0
       }
+    // #141: the dialog manages member folders; dedupe/overlap run in normalize.
+    const folders = (request.folders ?? ['.']).map((folder) => folder.trim()).filter(Boolean)
     const mutation = scopes.upsert({
       ...base,
-      members: [
-        {
-          path: '.',
-          visibleResults: true,
-          ...(request.mode === 'cdb' && request.compileDatabase
-            ? { compileDatabase: request.compileDatabase }
-            : {})
-        }
-      ],
+      members: folders.map((folder) => ({
+        path: folder,
+        visibleResults: true,
+        ...(request.mode === 'cdb' && request.compileDatabase
+          ? { compileDatabase: request.compileDatabase }
+          : {})
+      })),
       ...(request.mode === 'basic' && request.basicOptions ? { basicOptions: request.basicOptions } : {})
     })
     if (mutation.restartRequired) {

@@ -179,9 +179,18 @@
       "reauthorizeAtRevision": "重新授权 r{{value0}}",
       "pausedUntilReauthorize": "重新授权前代码智能保持暂停。",
       "reauthorize": "重新授权",
-      "reauthorizeFailed": "无法重新授权代码智能文件夹"
-    }
-,
+      "reauthorizeFailed": "无法重新授权代码智能文件夹",
+      "foldersLabel": "代码文件夹",
+      "addFolder": "添加文件夹…",
+      "removeFolder": "移除文件夹",
+      "wholeWorkspace": "(整个工作区)",
+      "noFolders": "没有代码文件夹 — 添加一个以启用索引",
+      "folderOutsideWorkspace": "代码文件夹必须位于工作区内",
+      "sshDirectoryPickerTitle": "选择文件夹",
+      "sshDirectoryPickerDescription": "在主机上导航并选择工作区内的代码文件夹。",
+      "sshDirectoryPickerNote": "文件夹必须位于此主机上的工作区内。",
+      "selectThisDirectory": "使用此文件夹"
+    },
     "appearance": {
       "language": {
         "title": "语言",
@@ -11200,7 +11209,7 @@
             "aiVaultSessionHistory": "智能体",
             "folderWorkspaces": "已附加的工作树",
             "parentPrChecks": "PR 检查",
-            "searchTab": "搜索",
+            "searchTab": "搜索",
             "outlineTab": "大纲"
           },
           "right": {
@@ -14881,4 +14890,4 @@
       }
     }
   }
-}
+}
