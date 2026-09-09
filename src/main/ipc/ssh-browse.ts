@@ -18,6 +18,11 @@ type RemoteBrowseResult = {
 
 const SSH_BROWSE_TIMEOUT_MS = 15_000
 
+// Why: a channel closed without exit status is a transient link blip (NAT idle reset, sleep wake, MaxSessions drop), not a listing failure.
+const TRANSIENT_CLOSE_RETRY_DELAY_MS = 500
+const TRANSIENT_CLOSE_RECONNECT_WAIT_MS = 10_000
+const TRANSIENT_CLOSE_POLL_INTERVAL_MS = 250
+
 // Why: 127 = POSIX "command not found" (locale-independent) — the Windows fallback never ran, so the original POSIX error is the real one.
 const POSIX_COMMAND_NOT_FOUND_EXIT = 127
 
@@ -51,21 +56,42 @@ export function registerSshBrowseHandler(
       }
 
       try {
-        return await browseWithPosixShell(conn, args.dirPath)
-      } catch (posixError) {
-        // Why: only a RemoteBrowseError (ran, non-zero exit) signals a Windows shell; don't retry transport errors/timeouts as Windows.
-        if (!(posixError instanceof RemoteBrowseError)) {
-          throw posixError
+        return await browseWithFallback(conn, args.dirPath)
+      } catch (error) {
+        if (!isTransientChannelClose(error)) {
+          throw error
         }
-        try {
-          return await browseWithWindowsPowerShell(conn, args.dirPath)
-        } catch (fallbackError) {
-          // Why: exit 127 (no powershell.exe) → host isn't Windows, surface the original POSIX failure; otherwise PowerShell's own error is the real cause.
-          throw isPosixCommandNotFound(fallbackError) ? posixError : fallbackError
-        }
+        // Why: a browse is a read-only idempotent listing, so one retry after the link settles is safe.
+        await delay(TRANSIENT_CLOSE_RETRY_DELAY_MS)
+        await waitForConnection(conn)
+        return await browseWithFallback(conn, args.dirPath)
       }
     }
   )
+}
+
+async function browseWithFallback(
+  conn: SshBrowseConnection,
+  dirPath: string
+): Promise<RemoteBrowseResult> {
+  try {
+    return await browseWithPosixShell(conn, dirPath)
+  } catch (posixError) {
+    // Why: only a RemoteBrowseError (ran, non-zero exit) signals a Windows shell; don't retry transport errors/timeouts as Windows.
+    if (!(posixError instanceof RemoteBrowseError)) {
+      throw posixError
+    }
+    // Why: a null exit code is a link blip, not a Windows shell reject; the outer transient retry owns it.
+    if (posixError.exitCode === null) {
+      throw posixError
+    }
+    try {
+      return await browseWithWindowsPowerShell(conn, dirPath)
+    } catch (fallbackError) {
+      // Why: exit 127 (no powershell.exe) → host isn't Windows, surface the original POSIX failure; otherwise PowerShell's own error is the real cause.
+      throw isPosixCommandNotFound(fallbackError) ? posixError : fallbackError
+    }
+  }
 }
 
 type SshBrowseConnection = NonNullable<ReturnType<SshConnectionManager['getConnection']>>
@@ -244,6 +270,22 @@ async function runBrowseCommand(
 // Why: exit 127 means powershell.exe wasn't found — the host isn't Windows, so surface the original POSIX failure instead.
 function isPosixCommandNotFound(error: unknown): boolean {
   return error instanceof RemoteBrowseError && error.exitCode === POSIX_COMMAND_NOT_FOUND_EXIT
+}
+
+function isTransientChannelClose(error: unknown): boolean {
+  return error instanceof RemoteBrowseError && error.exitCode === null
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Why: best-effort wait for the reconnect ladder; a half-open link still reads connected and simply retries immediately.
+async function waitForConnection(conn: SshBrowseConnection): Promise<void> {
+  const deadline = Date.now() + TRANSIENT_CLOSE_RECONNECT_WAIT_MS
+  while (conn.getState().status !== 'connected' && Date.now() < deadline) {
+    await delay(TRANSIENT_CLOSE_POLL_INTERVAL_MS)
+  }
 }
 
 // Why: single-quote to block shell injection; ~ needs $HOME since single quotes suppress tilde expansion.

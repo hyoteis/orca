@@ -474,4 +474,84 @@ describe('registerSshBrowseHandler', () => {
       vi.useRealTimers()
     }
   })
+
+  it('retries once when the channel closes without an exit status', async () => {
+    vi.useFakeTimers()
+    try {
+      // The transient the user hit: close arrives, no exit event, no stderr —
+      // a link blip, not a listing failure. One retry after the link settles
+      // must recover without ever probing PowerShell (it's not a Windows reject).
+      const deadChannel = createMockChannel()
+      const retryChannel = createMockChannel()
+      const exec = vi
+        .fn()
+        .mockResolvedValueOnce(deadChannel)
+        .mockResolvedValueOnce(retryChannel)
+      const getState = vi.fn(() => ({ status: 'connected' }))
+      const getConnectionManager = () => ({
+        getConnection: () => ({ exec, getState })
+      })
+      registerSshBrowseHandler(getConnectionManager as never)
+
+      const resultPromise = handler(null, { targetId: 'ssh-1', dirPath: '/home/user' })
+      await Promise.resolve()
+      deadChannel.emit('close')
+
+      await vi.advanceTimersByTimeAsync(500)
+      await Promise.resolve()
+      retryChannel.emit('data', Buffer.from('/home/user\nsrc/\n'))
+      retryChannel.emit('exit', 0)
+      retryChannel.emit('close')
+
+      await expect(resultPromise).resolves.toEqual({
+        resolvedPath: '/home/user',
+        pathFlavor: 'posix',
+        entries: [{ name: 'src', isDirectory: true }]
+      })
+      expect(exec).toHaveBeenCalledTimes(2)
+      expect(exec).toHaveBeenNthCalledWith(2, "cd '/home/user' && pwd && command ls -1Ap")
+      expect(deadChannel.listenerCount('close')).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('retries once even when the reconnect wait expires without recovery', async () => {
+    vi.useFakeTimers()
+    try {
+      // The wait is a best-effort gate: a link stuck in 'reconnecting' must
+      // still get its one retry (fresh exec, maybe a new transport), not a fail.
+      const deadChannel = createMockChannel()
+      const retryChannel = createMockChannel()
+      const exec = vi
+        .fn()
+        .mockResolvedValueOnce(deadChannel)
+        .mockResolvedValueOnce(retryChannel)
+      const getState = vi.fn(() => ({ status: 'reconnecting' }))
+      const getConnectionManager = () => ({
+        getConnection: () => ({ exec, getState })
+      })
+      registerSshBrowseHandler(getConnectionManager as never)
+
+      const resultPromise = handler(null, { targetId: 'ssh-1', dirPath: '/home/user' })
+      await Promise.resolve()
+      deadChannel.emit('close')
+
+      // 500ms settle delay + 10s reconnect wait (4×250ms polls).
+      await vi.advanceTimersByTimeAsync(12_000)
+      await Promise.resolve()
+      retryChannel.emit('data', Buffer.from('/home/user\n'))
+      retryChannel.emit('exit', 0)
+      retryChannel.emit('close')
+
+      await expect(resultPromise).resolves.toEqual({
+        resolvedPath: '/home/user',
+        pathFlavor: 'posix',
+        entries: []
+      })
+      expect(exec).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
