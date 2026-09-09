@@ -120,7 +120,11 @@ export function SshCompileDatabasePicker({
             {translate('settings.codeIntelligence.sshPickerUp', 'Parent directory')}
           </TooltipContent>
         </Tooltip>
-        <span className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs">{dir}</span>
+        {/* #141: directory mode hides the full path line (long host paths made
+            the dialog need horizontal scrolling); the listing is the feedback. */}
+        {select === 'database' ? (
+          <span className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs">{dir}</span>
+        ) : null}
       </div>
       <div className="min-h-32 rounded-md border border-border">
         {loading ? (
