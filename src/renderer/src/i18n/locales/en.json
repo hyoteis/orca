@@ -134,6 +134,7 @@
       "basicNote": "Applies to the whole workspace; the compile-database mode ignores these options.",
       "structureChanged": "Structure changed — saving will request reauthorization",
       "saveAndAuthorize": "Save and authorize",
+      "configuringAndAuthorizing": "Configuring and authorizing C++ code intelligence…",
       "configureSaved": "C++ code intelligence configured and authorized",
       "configureFailed": "Configuration failed",
       "revalidated": "Re-validated and reloaded",

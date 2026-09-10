@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import CodeIntelligenceConfigureDialog from './CodeIntelligenceConfigureDialog'
@@ -107,6 +107,32 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
       basicOptions: { includeDirectories: ['-I /opt/sdk'], defines: ['USE_GPU=1'], cppStandard: 'c++20' }
     })
     await waitFor(() => expect(mocks.fetchSettings).toHaveBeenCalled())
+  })
+
+  it('shows progress while configuring and authorizing', async () => {
+    const result = { scope: scopeFixture(), mappings: [], entryCount: 0 }
+    let finishConfiguration = (): void => {}
+    mocks.configureAggregate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishConfiguration = () => resolve(result)
+        })
+    )
+    renderDialog()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save and authorize' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Configuring and authorizing C++ code intelligence\u2026'
+    )
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('button', { name: 'Save and authorize' })).toHaveAttribute(
+      'aria-busy',
+      'true'
+    )
+
+    await act(async () => finishConfiguration())
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
 
   it('warns on partial coverage without blocking save', async () => {
