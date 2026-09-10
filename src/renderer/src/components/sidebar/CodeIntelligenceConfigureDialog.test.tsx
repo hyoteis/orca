@@ -14,12 +14,17 @@ const mocks = vi.hoisted(() => ({
   pickDirectory: vi.fn(),
   browseDir: vi.fn(),
   fetchSettings: vi.fn(async () => {}),
+  restartSession: vi.fn(() => true),
   toastSuccess: vi.fn(),
   toastError: vi.fn()
 }))
 
 vi.mock('sonner', () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError, warning: vi.fn() }
+}))
+
+vi.mock('@/lib/language-server/cpp-code-intelligence-session', () => ({
+  getCppSession: () => ({ restartSession: mocks.restartSession })
 }))
 
 const scopeFixture = (overrides: Record<string, unknown> = {}) => ({
@@ -148,6 +153,15 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
     renderDialog()
     fireEvent.click(screen.getByRole('radio', { name: 'Compile database' }))
     expect(screen.getByRole('button', { name: 'Save and authorize' })).toBeDisabled()
+  })
+
+  it('restarts the running C++ session on demand (#149)', () => {
+    renderDialog()
+    fireEvent.click(screen.getByRole('radio', { name: 'Compile database' }))
+    fireEvent.change(screen.getByLabelText('Database path'), { target: { value: '/cdb.json' } })
+    fireEvent.click(screen.getByRole('button', { name: /Restart C\+\+ session/ }))
+    expect(mocks.restartSession).toHaveBeenCalledWith('local:worktree:repo-1:cpp', 1)
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('C++ session restarted')
   })
 
   it('picks a local database through the native browse dialog', async () => {

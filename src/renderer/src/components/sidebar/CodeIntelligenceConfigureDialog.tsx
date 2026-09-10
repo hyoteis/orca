@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CheckCircle2, Database, Folder, FolderSearch, PauseCircle, RefreshCw, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, Database, Folder, FolderSearch, PauseCircle, RefreshCw, RotateCcw, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -17,6 +17,7 @@ import { parentPath } from './remote-file-browser-helpers'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { extractIpcErrorMessage } from '@/lib/ipc-error'
+import { getCppSession } from '@/lib/language-server/cpp-code-intelligence-session'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { getCppScopeIdForRepo } from '../../../../shared/code-intelligence-scope'
 import { relativePathInsideRoot } from '../../../../shared/cross-platform-path'
@@ -177,6 +178,16 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
     }
   }
 
+  // #149: health-only aggregate rebuilds never restart the running clangd —
+  // this is the user's manual escape hatch for a stale session.
+  const restartSession = (): void => {
+    if (!existingScope || busy) {
+      return
+    }
+    getCppSession().restartSession(existingScope.id, existingScope.revision)
+    toast.success(translate('settings.codeIntelligence.restarted', 'C++ session restarted'))
+  }
+
   const browse = async (): Promise<void> => {
     // SSH browses the remote host (spec §2 Step 5); local keeps the native pick.
     if (isSsh) {
@@ -325,10 +336,14 @@ export default function CodeIntelligenceConfigureDialog(): React.JSX.Element | n
                   </span>
                 </div>
               ) : null}
-              <div>
+              <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => void revalidate()} disabled={busy || !existingScope}>
                   <RefreshCw className="size-3.5" aria-hidden />
                   {translate('settings.codeIntelligence.revalidate', 'Re-validate and reload')}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={restartSession} disabled={busy || !existingScope}>
+                  <RotateCcw className="size-3.5" aria-hidden />
+                  {translate('settings.codeIntelligence.restartSession', 'Restart C++ session')}
                 </Button>
               </div>
               <p className="text-[11px] leading-snug text-muted-foreground">

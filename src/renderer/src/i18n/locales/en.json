@@ -216,7 +216,9 @@
       "sshDirectoryPickerTitle": "Select a folder",
       "sshDirectoryPickerDescription": "Navigate the Host and pick a code folder inside the workspace.",
       "sshDirectoryPickerNote": "The folder must live inside the workspace on this Host.",
-      "selectThisDirectory": "Use this folder"
+      "selectThisDirectory": "Use this folder",
+      "restartSession": "Restart C++ session",
+      "restarted": "C++ session restarted"
     },
     "appearance": {
       "language": {
@@ -15745,4 +15747,4 @@
       "settingsLink": "Settings → Voice"
     }
   }
-}
+}

@@ -102,6 +102,17 @@ export class CppCodeIntelligenceSession {
     return this.clients.get(scopeId) === client
   }
 
+  /** Manual restart (Configure dialog #149): drops the live client; caches
+   * clear via onClientDropped and the next request reopens against the
+   * rebuilt aggregate. False = no live client for the scope. */
+  restartSession(scopeId: string, revision: number): boolean {
+    if (!this.clients.has(scopeId)) {
+      return false
+    }
+    this.registry.restartScope(scopeId, revision)
+    return true
+  }
+
   dispose(): void {
     this.registry.dispose()
     this.clients.clear()

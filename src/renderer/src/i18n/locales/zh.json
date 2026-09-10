@@ -189,7 +189,9 @@
       "sshDirectoryPickerTitle": "选择文件夹",
       "sshDirectoryPickerDescription": "在主机上导航并选择工作区内的代码文件夹。",
       "sshDirectoryPickerNote": "文件夹必须位于此主机上的工作区内。",
-      "selectThisDirectory": "使用此文件夹"
+      "selectThisDirectory": "使用此文件夹",
+      "restartSession": "重启 C++ 会话",
+      "restarted": "C++ 会话已重启"
     },
     "appearance": {
       "language": {
@@ -14890,4 +14892,4 @@
       }
     }
   }
-}
+}
