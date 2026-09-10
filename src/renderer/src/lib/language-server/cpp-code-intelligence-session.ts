@@ -102,6 +102,17 @@ export class CppCodeIntelligenceSession {
     return this.clients.get(scopeId) === client
   }
 
+  /** #149: manual drop of the running client — health-only scope changes
+   * (#136) never restart, so the Configure dialog can force a reload of a
+   * rebuilt aggregate. Returns whether a session was running. */
+  restartSession(scopeId: string, revision: number): boolean {
+    const running = this.activeClient(scopeId) !== undefined
+    if (running) {
+      this.registry.restartScope(scopeId, revision)
+    }
+    return running
+  }
+
   dispose(): void {
     this.registry.dispose()
     this.clients.clear()

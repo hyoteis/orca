@@ -44,7 +44,8 @@ import { resetScriptedLanguageServerClient, scripted } from './scripted-language
 import {
   getCppDocumentSymbols,
   resetCppCodeIntelligence,
-  resolveCppDefinition
+  resolveCppDefinition,
+  restartCppSession
 } from './cpp-code-intelligence-requests'
 import type { CppCodeIntelligenceRequest } from './cpp-code-intelligence-requests'
 
@@ -189,5 +190,26 @@ describe('cpp document symbols', () => {
     settings = { codeIntelligenceScopes: [] as CodeIntelligenceScope[] } as GlobalSettings
     expect(await getCppDocumentSymbols(request(4))).toBeNull()
     expect(scripted.requestCalls).not.toContain('textDocument/documentSymbol')
+  })
+})
+
+describe('restartCppSession (#149)', () => {
+  it('drops the running client, clears caches, and reopens on the next request', async () => {
+    scripted.requestHandlers['textDocument/documentSymbol'] = () => []
+    await getCppDocumentSymbols(request(3))
+    await getCppDocumentSymbols(request(3))
+    expect(scripted.opens).toHaveLength(1)
+    expect(restartCppSession('local:worktree:demo:cpp', 1)).toBe(true)
+    // Same request re-queries: the cached answer died with the dropped client.
+    await getCppDocumentSymbols(request(3))
+    expect(scripted.opens).toHaveLength(2)
+    expect(
+      scripted.requestCalls.filter((call) => call === 'textDocument/documentSymbol')
+    ).toHaveLength(2)
+  })
+
+  it('is a harmless no-op without a running session', () => {
+    expect(restartCppSession('local:worktree:demo:cpp', 1)).toBe(false)
+    expect(scripted.opens).toHaveLength(0)
   })
 })
