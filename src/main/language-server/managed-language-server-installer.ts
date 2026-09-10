@@ -1,4 +1,3 @@
-import { join } from 'node:path'
 import {
   assertManagedLanguageServerTool,
   compareManagedLanguageServerVersions,
@@ -9,8 +8,8 @@ import {
 } from '../../shared/managed-language-server'
 import type {
   ManagedLanguageServerActivationRecord,
+  ManagedLanguageServerHostTarget,
   ManagedLanguageServerInstallEvent,
-  ManagedLanguageServerInstallPhase,
   ManagedLanguageServerInstallResult,
   ManagedLanguageServerInstallRoute,
   ManagedLanguageServerInstallState,
@@ -20,43 +19,32 @@ import type {
   ManagedLanguageServerToolId
 } from '../../shared/managed-language-server'
 import type { LanguageServerKind } from '../../shared/language-server-session'
-import { runCppSetupCommand, type CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
-import {
-  acquireManagedVersion,
-  resolveLocalManagedHostTarget,
-  probeManagedEntry
-} from './managed-language-server-acquisition'
-import type { FetchManagedArchive } from './managed-language-server-archive'
-import {
-  listManagedVersions,
-  managedToolRoot,
-  managedVersionDirectory,
-  readManagedActivation,
-  writeManagedActivation
-} from './managed-language-server-install-root'
+import type { ManagedLanguageServerInstallHost } from './managed-language-server-install-host'
+import { managedVersionDirectory } from './managed-language-server-install-root'
 
 export type ManagedLanguageServerInstallerOptions = {
-  /** Orca-private managed root: <userData>/code-intelligence/managed. */
+  /** Local layout root — only resolveActiveCommand still builds paths here;
+   * storage and acquisition live in the host. */
   root: string
   manifest: ManagedLanguageServerManifest
-  fetchArchive?: FetchManagedArchive
-  run?: CppSetupCommandRunner
+  host: ManagedLanguageServerInstallHost
   /** Versions scopes pin via serverSource.version; GC must keep them. */
   getPinnedVersions?: (tool: LanguageServerKind) => Promise<readonly string[]>
   emit?: (event: ManagedLanguageServerInstallEvent) => void
 }
 
 /**
- * The local-Host managed language-server transaction (#15): acquisition runs
- * stage → verify → extract → probe → atomic rename, then activation swaps the
- * record atomically. A failure or cancellation removes only staging; the
- * active version never changes. One per-tool lock deduplicates identical
- * concurrent requests, and GC protects active/rollback/pinned versions.
+ * The managed language-server transaction pipeline (#15, #151): lock/abort/
+ * event orchestration, entry matching, branch policy (already-active /
+ * installed / acquire), activation swaps with rollback retention, and GC
+ * keep-sets — Host-agnostic on top of ManagedLanguageServerInstallHost.
+ * One per-tool lock deduplicates identical concurrent requests; a failure or
+ * cancellation removes only staging; the active version never changes.
  */
 export class ManagedLanguageServerInstaller {
   private readonly locks = new Map<string, Promise<ManagedLanguageServerInstallResult>>()
   private readonly aborts = new Map<string, AbortController>()
-  private hostTarget: Promise<{ platform: string; arch: string; glibcVersion?: string }> | null = null
+  private hostTarget: Promise<ManagedLanguageServerHostTarget> | null = null
 
   constructor(private readonly options: ManagedLanguageServerInstallerOptions) {}
 
@@ -111,14 +99,13 @@ export class ManagedLanguageServerInstaller {
 
   async rollback(tool: LanguageServerKind): Promise<ManagedLanguageServerRollbackResult> {
     const managedTool = assertManagedLanguageServerTool(tool)
-    const toolRoot = managedToolRoot(this.options.root, managedTool)
-    const record = await readManagedActivation(toolRoot)
+    const record = await this.options.host.readActivation(managedTool)
     if (!record?.rollback) {
       return { status: 'no-rollback' }
     }
     try {
       await this.probeVersion(managedTool, record.rollback.version)
-      await writeManagedActivation(toolRoot, {
+      await this.options.host.writeActivation(managedTool, {
         active: record.rollback,
         rollback: record.active
       })
@@ -131,10 +118,9 @@ export class ManagedLanguageServerInstaller {
 
   async state(tool: LanguageServerKind): Promise<ManagedLanguageServerInstallState> {
     const managedTool = assertManagedLanguageServerTool(tool)
-    const toolRoot = managedToolRoot(this.options.root, managedTool)
     const [record, installedVersions] = await Promise.all([
-      readManagedActivation(toolRoot),
-      listManagedVersions(toolRoot)
+      this.options.host.readActivation(managedTool),
+      this.options.host.listVersions(managedTool)
     ])
     const resolved = resolveManagedLanguageServerEntry(
       this.options.manifest,
@@ -173,8 +159,7 @@ export class ManagedLanguageServerInstaller {
     version?: string
   ): Promise<{ executable: string; args: string[] } | null> {
     const managedTool = assertManagedLanguageServerTool(tool)
-    const toolRoot = managedToolRoot(this.options.root, managedTool)
-    const record = await readManagedActivation(toolRoot)
+    const record = await this.options.host.readActivation(managedTool)
     if (!record) {
       return null
     }
@@ -208,35 +193,27 @@ export class ManagedLanguageServerInstaller {
     }
     const { entry } = resolved
     controller.signal.throwIfAborted()
-    const seams = {
-      run: this.run,
-      fetchArchive: this.options.fetchArchive,
-      emit: (target: ManagedLanguageServerManifestEntry, phase: ManagedLanguageServerInstallPhase, extra?: { receivedBytes?: number; totalBytes?: number }) =>
-        emit({
-          executionHostId: 'local',
-          tool: target.tool,
-          version: target.version,
-          phase,
-          ...extra
-        })
-    }
-    const toolRoot = managedToolRoot(this.options.root, entry.tool)
-    const record = await readManagedActivation(toolRoot)
+    const record = await this.options.host.readActivation(entry.tool)
     if (record?.active.version === entry.version) {
       await this.probeVersion(entry.tool, entry.version)
       return { status: 'already-active', version: entry.version }
     }
-    if ((await listManagedVersions(toolRoot)).includes(entry.version)) {
+    if ((await this.options.host.listVersions(entry.tool)).includes(entry.version)) {
       await this.probeVersion(entry.tool, entry.version)
       await this.activate(entry, record)
     } else {
-      await acquireManagedVersion({
-        root: this.options.root,
-        manifest: this.options.manifest,
+      await this.options.host.acquire({
         entry,
         route: args.route,
         signal: controller.signal,
-        seams
+        emit: (phase, extra) =>
+          emit({
+            executionHostId: 'local',
+            tool: entry.tool,
+            version: entry.version,
+            phase,
+            ...extra
+          })
       })
       await this.activate(entry, record)
     }
@@ -250,28 +227,23 @@ export class ManagedLanguageServerInstaller {
       this.options.manifest,
       tool,
       version,
-      { platform: process.platform, arch: process.arch }
+      await this.resolveHostTarget()
     )
     if (!entry) {
       throw new Error(`No trusted manifest entry for ${tool} ${version}`)
     }
-    await probeManagedEntry(
-      entry,
-      managedVersionDirectory(this.options.root, entry.tool, entry.version),
-      this.run
-    )
+    await this.options.host.probeVersion(entry)
   }
 
   private async activate(
     entry: ManagedLanguageServerManifestEntry,
     prior: ManagedLanguageServerActivationRecord | null
   ): Promise<void> {
-    const toolRoot = managedToolRoot(this.options.root, entry.tool)
     const next = this.activationFor(entry)
     if (prior?.active && prior.active.version !== entry.version) {
       next.rollback = prior.active
     }
-    await writeManagedActivation(toolRoot, next)
+    await this.options.host.writeActivation(entry.tool, next)
   }
 
   private activationFor(
@@ -283,27 +255,22 @@ export class ManagedLanguageServerInstaller {
   /** GC protects active, rollback, and scope-pinned versions; staging is skipped.
    * ponytail: in-use protection approximated — sessions launch from `active`. */
   private async gc(tool: ManagedLanguageServerToolId): Promise<void> {
-    const toolRoot = managedToolRoot(this.options.root, tool)
-    const record = await readManagedActivation(toolRoot)
+    const record = await this.options.host.readActivation(tool)
     const pinned = (await this.options.getPinnedVersions?.(tool)) ?? []
     const keep = new Set<string>(
       [record?.active?.version, record?.rollback?.version, ...pinned].filter(
         (version): version is string => typeof version === 'string'
       )
     )
-    const { rm } = await import('node:fs/promises')
-    for (const version of await listManagedVersions(toolRoot)) {
+    for (const version of await this.options.host.listVersions(tool)) {
       if (!keep.has(version)) {
-        await rm(join(toolRoot, version), { recursive: true, force: true })
+        await this.options.host.removeVersion(tool, version)
       }
     }
   }
 
-  private resolveHostTarget(): Promise<{ platform: string; arch: string; glibcVersion?: string }> {
-    this.hostTarget ??= resolveLocalManagedHostTarget(this.run)
+  private resolveHostTarget(): Promise<ManagedLanguageServerHostTarget> {
+    this.hostTarget ??= this.options.host.hostTarget()
     return this.hostTarget
   }
-
-  private run: CppSetupCommandRunner = (executable, args, cwd) =>
-    (this.options.run ?? runCppSetupCommand)(executable, args, cwd)
 }

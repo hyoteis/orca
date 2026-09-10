@@ -16,6 +16,7 @@ import type {
 import type { LanguageServerKind } from '../../shared/language-server-session'
 import { languageServerKindForScope } from '../../shared/code-intelligence-scope'
 import { ManagedLanguageServerInstaller } from '../language-server/managed-language-server-installer'
+import { createLocalManagedLanguageServerInstallHost } from '../language-server/managed-language-server-local-install-host'
 import {
   installSshManagedLanguageServer,
   sshManagedRemoteArch
@@ -60,9 +61,11 @@ let installerSingleton: ManagedLanguageServerInstaller | null = null
 export function getManagedLanguageServerInstaller(store: Store): ManagedLanguageServerInstaller {
   // Read-only callers (launch resolution) may pass any store view; the first
   // registration pins the GC pin-list source, which only affects deletions.
+  const root = join(app.getPath('userData'), 'code-intelligence', 'managed')
   installerSingleton ??= new ManagedLanguageServerInstaller({
-    root: join(app.getPath('userData'), 'code-intelligence', 'managed'),
+    root,
     manifest: MANAGED_LANGUAGE_SERVER_MANIFEST,
+    host: createLocalManagedLanguageServerInstallHost({ root }),
     emit: broadcastManagedInstallEvent,
     getPinnedVersions: (tool) => Promise.resolve(pinnedManagedVersions(store, tool))
   })

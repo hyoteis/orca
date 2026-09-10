@@ -6,7 +6,6 @@ import {
 import type {
   ManagedLanguageServerInstallPhase,
   ManagedLanguageServerInstallRoute,
-  ManagedLanguageServerManifest,
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
 import type { CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
@@ -56,7 +55,6 @@ export type ManagedAcquisitionSeams = {
  */
 export async function acquireManagedVersion(args: {
   root: string
-  manifest: ManagedLanguageServerManifest
   entry: ManagedLanguageServerManifestEntry
   route: ManagedLanguageServerInstallRoute
   signal: AbortSignal

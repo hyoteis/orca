@@ -11,6 +11,7 @@ import type {
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
 import { ManagedLanguageServerInstaller } from './managed-language-server-installer'
+import { createLocalManagedLanguageServerInstallHost } from './managed-language-server-local-install-host'
 import type { CppSetupCommandRunner } from './code-intelligence-cpp-command-runner'
 import { readManagedActivation } from './managed-language-server-install-root'
 
@@ -82,8 +83,11 @@ function makeInstaller(args: {
   const installer = new ManagedLanguageServerInstaller({
     root,
     manifest: { manifestVersion: 1, entries: args.entries } satisfies ManagedLanguageServerManifest,
-    fetchArchive,
-    run: makeRunner(args.entries[0]),
+    host: createLocalManagedLanguageServerInstallHost({
+      root,
+      fetchArchive,
+      run: makeRunner(args.entries[0])
+    }),
     getPinnedVersions: args.getPinnedVersions,
     emit: args.emit
   })
@@ -278,12 +282,15 @@ describe('ManagedLanguageServerInstaller', () => {
     const installer = new ManagedLanguageServerInstaller({
       root,
       manifest: { manifestVersion: 1, entries: [v1, v2] },
-      fetchArchive: async (url) => ({
-        ok: true,
-        status: 200,
-        body: new Blob([bodies.get(url)!]).stream()
-      }),
-      run: makeRunner(v1)
+      host: createLocalManagedLanguageServerInstallHost({
+        root,
+        fetchArchive: async (url) => ({
+          ok: true,
+          status: 200,
+          body: new Blob([bodies.get(url)!]).stream()
+        }),
+        run: makeRunner(v1)
+      })
     })
 
     await installer.install({ tool: 'clangd', version: '1.0.0', route: { type: 'host-download' } })
@@ -327,12 +334,15 @@ describe('ManagedLanguageServerInstaller', () => {
     const installer = new ManagedLanguageServerInstaller({
       root,
       manifest: { manifestVersion: 1, entries: [v1, v2] },
-      fetchArchive: async (url) => ({
-        ok: true,
-        status: 200,
-        body: new Blob([bodies.get(url)!]).stream()
-      }),
-      run: runner
+      host: createLocalManagedLanguageServerInstallHost({
+        root,
+        fetchArchive: async (url) => ({
+          ok: true,
+          status: 200,
+          body: new Blob([bodies.get(url)!]).stream()
+        }),
+        run: runner
+      })
     })
     await installer.install({ tool: 'clangd', version: '1.0.0', route: { type: 'host-download' } })
     await installer.install({ tool: 'clangd', version: '2.0.0', route: { type: 'host-download' } })

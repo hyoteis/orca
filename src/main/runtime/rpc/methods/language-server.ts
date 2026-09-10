@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { defineStreamingMethod, type RpcAnyMethod } from '../core'
 import { LocalLanguageServerSessionManager } from '../../../language-server/local-language-server-session-manager'
 import { ManagedLanguageServerInstaller } from '../../../language-server/managed-language-server-installer'
+import { createLocalManagedLanguageServerInstallHost } from '../../../language-server/managed-language-server-local-install-host'
 import { MANAGED_LANGUAGE_SERVER_MANIFEST } from '../../../../shared/managed-language-server-manifest-data'
 import { LANGUAGE_SERVER_KINDS } from '../../../../shared/language-server-session'
 
@@ -34,9 +35,11 @@ const Params = z.object({
  * with no Electron userData). Host-resolved truth (#15): this Host's own
  * trusted manifest governs; clients only ever send manifest ids. */
 function getRelayManagedInstaller(): ManagedLanguageServerInstaller {
+  const root = join(homedir(), '.orca', 'code-intelligence', 'managed')
   relayInstallerSingleton ??= new ManagedLanguageServerInstaller({
-    root: join(homedir(), '.orca', 'code-intelligence', 'managed'),
-    manifest: MANAGED_LANGUAGE_SERVER_MANIFEST
+    root,
+    manifest: MANAGED_LANGUAGE_SERVER_MANIFEST,
+    host: createLocalManagedLanguageServerInstallHost({ root })
   })
   return relayInstallerSingleton
 }
