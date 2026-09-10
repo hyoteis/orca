@@ -40,6 +40,7 @@ vi.mock('./language-server-client-registry', async () => {
 })
 
 import { resetScriptedLanguageServerClient, scripted } from './scripted-language-server-client'
+import { getCppSession } from './cpp-code-intelligence-session'
 
 import {
   getCppDocumentSymbols,
@@ -189,5 +190,19 @@ describe('cpp document symbols', () => {
     settings = { codeIntelligenceScopes: [] as CodeIntelligenceScope[] } as GlobalSettings
     expect(await getCppDocumentSymbols(request(4))).toBeNull()
     expect(scripted.requestCalls).not.toContain('textDocument/documentSymbol')
+  })
+})
+
+describe('manual session restart (#149)', () => {
+  it('drops the running client so the next request reopens it', async () => {
+    await resolveCppDefinition(request(1))
+    expect(scripted.opens).toHaveLength(1)
+    expect(getCppSession().restartSession(scope(1).id, 1)).toBe(true)
+    await resolveCppDefinition(request(2))
+    expect(scripted.opens).toHaveLength(2)
+  })
+
+  it('reports false when the scope has no live client', () => {
+    expect(getCppSession().restartSession(scope(1).id, 1)).toBe(false)
   })
 })
