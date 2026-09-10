@@ -113,6 +113,7 @@
       "basicNote": "对整个工作区生效；编译数据库模式不使用这些设置。",
       "structureChanged": "结构已变更 — 保存后将请求重新授权",
       "saveAndAuthorize": "保存并授权",
+      "configuringAndAuthorizing": "正在配置并授权 C++ 代码智能…",
       "configureSaved": "C++ 代码智能已配置并授权",
       "configureFailed": "配置失败",
       "revalidated": "已重新验证并重载",

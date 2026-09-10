@@ -133,21 +133,21 @@
     "count": 1
   },
   {
-    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "filePath": "src/renderer/src/components/sidebar/ConfigureBasicOptionsForm.tsx",
     "kind": "jsx-text",
     "text": "C++17",
     "dynamic": false,
     "count": 1
   },
   {
-    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "filePath": "src/renderer/src/components/sidebar/ConfigureBasicOptionsForm.tsx",
     "kind": "jsx-text",
     "text": "C++20",
     "dynamic": false,
     "count": 1
   },
   {
-    "filePath": "src/renderer/src/components/sidebar/CodeIntelligenceConfigureDialog.tsx",
+    "filePath": "src/renderer/src/components/sidebar/ConfigureBasicOptionsForm.tsx",
     "kind": "jsx-text",
     "text": "C++23",
     "dynamic": false,
