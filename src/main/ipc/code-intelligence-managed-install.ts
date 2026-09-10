@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
-import { parseExecutionHostId } from '../../shared/execution-host'
+import { parseExecutionHostId, toSshExecutionHostId } from '../../shared/execution-host'
 import type {
   ManagedLanguageServerInstallEvent,
   ManagedLanguageServerInstallRequest,
@@ -9,7 +9,6 @@ import type {
   ManagedLanguageServerRollbackResult
 } from '../../shared/managed-language-server'
 import { MANAGED_LANGUAGE_SERVER_MANIFEST } from '../../shared/managed-language-server-manifest-data'
-import { assertManagedLanguageServerTool } from '../../shared/managed-language-server'
 import type {
   CodeIntelligenceScope
 } from '../../shared/code-intelligence-scope'
@@ -17,22 +16,17 @@ import type { LanguageServerKind } from '../../shared/language-server-session'
 import { languageServerKindForScope } from '../../shared/code-intelligence-scope'
 import { ManagedLanguageServerInstaller } from '../language-server/managed-language-server-installer'
 import { createLocalManagedLanguageServerInstallHost } from '../language-server/managed-language-server-local-install-host'
-import {
-  installSshManagedLanguageServer,
-  sshManagedRemoteArch
-} from '../language-server/code-intelligence-ssh-managed-install'
-import {
-  readSshManagedActivation,
-  type SshManagedInstallContext
+import { probeSshManagedGlibc, sshManagedRemoteArch } from '../language-server/code-intelligence-ssh-managed-install-root'
+import type {
+  SshManagedInstallContext
 } from '../language-server/code-intelligence-ssh-managed-install-root'
 import {
-  gcSshManagedLanguageServerVersions,
-  resolveSshManagedLanguageServerCommand,
-  rollbackSshManagedLanguageServer,
-  sshManagedLanguageServerState
+  resolveSshManagedLanguageServerCommand
 } from '../language-server/code-intelligence-ssh-managed-install-state'
+import { createSshManagedLanguageServerInstallHost } from '../language-server/code-intelligence-ssh-managed-install-host'
 import { SshSetupExecQueue } from '../language-server/code-intelligence-ssh-setup-exec'
 import { uploadFile as uploadFileViaSftp } from '../ssh/sftp-upload'
+import type { SshConnection } from '../ssh/ssh-connection'
 import type { Store } from '../persistence'
 import { getSshConnectionManager, getRegisteredSshState } from './ssh'
 
@@ -94,21 +88,53 @@ export async function resolveManagedLanguageServerLaunch(
   return null
 }
 
-async function createSshManagedInstallContext(targetId: string): Promise<SshManagedInstallContext> {
+type SshManagedTargetProbe = Omit<SshManagedInstallContext, 'queue' | 'uploadFile'>
+
+/** Probed once per target for the app lifetime (local parity: the installer
+ * caches hostTarget the same way); transport pieces follow the live
+ * connection so a reconnect heals itself. */
+const sshTargetProbes = new Map<string, Promise<SshManagedTargetProbe>>()
+
+function probeSshManagedTarget(targetId: string): Promise<SshManagedTargetProbe> {
+  let probe = sshTargetProbes.get(targetId)
+  if (!probe) {
+    probe = (async (): Promise<SshManagedTargetProbe> => {
+      const connection = requireSshConnection(targetId)
+      const queue = new SshSetupExecQueue(connection)
+      const remotePlatform = getRegisteredSshState(targetId)?.remotePlatform ?? 'linux'
+      return {
+        home: await queue.capture('printf %s "$HOME"'),
+        remotePlatform,
+        remoteArch: (await sshManagedRemoteArch(connection)) ?? 'x64',
+        ...(remotePlatform === 'linux'
+          ? { remoteGlibc: await probeSshManagedGlibc(queue) }
+          : {})
+      }
+    })()
+    sshTargetProbes.set(targetId, probe)
+    // A rejected probe (target was down) must not pin the failure forever.
+    probe.catch(() => sshTargetProbes.delete(targetId))
+  }
+  return probe
+}
+
+function requireSshConnection(targetId: string): SshConnection {
   const connection = getSshConnectionManager()?.getConnection(targetId)
   if (!connection) {
     throw new Error(`SSH target is not connected: ${targetId}`)
   }
-  const queue = new SshSetupExecQueue(connection)
-  const home = await queue.capture('printf %s "$HOME"')
-  const remotePlatform = getRegisteredSshState(targetId)?.remotePlatform ?? 'linux'
-  const remoteArch = (await sshManagedRemoteArch(connection)) ?? 'x64'
+  return connection
+}
+
+async function createSshManagedInstallContext(targetId: string): Promise<SshManagedInstallContext> {
+  const probe = await probeSshManagedTarget(targetId)
+  const connection = requireSshConnection(targetId)
   return {
-    queue,
-    home,
-    remotePlatform,
-    remoteArch,
-    ...(remotePlatform === 'linux' ? { remoteGlibc: await probeRemoteGlibc(queue) } : {}),
+    queue: new SshSetupExecQueue(connection),
+    ...probe,
+    // Re-read per call: registration may lag the first probe, and pinning the
+    // fallback would veto Windows remotes forever.
+    remotePlatform: getRegisteredSshState(targetId)?.remotePlatform ?? probe.remotePlatform,
     uploadFile: async (localPath, remotePath, signal) => {
       const sftp = await connection.sftp(signal ?? undefined)
       await uploadFileViaSftp(sftp, localPath, remotePath, signal ? { signal } : undefined)
@@ -116,88 +142,29 @@ async function createSshManagedInstallContext(targetId: string): Promise<SshMana
   }
 }
 
-/** `ldd --version | head -1` carries the remote glibc; failure = unknown. */
-async function probeRemoteGlibc(queue: SshSetupExecQueue): Promise<string | undefined> {
-  const result = await queue.exec('ldd --version 2>/dev/null | head -1')
-  return result.code === 0 ? result.stdout.match(/\b(2\.\d+(?:\.\d+)?)\b/)?.[1] : undefined
+const sshInstallers = new Map<string, ManagedLanguageServerInstaller>()
+
+/** One pipeline instance per SSH target: its lock deduplicates concurrent
+ * installs and its event envelope carries the target's executionHostId. */
+function getSshManagedInstaller(targetId: string, store: Store): ManagedLanguageServerInstaller {
+  let installer = sshInstallers.get(targetId)
+  if (!installer) {
+    installer = new ManagedLanguageServerInstaller({
+      manifest: MANAGED_LANGUAGE_SERVER_MANIFEST,
+      host: createSshManagedLanguageServerInstallHost({
+        createContext: () => createSshManagedInstallContext(targetId)
+      }),
+      getPinnedVersions: (tool) => Promise.resolve(pinnedManagedVersions(store, tool)),
+      emit: (event) =>
+        broadcastManagedInstallEvent({ ...event, executionHostId: toSshExecutionHostId(targetId) })
+    })
+    sshInstallers.set(targetId, installer)
+  }
+  return installer
 }
 
 export function registerManagedLanguageServerInstallHandlers(store: Store): void {
   const installer = getManagedLanguageServerInstaller(store)
-  const sshInstallLocks = new Map<string, Promise<ManagedLanguageServerInstallResult>>()
-  const sshInstallAborts = new Map<string, AbortController>()
-  const emitSshTerminalEvent = (
-    request: Pick<ManagedLanguageServerInstallRequest, 'executionHostId' | 'tool'>,
-    result: ManagedLanguageServerInstallResult
-  ): void => {
-    // Terminal outcomes only — unsupported/already-active are not events.
-    if (result.status === 'unsupported' || result.status === 'already-active') {
-      return
-    }
-    const version = 'version' in result ? result.version : ''
-    broadcastManagedInstallEvent({
-      executionHostId: request.executionHostId,
-      tool: assertManagedLanguageServerTool(request.tool),
-      version,
-      phase: result.status === 'installed' ? 'complete' : 'error',
-      ...(result.status === 'failed' ? { message: result.error } : {}),
-      ...(result.status === 'canceled' ? { canceled: true } : {})
-    })
-  }
-  /** Remote GC after install/rollback: keep active, rollback, and pins. */
-  const gcSshManaged = async (targetId: string, tool: LanguageServerKind): Promise<void> => {
-    try {
-      const ctx = await createSshManagedInstallContext(targetId)
-      const record = await readSshManagedActivation(ctx, tool)
-      await gcSshManagedLanguageServerVersions({
-        ctx,
-        tool,
-        keepVersions: [
-          record?.active.version,
-          record?.rollback?.version,
-          ...pinnedManagedVersions(store, tool)
-        ].filter((version): version is string => typeof version === 'string')
-      })
-    } catch {
-      // Best-effort: an unreachable host collects until the next install.
-    }
-  }
-  const runSshManagedInstall = (
-    targetId: string,
-    request: ManagedLanguageServerInstallRequest,
-    signal?: AbortSignal
-  ): Promise<ManagedLanguageServerInstallResult> => {
-    const key = `${targetId}:${request.tool}`
-    const running = sshInstallLocks.get(key)
-    if (running) {
-      return running
-    }
-    const controller = new AbortController()
-    signal?.addEventListener('abort', () => controller.abort(signal!.reason), { once: true })
-    const promise = (async () => {
-      sshInstallAborts.set(key, controller)
-      try {
-        return await installSshManagedLanguageServer({
-          ctx: await createSshManagedInstallContext(targetId),
-          manifest: MANAGED_LANGUAGE_SERVER_MANIFEST,
-          tool: request.tool,
-          version: request.version,
-          route: request.route,
-          signal: controller.signal
-        })
-      } catch (error) {
-        return {
-          status: 'failed' as const,
-          error: error instanceof Error ? error.message : String(error)
-        }
-      }
-    })().finally(() => {
-      sshInstallLocks.delete(key)
-      sshInstallAborts.delete(key)
-    })
-    sshInstallLocks.set(key, promise)
-    return promise
-  }
   ipcMain.handle(
     'codeIntelligence:managedInstallState',
     async (
@@ -206,11 +173,7 @@ export function registerManagedLanguageServerInstallHandlers(store: Store): void
     ): Promise<ManagedLanguageServerInstallState> => {
       const host = parseExecutionHostId(request.executionHostId)
       if (host?.kind === 'ssh') {
-        return sshManagedLanguageServerState({
-          ctx: await createSshManagedInstallContext(host.targetId),
-          manifest: MANAGED_LANGUAGE_SERVER_MANIFEST,
-          tool: request.tool
-        })
+        return getSshManagedInstaller(host.targetId, store).state(request.tool)
       }
       return installer.state(request.tool)
     }
@@ -223,12 +186,11 @@ export function registerManagedLanguageServerInstallHandlers(store: Store): void
     ): Promise<ManagedLanguageServerInstallResult> => {
       const host = parseExecutionHostId(request.executionHostId)
       if (host?.kind === 'ssh') {
-        const result = await runSshManagedInstall(host.targetId, request)
-        emitSshTerminalEvent(request, result)
-        if (result.status === 'installed') {
-          await gcSshManaged(host.targetId, request.tool)
-        }
-        return result
+        return getSshManagedInstaller(host.targetId, store).install({
+          tool: request.tool,
+          version: request.version,
+          route: request.route
+        })
       }
       if (host?.kind === 'local') {
         return installer.install({
@@ -247,9 +209,7 @@ export function registerManagedLanguageServerInstallHandlers(store: Store): void
     (_event, request: { executionHostId: string; tool: LanguageServerKind }): boolean => {
       const host = parseExecutionHostId(request.executionHostId)
       if (host?.kind === 'ssh') {
-        const controller = sshInstallAborts.get(`${host.targetId}:${request.tool}`)
-        controller?.abort(new Error('Managed language-server install was canceled'))
-        return controller !== undefined
+        return getSshManagedInstaller(host.targetId, store).cancel(request.tool)
       }
       return installer.cancel(request.tool)
     }
@@ -262,15 +222,7 @@ export function registerManagedLanguageServerInstallHandlers(store: Store): void
     ): Promise<ManagedLanguageServerRollbackResult> => {
       const host = parseExecutionHostId(request.executionHostId)
       if (host?.kind === 'ssh') {
-        const result = await rollbackSshManagedLanguageServer({
-          ctx: await createSshManagedInstallContext(host.targetId),
-          manifest: MANAGED_LANGUAGE_SERVER_MANIFEST,
-          tool: request.tool
-        })
-        if (result.status === 'rolled-back') {
-          await gcSshManaged(host.targetId, request.tool)
-        }
-        return result
+        return getSshManagedInstaller(host.targetId, store).rollback(request.tool)
       }
       return installer.rollback(request.tool)
     }
