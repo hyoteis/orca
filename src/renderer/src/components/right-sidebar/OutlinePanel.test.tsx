@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   fetchSettings: vi.fn().mockResolvedValue(undefined)
 }))
 
-vi.mock('@/lib/language-server/cpp-definition-navigation', () => ({
+vi.mock('@/lib/language-server/cpp-code-intelligence-requests', () => ({
   getCppDocumentSymbols: mocks.getCppDocumentSymbols
 }))
 

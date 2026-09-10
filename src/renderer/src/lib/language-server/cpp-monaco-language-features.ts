@@ -17,7 +17,7 @@ import {
   getCppDocumentSymbols,
   openCppDefinitionTarget,
   type CppCodeIntelligenceRequest
-} from './cpp-definition-navigation'
+} from './cpp-code-intelligence-requests'
 import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
 import { lspSymbolsToMonaco } from './document-symbol-monaco-mapping'
 import { createSemanticMonacoStack } from './semantic-monaco-stack'

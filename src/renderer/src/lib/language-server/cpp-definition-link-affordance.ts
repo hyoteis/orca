@@ -4,7 +4,7 @@ import {
   openCppDefinitionTarget,
   resolveCppDefinition,
   type CppCodeIntelligenceRequest
-} from './cpp-definition-navigation'
+} from './cpp-code-intelligence-requests'
 
 export const isCppDefinitionModifierPressed = isDefinitionModifierPressed
 

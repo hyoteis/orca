@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   openDefinitionTargetInWorkspace: vi.fn()
 }))
 
-vi.mock('@/lib/language-server/cpp-definition-navigation', () => ({
+vi.mock('@/lib/language-server/cpp-code-intelligence-requests', () => ({
   searchCppWorkspaceSymbols: mocks.searchCppWorkspaceSymbols
 }))
 

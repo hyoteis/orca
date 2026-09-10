@@ -20,7 +20,7 @@ export type {
   WorkspaceSymbolFanout
 } from './code-intelligence-workspace'
 
-// Lives here (not in cpp-definition-navigation) so banner/UI code can gate on
+// Lives here (not in cpp-code-intelligence-requests) so banner/UI code can gate on
 // C/C++ without pulling the vscode-jsonrpc/browser import chain into tests.
 export const CPP_LANGUAGES = new Set(['c', 'cpp', 'objective-c', 'objective-cpp'])
 
