@@ -45,8 +45,8 @@ import {
   getCppDocumentSymbols,
   resetCppCodeIntelligence,
   resolveCppDefinition
-} from './cpp-definition-navigation'
-import type { CppCodeIntelligenceRequest } from './cpp-definition-navigation'
+} from './cpp-code-intelligence-requests'
+import type { CppCodeIntelligenceRequest } from './cpp-code-intelligence-requests'
 
 const scope = (revision: number): CodeIntelligenceScope => ({
   id: 'local:worktree:demo:cpp',

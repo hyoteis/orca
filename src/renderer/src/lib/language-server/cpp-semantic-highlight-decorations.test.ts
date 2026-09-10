@@ -3,12 +3,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CPP_SEMANTIC_TOKEN_TYPES } from './cpp-semantic-token-mapping'
 
-vi.mock('./cpp-definition-navigation', () => ({
+vi.mock('./cpp-code-intelligence-requests', () => ({
   getCppSemanticTokens: vi.fn(),
   subscribeCppClientDropped: vi.fn(() => () => {})
 }))
 
-import { getCppSemanticTokens, subscribeCppClientDropped } from './cpp-definition-navigation'
+import { getCppSemanticTokens, subscribeCppClientDropped } from './cpp-code-intelligence-requests'
 import {
   decodeCppSemanticTokenDecorations,
   installCppSemanticHighlightDecorations

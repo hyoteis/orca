@@ -10,7 +10,7 @@ import {
   findCodeIntelligenceRepo,
   findCodeIntelligenceScope
 } from '@/lib/language-server/code-intelligence-workspace'
-import { getCppDocumentSymbols } from '@/lib/language-server/cpp-definition-navigation'
+import { getCppDocumentSymbols } from '@/lib/language-server/cpp-code-intelligence-requests'
 import {
   semanticDocumentEditorFor,
   subscribeSemanticDocuments

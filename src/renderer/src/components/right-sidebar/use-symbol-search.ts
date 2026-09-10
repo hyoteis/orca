@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
-import { searchCppWorkspaceSymbols } from '@/lib/language-server/cpp-definition-navigation'
+import { searchCppWorkspaceSymbols } from '@/lib/language-server/cpp-code-intelligence-requests'
 import { openDefinitionTargetInWorkspace } from '@/lib/language-server/code-intelligence-workspace'
 import type { WorkspaceSymbolFanout } from '@/lib/language-server/code-intelligence-workspace'
 import {

@@ -1,5 +1,5 @@
 import type * as Monaco from 'monaco-editor'
-import { getCppSemanticTokens, subscribeCppClientDropped, type CppCodeIntelligenceRequest } from './cpp-definition-navigation'
+import { getCppSemanticTokens, subscribeCppClientDropped, type CppCodeIntelligenceRequest } from './cpp-code-intelligence-requests'
 import { CPP_SEMANTIC_TOKEN_TYPES } from './cpp-semantic-token-mapping'
 
 type MonacoApi = typeof Monaco

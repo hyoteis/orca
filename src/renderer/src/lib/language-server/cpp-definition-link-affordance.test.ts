@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('./cpp-definition-navigation', () => ({
+vi.mock('./cpp-code-intelligence-requests', () => ({
   openCppDefinitionTarget: vi.fn(),
   resolveCppDefinition: vi.fn()
 }))
