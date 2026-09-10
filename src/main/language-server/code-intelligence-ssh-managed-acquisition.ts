@@ -5,7 +5,6 @@ import { buildPosixLanguageServerCommand } from '../ssh/ssh-language-server-sess
 import { resolveManagedLanguageServerCommand } from '../../shared/managed-language-server'
 import type {
   ManagedLanguageServerInstallRoute,
-  ManagedLanguageServerManifest,
   ManagedLanguageServerManifestEntry
 } from '../../shared/managed-language-server'
 import { buildManagedExtractionCommands } from './managed-language-server-extraction'
@@ -69,7 +68,6 @@ export async function probeSshManagedVersion(
  */
 export async function acquireSshManagedVersion(args: {
   ctx: SshManagedInstallContext
-  manifest: ManagedLanguageServerManifest
   entry: ManagedLanguageServerManifestEntry
   route: ManagedLanguageServerInstallRoute
   signal?: AbortSignal

@@ -53,6 +53,15 @@ the active version and one retained rollback version; swapped atomically
 (tmp + rename). Installing never mutates a running session — new sessions
 pick up the newly activated version.
 
+## ManagedInstallHost
+
+The execution surface the managed-install pipeline runs against: report the
+Host target, read/write the activation record, list and remove version
+directories, smoke-probe an installed version, and acquire one new version
+(stage → verify → extract → probe → adopt). The local filesystem and the SSH
+exec queue are the two realizations; lock/abort/event/branch/activation/GC
+policy lives in the one pipeline, never in a realization.
+
 ## Workspace-edit transaction
 
 The guarded path every mutating semantic result takes onto the Host's files

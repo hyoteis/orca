@@ -5,7 +5,7 @@ import type {
   ManagedLanguageServerActivationRecord
 } from '../../shared/managed-language-server'
 import { MANAGED_LANGUAGE_SERVER_ACTIVATION_FILE } from './managed-language-server-install-root'
-import type { SshSetupExecQueue } from './code-intelligence-ssh-setup-exec'
+import { SshSetupExecQueue } from './code-intelligence-ssh-setup-exec'
 
 /** Everything the remote transaction needs; the IPC layer resolves these per
  * request from the live connection and registered remote platform. */
@@ -73,4 +73,30 @@ export async function listSshManagedVersions(ctx: SshManagedInstallContext, tool
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => /^\d+(\.\d+)+$/.test(line))
+}
+
+/** Remote arch from `uname -m` for entry matching. */
+export async function sshManagedRemoteArch(
+  connection: ConstructorParameters<typeof SshSetupExecQueue>[0]
+): Promise<'x64' | 'arm64' | null> {
+  const result = await new SshSetupExecQueue(connection).exec('uname -m')
+  if (result.code !== 0) {
+    return null
+  }
+  const machine = result.stdout.trim()
+  if (machine === 'x86_64' || machine === 'amd64') {
+    return 'x64'
+  }
+  if (machine === 'aarch64' || machine === 'arm64') {
+    return 'arm64'
+  }
+  return null
+}
+
+/** `ldd --version | head -1` carries the remote glibc; failure = unknown. */
+export async function probeSshManagedGlibc(
+  queue: SshSetupExecQueue
+): Promise<string | undefined> {
+  const result = await queue.exec('ldd --version 2>/dev/null | head -1')
+  return result.code === 0 ? result.stdout.match(/\b(2\.\d+(?:\.\d+)?)\b/)?.[1] : undefined
 }

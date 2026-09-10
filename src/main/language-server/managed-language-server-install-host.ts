@@ -4,7 +4,8 @@ import type {
   ManagedLanguageServerInstallPhase,
   ManagedLanguageServerInstallRoute,
   ManagedLanguageServerManifestEntry,
-  ManagedLanguageServerToolId
+  ManagedLanguageServerToolId,
+  ManagedLanguageServerUnsupportedReason
 } from '../../shared/managed-language-server'
 
 /** Progress sink the pipeline hands to acquire(); the pipeline fills in
@@ -19,6 +20,11 @@ export type ManagedAcquireProgress = (
  * implements storage and acquisition in its own idiom. Parallel to CppSetupHost. */
 export type ManagedLanguageServerInstallHost = {
   hostTarget(): Promise<ManagedLanguageServerHostTarget>
+  /** Host-level incompatibility entry matching cannot see (e.g. the SSH
+   * POSIX acquisition chain on a Windows remote — the manifest does carry
+   * win32 entries for the local Host). A reason short-circuits install/state
+   * to `unsupported` before any entry matching. */
+  unsupportedReason?(): Promise<ManagedLanguageServerUnsupportedReason | null>
   readActivation(
     tool: ManagedLanguageServerToolId
   ): Promise<ManagedLanguageServerActivationRecord | null>

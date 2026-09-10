@@ -24,8 +24,8 @@ import { managedVersionDirectory } from './managed-language-server-install-root'
 
 export type ManagedLanguageServerInstallerOptions = {
   /** Local layout root — only resolveActiveCommand still builds paths here;
-   * storage and acquisition live in the host. */
-  root: string
+   * SSH Hosts resolve launch commands in their adapter path instead. */
+  root?: string
   manifest: ManagedLanguageServerManifest
   host: ManagedLanguageServerInstallHost
   /** Versions scopes pin via serverSource.version; GC must keep them. */
@@ -122,6 +122,19 @@ export class ManagedLanguageServerInstaller {
       this.options.host.readActivation(managedTool),
       this.options.host.listVersions(managedTool)
     ])
+    const unsupported = await this.options.host.unsupportedReason?.()
+    if (unsupported) {
+      return {
+        tool,
+        supported: false,
+        unsupportedReason: unsupported,
+        activeVersion: record?.active.version ?? null,
+        rollbackVersion: record?.rollback?.version ?? null,
+        installedVersions,
+        latestEntry: null,
+        updateAvailable: false
+      }
+    }
     const resolved = resolveManagedLanguageServerEntry(
       this.options.manifest,
       { tool: managedTool },
@@ -158,6 +171,9 @@ export class ManagedLanguageServerInstaller {
     tool: LanguageServerKind,
     version?: string
   ): Promise<{ executable: string; args: string[] } | null> {
+    if (!this.options.root) {
+      return null
+    }
     const managedTool = assertManagedLanguageServerTool(tool)
     const record = await this.options.host.readActivation(managedTool)
     if (!record) {
@@ -182,10 +198,15 @@ export class ManagedLanguageServerInstaller {
     controller: AbortController,
     emit: (event: ManagedLanguageServerInstallEvent) => void
   ): Promise<ManagedLanguageServerInstallResult> {
-    this.aborts.set(assertManagedLanguageServerTool(args.tool), controller)
+    const managedTool = assertManagedLanguageServerTool(args.tool)
+    this.aborts.set(managedTool, controller)
+    const unsupported = await this.options.host.unsupportedReason?.()
+    if (unsupported) {
+      return { status: 'unsupported', reason: unsupported }
+    }
     const resolved = resolveManagedLanguageServerEntry(
       this.options.manifest,
-      { tool: 'clangd', version: args.version },
+      { tool: managedTool, version: args.version },
       await this.resolveHostTarget()
     )
     if (!('entry' in resolved)) {
@@ -252,25 +273,37 @@ export class ManagedLanguageServerInstaller {
     return { active: { version: entry.version, entryId: entry.id, activatedAt: Date.now() } }
   }
 
-  /** GC protects active, rollback, and scope-pinned versions; staging is skipped.
-   * ponytail: in-use protection approximated — sessions launch from `active`. */
+  /** GC protects active, rollback, and scope-pinned versions; staging is
+   * skipped. Best-effort end to end: an unreachable Host or an in-use
+   * directory retries on the next install and must never fail a completed
+   * activation swap. ponytail: in-use protection approximated — sessions
+   * launch from `active`. */
   private async gc(tool: ManagedLanguageServerToolId): Promise<void> {
-    const record = await this.options.host.readActivation(tool)
-    const pinned = (await this.options.getPinnedVersions?.(tool)) ?? []
-    const keep = new Set<string>(
-      [record?.active?.version, record?.rollback?.version, ...pinned].filter(
-        (version): version is string => typeof version === 'string'
+    try {
+      const record = await this.options.host.readActivation(tool)
+      const pinned = (await this.options.getPinnedVersions?.(tool)) ?? []
+      const keep = new Set<string>(
+        [record?.active?.version, record?.rollback?.version, ...pinned].filter(
+          (version): version is string => typeof version === 'string'
+        )
       )
-    )
-    for (const version of await this.options.host.listVersions(tool)) {
-      if (!keep.has(version)) {
-        await this.options.host.removeVersion(tool, version)
+      for (const version of await this.options.host.listVersions(tool)) {
+        if (!keep.has(version)) {
+          await this.options.host.removeVersion(tool, version).catch(() => {})
+        }
       }
+    } catch {
+      // Keep-set computation failed — collect until the next install.
     }
   }
 
   private resolveHostTarget(): Promise<ManagedLanguageServerHostTarget> {
-    this.hostTarget ??= this.options.host.hostTarget()
+    // A rejected probe (Host was unreachable) must not pin the failure for
+    // the installer's lifetime.
+    this.hostTarget ??= this.options.host.hostTarget().catch((error) => {
+      this.hostTarget = null
+      throw error
+    })
     return this.hostTarget
   }
 }
