@@ -271,6 +271,12 @@ export function subscribeCppClientDropped(listener: () => void): () => void {
   return service().onClientDropped(listener)
 }
 
+/** #149: manual restart from the Configure dialog; cache invalidation rides
+ * the session's drop listeners. */
+export function restartCppSession(scopeId: string, revision: number): boolean {
+  return getCppSession().restartSession(scopeId, revision)
+}
+
 export function getCppDocumentSymbols(
   request: CppCodeIntelligenceRequest,
   token?: CancellationToken

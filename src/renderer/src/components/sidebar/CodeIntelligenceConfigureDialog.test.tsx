@@ -14,12 +14,19 @@ const mocks = vi.hoisted(() => ({
   pickDirectory: vi.fn(),
   browseDir: vi.fn(),
   fetchSettings: vi.fn(async () => {}),
+  restartCppSession: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn()
 }))
 
 vi.mock('sonner', () => ({
   toast: { success: mocks.toastSuccess, error: mocks.toastError, warning: vi.fn() }
+}))
+
+// #149: the dialog's restart action routes through the live session singleton;
+// the mock keeps this harness free of the real registry/store wiring.
+vi.mock('@/lib/language-server/cpp-code-intelligence-requests', () => ({
+  restartCppSession: mocks.restartCppSession
 }))
 
 const scopeFixture = (overrides: Record<string, unknown> = {}) => ({
@@ -41,6 +48,7 @@ beforeEach(() => {
   mocks.revalidateAggregate.mockReset()
   mocks.pickCompileDatabase.mockReset()
   mocks.pickDirectory.mockReset()
+  mocks.restartCppSession.mockReset()
   mocks.toastSuccess.mockClear()
   mocks.toastError.mockClear()
   globalThis.window.api = {
@@ -271,5 +279,26 @@ describe('CodeIntelligenceConfigureDialog (#138)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }))
     await waitFor(() => expect(screen.getByText('src')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: 'Use this folder' })).toBeNull()
+  })
+})
+
+describe('CodeIntelligenceConfigureDialog restart session (#149)', () => {
+  it('restarts the running C++ session for the scope', async () => {
+    mocks.restartCppSession.mockReturnValue(true)
+    renderDialog()
+    fireEvent.click(screen.getByRole('radio', { name: 'Compile database' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restart C++ session' }))
+    expect(mocks.restartCppSession).toHaveBeenCalledWith('local:worktree:repo-1:cpp', 1)
+    await waitFor(() =>
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('C++ session restarted — reopens on next use')
+    )
+  })
+
+  it('toasts normally when no session is running', async () => {
+    mocks.restartCppSession.mockReturnValue(false)
+    renderDialog()
+    fireEvent.click(screen.getByRole('radio', { name: 'Compile database' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restart C++ session' }))
+    await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith('No running C++ session'))
   })
 })
