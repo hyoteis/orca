@@ -19,6 +19,11 @@ import {
   type CppCodeIntelligenceRequest
 } from './cpp-code-intelligence-requests'
 import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
+import {
+  CPP_DIAGNOSTIC_MARKER_OWNER,
+  installCppDiagnosticsMarkers
+} from './cpp-diagnostics-markers'
+import { toServerFileUri } from './language-server-document-uri'
 import { lspSymbolsToMonaco } from './document-symbol-monaco-mapping'
 import { createSemanticMonacoStack } from './semantic-monaco-stack'
 
@@ -92,12 +97,42 @@ function contextForModel(model: Monaco.editor.ITextModel): DocumentContext | nul
   return documents.get(model.uri.toString()) ?? null
 }
 
+/** Tracked live models whose document path matches the server-form URI (#162). */
+function modelsForServerUri(monaco: MonacoApi, serverUri: string): Monaco.editor.ITextModel[] {
+  const models: Monaco.editor.ITextModel[] = []
+  for (const [modelUri, context] of documents) {
+    const request = context.requestAt({ lineNumber: 1, column: 1 })
+    if (request && toServerFileUri(request.filePath) === serverUri) {
+      const model = monaco.editor.getModel(monaco.Uri.parse(modelUri))
+      if (model) {
+        models.push(model)
+      }
+    }
+  }
+  return models
+}
+
+function trackedModels(monaco: MonacoApi): Monaco.editor.ITextModel[] {
+  const models: Monaco.editor.ITextModel[] = []
+  for (const modelUri of documents.keys()) {
+    const model = monaco.editor.getModel(monaco.Uri.parse(modelUri))
+    if (model) {
+      models.push(model)
+    }
+  }
+  return models
+}
+
 function installProviders(monaco: MonacoApi): void {
   if (installed) {
     return
   }
   installed = true
   cppStack.installProviders(monaco)
+  installCppDiagnosticsMarkers(monaco, getCppSession(), {
+    forServerUri: (uri) => modelsForServerUri(monaco, uri),
+    all: () => trackedModels(monaco)
+  })
   for (const language of CPP_LANGUAGES) {
     monaco.languages.registerHoverProvider(language, {
       provideHover: async (model, position, token) => {
@@ -173,6 +208,9 @@ export function registerCppMonacoDocument(
     unregisterSemantic()
     uninstallDefinitionLink()
     uninstallSemanticHighlights()
+    // Tab close keeps cached models alive; drop its markers before the next
+    // open replays a stale squiggle (#162).
+    monaco.editor.setModelMarkers(model, CPP_DIAGNOSTIC_MARKER_OWNER, [])
     if (documents.get(key)?.token === context.token) {
       documents.delete(key)
     }
