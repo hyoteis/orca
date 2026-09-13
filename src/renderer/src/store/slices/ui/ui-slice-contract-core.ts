@@ -113,6 +113,8 @@ export type UiViewHistory =
   | 'skills'
   | 'artifacts'
   | 'mobile'
+  // PROTOTYPE (throwaway, branch prototype/lsp-editor-ux): dev-only LSP editor UX page.
+  | 'lspux'
 
 export type UISliceCore = {
   sidebarOpen: boolean
@@ -164,6 +166,8 @@ export type UISliceCore = {
   closeTaskPage: () => void
   openActivityPage: () => void
   closeActivityPage: () => void
+  // PROTOTYPE (throwaway, branch prototype/lsp-editor-ux): dev-only LSP editor UX page.
+  openLspUxPrototypePage: () => void
   selectedAutomationId: string | null
   setSelectedAutomationId: (id: string | null) => void
   pendingAutomationRunNavigation: {

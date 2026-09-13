@@ -24,6 +24,10 @@ const SkillsPage = lazy(() => import('../components/skills/SkillsPage'))
 const ArtifactsPage = lazy(() => import('../components/artifacts/ArtifactsPage'))
 const WorkspaceSpacePage = lazy(() => import('../components/workspace-space/WorkspaceSpacePage'))
 const MobilePage = lazy(() => import('../components/mobile/MobilePage'))
+// PROTOTYPE (throwaway, branch prototype/lsp-editor-ux)
+const LspEditorUxPrototypePage = lazy(
+  () => import('../components/editor/lsp-editor-ux-prototype/LspEditorUxPrototypePage')
+)
 const Terminal = lazy(() => import('../components/Terminal'))
 
 type WorktreeSidebarScrollRefs = {
@@ -74,6 +78,7 @@ function ActivePage({ layout }: { layout: AppChromeLayout }): React.JSX.Element 
       {activeView === 'tasks' ? <TaskPage /> : null}
       {activeView === 'automations' ? <AutomationsPage /> : null}
       {activeView === 'activity' ? <ActivityPrototypePage /> : null}
+      {activeView === 'lspux' ? <LspEditorUxPrototypePage /> : null}
       {activeView === 'space' ? <WorkspaceSpacePage /> : null}
       {activeView === 'mobile' ? <MobilePage /> : null}
       {activeView === 'terminal' && creationLayoutActive && activePendingCreationId ? (

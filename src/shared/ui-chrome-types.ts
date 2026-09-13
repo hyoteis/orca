@@ -120,3 +120,5 @@ export type TopLevelView =
   | 'skills'
   | 'artifacts'
   | 'mobile'
+  // PROTOTYPE (throwaway, branch prototype/lsp-editor-ux): dev-only LSP editor UX page.
+  | 'lspux'

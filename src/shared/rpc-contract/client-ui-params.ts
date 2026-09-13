@@ -115,7 +115,9 @@ export const TopLevelViewSchema = z.enum([
   'space',
   'skills',
   'artifacts',
-  'mobile'
+  'mobile',
+  // PROTOTYPE (throwaway, branch prototype/lsp-editor-ux): dev-only LSP editor UX page.
+  'lspux'
 ])
 
 export const UiUpdateFields = z

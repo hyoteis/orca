@@ -1,0 +1,136 @@
+/* PROTOTYPE (throwaway) — LSP editor UX prototype styles.
+   Wayfinder ticket #179. Branch: prototype/lsp-editor-ux.
+   Scoped under .lspux-proto so nothing leaks into real editor surfaces. */
+
+/* Squiggle hierarchy → repo tokens.
+   error → --destructive · warning → --workspace-status-progress (amber)
+   info → --terminal-pane-locate (blue) · hint → --muted-foreground, dotted. */
+.lspux-proto .squiggly-error {
+  background: none !important;
+  text-decoration: underline wavy var(--destructive);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.lspux-proto .squiggly-warning {
+  background: none !important;
+  text-decoration: underline wavy var(--workspace-status-progress);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.lspux-proto .squiggly-info {
+  background: none !important;
+  text-decoration: underline wavy var(--terminal-pane-locate);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.lspux-proto .squiggly-hint {
+  background: none !important;
+  text-decoration: underline dotted var(--muted-foreground);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+/* Gutter badges: filled severity dots; hints are a hollow ring.
+   Why !important: monaco also tags glyph decorations with `.codicon`, whose
+   18px flex sizing loads after this lazy chunk and would override the dots. */
+.lspux-proto .lspux-gutter {
+  margin-left: 4px;
+  height: 0;
+  width: 0;
+}
+
+.lspux-proto .lspux-gutter-error,
+.lspux-proto .lspux-gutter-warning,
+.lspux-proto .lspux-gutter-info {
+  display: inline-block !important;
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 9999px !important;
+  background: var(--severity, var(--muted-foreground)) !important;
+}
+
+.lspux-proto .lspux-gutter-error {
+  --severity: var(--destructive);
+}
+
+.lspux-proto .lspux-gutter-warning {
+  --severity: var(--workspace-status-progress);
+}
+
+.lspux-proto .lspux-gutter-info {
+  --severity: var(--terminal-pane-locate);
+}
+
+.lspux-proto .lspux-gutter-hint {
+  display: inline-block !important;
+  width: 7px !important;
+  height: 7px !important;
+  border-radius: 9999px !important;
+  border: 1.5px solid var(--muted-foreground) !important;
+  background: transparent !important;
+}
+
+/* Suggest-widget + hover popups sit above the editor surface: use the floating elevation. */
+.lspux-proto .monaco-editor .suggest-widget,
+.lspux-proto .monaco-editor .monaco-hover,
+.lspux-proto .monaco-editor .monaco-editor-hover {
+  border: 1px solid var(--border) !important;
+  box-shadow: var(--shadow-floating);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+/* The floating prototype switcher (obviously not part of the evaluated design). */
+.lspux-switcher {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--popover) 92%, transparent);
+  box-shadow: var(--shadow-floating);
+  padding: 4px 8px;
+  color: var(--popover-foreground);
+  font-size: 11px;
+}
+
+.lspux-switcher-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lspux-switcher button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.lspux-switcher button[data-active='true'] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: transparent;
+}
+
+.lspux-switcher button:hover {
+  filter: brightness(1.05);
+}
+
+.lspux-switcher-label {
+  font-weight: 600;
+  min-width: 150px;
+  text-align: center;
+}

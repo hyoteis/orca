@@ -14,6 +14,8 @@ export function createUiViewActions(set: UISliceSet, get: UISliceGet): Partial<U
       set((state) => ({
         activeView: state.previousViewBeforeActivity
       })),
+    // PROTOTYPE (throwaway, branch prototype/lsp-editor-ux): dev-only LSP editor UX page.
+    openLspUxPrototypePage: () => set({ activeView: 'lspux' }),
     selectedAutomationId: null,
     setSelectedAutomationId: (id) => set({ selectedAutomationId: id }),
     pendingAutomationRunNavigation: null,
