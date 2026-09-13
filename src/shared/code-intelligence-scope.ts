@@ -90,6 +90,10 @@ export type CodeIntelligenceScopeChange = {
   /** Ephemeral mapping health (#136 spec §2 Step 4): rides this push, never
    * persisted into settings — absent on ordinary scope changes. */
   mappingHealth?: readonly AggregateMappingHealthSnapshot[]
+  /** Host-absolute path of the rewritten aggregate compile database; rides
+   * the health-only push so live clangd sessions can reload it (#165).
+   * Optional for mixed-version safety — old clients ignore it. */
+  aggregateCdbPath?: string
 }
 
 /** Per-mapping health as of the latest aggregate rebuild. */

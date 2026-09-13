@@ -24,7 +24,8 @@ export const scripted = {
   isCurrentRequest: true,
   instance: null as ScriptedLanguageServerClient | null,
   /** When set, the next open() rejects with it (#164 failure injection). */
-  openRejection: null as Error | null
+  openRejection: null as Error | null,
+  sentNotifications: [] as { method: string; params: unknown }[]
 }
 
 export function resetScriptedLanguageServerClient(): void {
@@ -40,14 +41,21 @@ export function resetScriptedLanguageServerClient(): void {
   scripted.isCurrentRequest = true
   scripted.instance = null
   scripted.openRejection = null
+  scripted.sentNotifications = []
 }
 
 export class ScriptedLanguageServerClient {
   constructor(
     _api: unknown,
-    private readonly onRestartDecision?: (key: Partial<LanguageServerClientKey>) => void
+    private readonly onRestartDecision?: (key: Partial<LanguageServerClientKey>) => void,
+    _scopeAuthority?: unknown,
+    private readonly onMappingHealth?: (change: unknown) => void
   ) {
     scripted.instance = this
+  }
+  /** Test hook: deliver a health-only scope push (#165 wiring). */
+  pushMappingHealth(change: unknown): void {
+    this.onMappingHealth?.(change)
   }
   nextRequestGeneration(): number {
     return 1
@@ -60,9 +68,8 @@ export class ScriptedLanguageServerClient {
     connection: {
       onRequest: (type: { method: string } | string, handler: (params: unknown) => unknown) => unknown
       onNotification: (type: { method: string } | string, handler: (params: unknown) => void) => unknown
-      sendNotification: () => void
-      sendRequest: (type: { method: string }, params: unknown, token?: unknown) => Promise<unknown>
-    }
+      sendNotification: (type: { method: string } | string, params?: unknown) => Promise<void>
+      sendRequest: (type: { method: string }, params: unknown, token?: unknown) => Promise<unknown>    }
     sync: { reconcile: () => void }
     initialize: (params: unknown) => Promise<{ capabilities: Record<string, unknown> }>
   }> {
@@ -84,7 +91,10 @@ export class ScriptedLanguageServerClient {
           scripted.notificationRoutes[routeMethod(type)] = handler
           return { dispose: () => delete scripted.notificationRoutes[routeMethod(type)] }
         },
-        sendNotification: () => {},
+        sendNotification: (type: { method: string } | string, params?: unknown) => {
+          scripted.sentNotifications.push({ method: routeMethod(type), params })
+          return Promise.resolve()
+        },
         sendRequest: async (type, params, token) => {
           scripted.requestCalls.push(type.method)
           if ((token as { isCancellationRequested?: boolean } | undefined)?.isCancellationRequested) {
