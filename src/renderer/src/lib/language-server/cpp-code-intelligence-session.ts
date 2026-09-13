@@ -35,6 +35,7 @@ import {
   CPP_SEMANTIC_TOKEN_TYPES
 } from './cpp-semantic-token-mapping'
 import { CppIndexingProgress } from './cpp-indexing-progress'
+import { CppInitFailureCache, isTransientInitFailure } from './cpp-init-failure-cache'
 
 export type CppCodeIntelligenceRequest = CodeIntelligenceDocumentRequest
 
@@ -73,6 +74,9 @@ export class CppCodeIntelligenceSession {
   private readonly diagnosticsListeners = new Set<(event: CppDiagnosticsEvent) => void>()
   /** Server-pushed work-done progress per scope (#163); the UI subscribes. */
   readonly indexing = new CppIndexingProgress()
+  /** Deterministic init failures fail fast within the TTL (#164); a manual
+   * restart (#149) or scope reload clears the way for a fresh spawn. */
+  private readonly initFailures = new CppInitFailureCache()
   private workspaceApplyEditHandler:
     | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
     | null = null
@@ -116,6 +120,9 @@ export class CppCodeIntelligenceSession {
     }
     // Progress from a dead session never ends on its own (#163).
     this.indexing.clearScope(scopeId)
+    // A restart explicitly chooses a fresh spawn — clear the failure cache
+    // (#164) so the very next request retries instead of replaying it.
+    this.initFailures.clear(scopeId)
   }
 
   setWorkspaceApplyEditHandler(
@@ -143,6 +150,10 @@ export class CppCodeIntelligenceSession {
    * (#136) never restart, so the Configure dialog can force a reload of a
    * rebuilt aggregate. Returns whether a session was running. */
   restartSession(scopeId: string, revision: number): boolean {
+    // A failed session has no running client, so the restart broadcast below
+    // never fires — but the user asked for a retry, so the failure cache must
+    // go regardless (#164).
+    this.initFailures.clear(scopeId)
     const running = this.activeClient(scopeId) !== undefined
     if (running) {
       this.registry.restartScope(scopeId, revision)
@@ -213,13 +224,29 @@ export class CppCodeIntelligenceSession {
       // change restarts, and that arrives via the registry's restart broadcast.
       return current
     }
+    // #164: a recently-failed spawn must not repeat its full handshake per
+    // editor query — replay the cached rejection until restart or TTL expiry.
+    const cachedFailure = this.initFailures.cached(scope.id)
+    if (cachedFailure) {
+      throw cachedFailure
+    }
     // Single-flight: outline and decorations query the same tick; a second
     // open of the live sessionId is rejected by the Host as a duplicate.
     const inFlight = this.opening.get(scope.id)
     if (inFlight) {
       return inFlight
     }
-    const opening = this.openClient(scope).finally(() => this.opening.delete(scope.id))
+    const opening = this.openClient(scope)
+      .catch((error: unknown) => {
+        if (!isTransientInitFailure(error)) {
+          this.initFailures.record(
+            scope.id,
+            error instanceof Error ? error.message : String(error)
+          )
+        }
+        throw error
+      })
+      .finally(() => this.opening.delete(scope.id))
     this.opening.set(scope.id, opening)
     return opening
   }

@@ -22,7 +22,9 @@ export const scripted = {
   closes: [] as LanguageServerClientKey[],
   sessionOverrides: [] as Record<string, RequestHandler>[],
   isCurrentRequest: true,
-  instance: null as ScriptedLanguageServerClient | null
+  instance: null as ScriptedLanguageServerClient | null,
+  /** When set, the next open() rejects with it (#164 failure injection). */
+  openRejection: null as Error | null
 }
 
 export function resetScriptedLanguageServerClient(): void {
@@ -37,6 +39,7 @@ export function resetScriptedLanguageServerClient(): void {
   scripted.sessionOverrides = []
   scripted.isCurrentRequest = true
   scripted.instance = null
+  scripted.openRejection = null
 }
 
 export class ScriptedLanguageServerClient {
@@ -55,14 +58,18 @@ export class ScriptedLanguageServerClient {
   async open(key: LanguageServerClientKey): Promise<{
     generation: number
     connection: {
-      onRequest: (type: { method: string }, handler: (params: unknown) => unknown) => unknown
-      onNotification: (type: { method: string }, handler: (params: unknown) => void) => unknown
+      onRequest: (type: { method: string } | string, handler: (params: unknown) => unknown) => unknown
+      onNotification: (type: { method: string } | string, handler: (params: unknown) => void) => unknown
       sendNotification: () => void
       sendRequest: (type: { method: string }, params: unknown, token?: unknown) => Promise<unknown>
     }
     sync: { reconcile: () => void }
     initialize: (params: unknown) => Promise<{ capabilities: Record<string, unknown> }>
   }> {
+    if (scripted.openRejection) {
+      scripted.opens.push(key)
+      throw scripted.openRejection
+    }
     const sessionIndex = scripted.sessionOverrides.length
     scripted.sessionOverrides.push({})
     scripted.opens.push(key)
