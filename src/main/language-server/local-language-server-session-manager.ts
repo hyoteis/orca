@@ -29,7 +29,7 @@ export function resolveDefaultLocalLanguageServerCommand(
     throw new Error(`Python language servers are no longer supported: ${request.kind}`)
   }
   const command =
-    request.command ?? { executable: 'clangd', args: [] as string[] }
+    request.command ?? { executable: 'clangd', args: ['--background-index'] }
   return { executable: command.executable, args: [...command.args], cwd: request.workspaceRoot }
 }
 

@@ -72,7 +72,9 @@ function clangdEntries(): ManagedLanguageServerManifestEntry[] {
       },
       command: {
         executable: platform === 'win32' ? '{root}/bin/clangd.exe' : '{root}/bin/clangd',
-        args: []
+        // Persistent background index (#161): large workspaces reuse the
+        // on-disk index instead of re-indexing on every cold start.
+        args: ['--background-index']
       },
       license: {
         name: 'Apache-2.0 WITH LLVM-exception',
