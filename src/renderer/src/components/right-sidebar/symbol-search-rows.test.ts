@@ -161,6 +161,9 @@ describe('buildSymbolSearchRows Phase 1 budget (#14)', () => {
 
     expect(rows).toHaveLength(10_000)
     expect(rows[0]?.name).toBe('symbol_00000')
-    expect(elapsed).toBeLessThan(100)
+    // #180: CI runners sit at 60–75% of a dev machine's throughput with high
+    // pool variance (observed 106–133 ms across five red runs while local
+    // stays <100 ms) — keep the local budget, widen only on CI.
+    expect(elapsed).toBeLessThan(process.env.CI ? 250 : 100)
   })
 })
