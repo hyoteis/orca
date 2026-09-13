@@ -11,6 +11,7 @@ import {
   findCodeIntelligenceScope
 } from '@/lib/language-server/code-intelligence-workspace'
 import { getCppDocumentSymbols } from '@/lib/language-server/cpp-code-intelligence-requests'
+import { useCppIndexingState, type CppIndexingState } from './use-cpp-indexing-state'
 import {
   semanticDocumentEditorFor,
   subscribeSemanticDocuments
@@ -22,9 +23,8 @@ import {
   resolveOutlineTier,
   type OutlineSymbolRow
 } from './outline-model'
-import { extractHeuristicOutlineRows } from './outline-heuristics'
-import { regroupQualifiedRows } from './outline-qualified-regroup'
 import { revealOutlineRow } from './outline-row-reveal'
+import { heuristicRowsFor } from './outline-active-heuristic-rows'
 
 export type OutlineSymbolsState =
   | { status: 'no-file' }
@@ -42,18 +42,6 @@ const OUTLINE_REFRESH_DEBOUNCE_MS = 500
 // file path; never persists across app restarts (out of scope per #98).
 const collapsedRowsByFile = new Map<string, Set<string>>()
 const EMPTY_COLLAPSED: ReadonlySet<string> = new Set()
-
-/** Heuristic tier rows (ADR 0003 tier 3) from the live editor text; undefined
- * while the document is not mounted (no badge, plain status). Qualified
- * out-of-line definitions re-nest under their class (#105 follow-up). */
-function heuristicRowsFor(activeFile: OpenFile | null): OutlineSymbolRow[] | undefined {
-  const document = activeFile && semanticDocumentEditorFor(activeFile.id)
-  return document && activeFile
-    ? regroupQualifiedRows(
-        extractHeuristicOutlineRows(document.model.getValue(), activeFile.language)
-      )
-    : undefined
-}
 
 function useActiveEditFile(): OpenFile | null {
   // Returns an existing OpenFile reference (or null) so unrelated store writes
@@ -73,6 +61,8 @@ function useActiveEditFile(): OpenFile | null {
 export function useOutlineSymbols(): {
   state: OutlineSymbolsState
   fileName: string | null
+  /** Index state of the covering scope; null when no scope applies (#163). */
+  indexing: CppIndexingState | null
   reveal: (row: OutlineSymbolRow) => void
   /** 0-based LSP line of the editor cursor; null when unknown. */
   cursorLine: number | null
@@ -339,9 +329,14 @@ export function useOutlineSymbols(): {
   const reveal = (row: OutlineSymbolRow): void =>
     revealOutlineRow(row, activeFile, scope, state.status === 'ready', setPendingEditorReveal)
 
+  // #163: clangd's index state for the covering scope — explains empty symbol
+  // results while the workspace index is still building.
+  const indexing = useCppIndexingState(scope?.id ?? null)
+
   return {
     state,
     fileName: activeFile ? basename(activeFile.filePath) : null,
+    indexing,
     reveal,
     cursorLine,
     collapsedKeys,

@@ -89,7 +89,7 @@ const HEADER_CONTROL_CLASS =
  * live refresh, and the server-error retry state. #103 adds the heuristic
  * tier: approximate rows plus badge when no language server can run. */
 export function OutlinePanel(): React.JSX.Element {
-  const { state, fileName, reveal, cursorLine, collapsedKeys, toggleCollapsed, retry } =
+  const { state, fileName, indexing, reveal, cursorLine, collapsedKeys, toggleCollapsed, retry } =
     useOutlineSymbols()
   const openModal = useAppStore((s) => s.openModal)
   const [sortMode, setSortMode] = useState<OutlineSortMode>('position')
@@ -257,6 +257,25 @@ export function OutlinePanel(): React.JSX.Element {
           cursorRowKey={cursorRowKey}
         />
       </div>
+    ) : indexing?.active ? (
+      // #163: an empty result during indexing is expected, not a dead file.
+      <OutlineEmptyState
+        icon={Loader2}
+        title={translate(
+          'auto.components.right.sidebar.OutlinePanel.0fd325c2eb',
+          'clangd is indexing this workspace'
+        )}
+        subtitle={
+          indexing.percentage !== undefined
+            ? translate('auto.components.right.sidebar.OutlinePanel.bef2a00066', '{{value0}}%', {
+                value0: String(Math.round(indexing.percentage))
+              })
+            : translate(
+                'auto.components.right.sidebar.OutlinePanel.3891f471e8',
+                'Symbols appear as the index completes'
+              )
+        }
+      />
     ) : (
       <OutlineEmptyState
         icon={ListTree}
