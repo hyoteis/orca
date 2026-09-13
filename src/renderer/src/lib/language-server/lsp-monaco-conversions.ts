@@ -147,3 +147,22 @@ export function monacoMarkerToLspDiagnostic(
     source: marker.source ?? undefined
   }
 }
+
+/** LSP DiagnosticSeverity (1..4) → marker severity (8,4,2,1); the inverse of
+ * {@link monacoMarkerToLspDiagnostic} so code-action contexts round-trip.
+ * MarkupContent messages (3.18) flatten to their markdown source — clangd
+ * sends plain strings, but the type admits both. */
+export function lspDiagnosticToMonacoMarker(diagnostic: Diagnostic): Monaco.editor.IMarkerData {
+  const severity =
+    diagnostic.severity === 1 ? 8 : diagnostic.severity === 2 ? 4 : diagnostic.severity === 3 ? 2 : 1
+  const message = typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value
+  return {
+    startLineNumber: diagnostic.range.start.line + 1,
+    startColumn: diagnostic.range.start.character + 1,
+    endLineNumber: diagnostic.range.end.line + 1,
+    endColumn: diagnostic.range.end.character + 1,
+    message,
+    severity,
+    ...(diagnostic.source !== undefined ? { source: diagnostic.source } : {})
+  }
+}

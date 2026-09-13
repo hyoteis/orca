@@ -2,11 +2,14 @@ import {
   ApplyWorkspaceEditRequest,
   InitializedNotification,
   MarkupKind,
+  PublishDiagnosticsNotification,
   TokenFormat,
   type ApplyWorkspaceEditResult,
   type CancellationToken,
+  type Diagnostic,
   type InitializeParams,
   type MessageConnection,
+  type PublishDiagnosticsParams,
   type SemanticTokensLegend,
   type WorkspaceEdit
 } from 'vscode-languageserver-protocol'
@@ -44,6 +47,12 @@ export type CppActiveClient = {
 
 const CLIENT_INSTANCE_ID = crypto.randomUUID()
 
+/** Server-pushed diagnostics for one document (an empty array clears — LSP
+ * publish semantics), or the whole-scope wipe when its client drops (#162). */
+export type CppDiagnosticsEvent =
+  | { type: 'publish'; scopeId: string; uri: string; diagnostics: readonly Diagnostic[] }
+  | { type: 'scopeCleared'; scopeId: string }
+
 /** One clangd session per C++ scope (#12 shared-session model): launch,
  * initialize, capability readout, and guarded applyEdit interception (#37). */
 export class CppCodeIntelligenceSession {
@@ -53,9 +62,19 @@ export class CppCodeIntelligenceSession {
   private readonly clients = new Map<string, CppActiveClient>()
   private readonly opening = new Map<string, Promise<CppActiveClient>>()
   private readonly dropListeners = new Set<() => void>()
+  private readonly diagnosticsListeners = new Set<(event: CppDiagnosticsEvent) => void>()
   private workspaceApplyEditHandler:
     | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
     | null = null
+
+  /** Marker/code-action surfaces subscribe here (#162); markers are the only
+   * retained diagnostic state, so this is a pass-through with no cache. */
+  onDiagnostics(listener: (event: CppDiagnosticsEvent) => void): () => void {
+    this.diagnosticsListeners.add(listener)
+    return () => {
+      this.diagnosticsListeners.delete(listener)
+    }
+  }
 
   private async resolveApplyEdit(
     scope: CodeIntelligenceScope,
@@ -78,6 +97,12 @@ export class CppCodeIntelligenceSession {
     this.clients.delete(scopeId)
     for (const listener of this.dropListeners) {
       listener()
+    }
+    // Dropping invalidates every diagnostic the client pushed; markers must
+    // not outlive the session that produced them (#162).
+    const cleared: CppDiagnosticsEvent = { type: 'scopeCleared', scopeId }
+    for (const listener of this.diagnosticsListeners) {
+      listener(cleared)
     }
   }
 
@@ -199,7 +224,7 @@ export class CppCodeIntelligenceSession {
       scopeId: scope.id,
       revision: scope.revision
     })
-    this.installServerRequestHandlers(client.connection, scope)
+    this.installServerHandlers(client.connection, scope)
     const rootUri = toServerFileUri(scope.workspaceRoot)
     const params: InitializeParams = {
       processId: null,
@@ -248,8 +273,8 @@ export class CppCodeIntelligenceSession {
     return active
   }
 
-  private installServerRequestHandlers(
-    connection: Pick<MessageConnection, 'onRequest'>,
+  private installServerHandlers(
+    connection: Pick<MessageConnection, 'onRequest' | 'onNotification'>,
     scope: CodeIntelligenceScope
   ): void {
     connection.onRequest('workspace/configuration', () => [])
@@ -258,6 +283,17 @@ export class CppCodeIntelligenceSession {
     connection.onRequest(ApplyWorkspaceEditRequest.type, (params) =>
       this.resolveApplyEdit(scope, params.edit)
     )
+    connection.onNotification(PublishDiagnosticsNotification.type, (params: PublishDiagnosticsParams) => {
+      const event: CppDiagnosticsEvent = {
+        type: 'publish',
+        scopeId: scope.id,
+        uri: params.uri,
+        diagnostics: params.diagnostics ?? []
+      }
+      for (const listener of this.diagnosticsListeners) {
+        listener(event)
+      }
+    })
   }
 }
 
