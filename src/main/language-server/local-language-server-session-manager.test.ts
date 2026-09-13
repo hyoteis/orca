@@ -44,7 +44,7 @@ describe('LocalLanguageServerSessionManager', () => {
   it('resolves only known language-server commands', () => {
     expect(resolveDefaultLocalLanguageServerCommand(launch())).toEqual({
       executable: 'clangd',
-      args: [],
+      args: ['--background-index'],
       cwd: tmpdir()
     })
     expect(
@@ -54,6 +54,16 @@ describe('LocalLanguageServerSessionManager', () => {
     ).toEqual({
       executable: '/custom/clangd',
       args: ['--background-index'],
+      cwd: tmpdir()
+    })
+    // Custom commands stay user-owned (#161): no arg is injected or duplicated.
+    expect(
+      resolveDefaultLocalLanguageServerCommand(
+        launch({ command: { executable: '/custom/clangd', args: ['--log=verbose'] } })
+      )
+    ).toEqual({
+      executable: '/custom/clangd',
+      args: ['--log=verbose'],
       cwd: tmpdir()
     })
   })

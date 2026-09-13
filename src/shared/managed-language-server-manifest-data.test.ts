@@ -37,4 +37,10 @@ describe('MANAGED_LANGUAGE_SERVER_MANIFEST', () => {
       expect(entry.sha256).not.toMatch(/^0+$/)
     }
   })
+
+  it('launches managed clangd with a persistent background index (#161)', () => {
+    for (const entry of MANAGED_LANGUAGE_SERVER_MANIFEST.entries) {
+      expect(entry.command.args).toContain('--background-index')
+    }
+  })
 })
