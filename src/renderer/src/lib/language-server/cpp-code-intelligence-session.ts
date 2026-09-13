@@ -36,6 +36,7 @@ import {
 } from './cpp-semantic-token-mapping'
 import { CppIndexingProgress } from './cpp-indexing-progress'
 import { CppInitFailureCache, isTransientInitFailure } from './cpp-init-failure-cache'
+import { notifyAggregateCdbRewritten } from './cpp-aggregate-cdb-notify'
 
 export type CppCodeIntelligenceRequest = CodeIntelligenceDocumentRequest
 
@@ -65,8 +66,13 @@ export type CppDiagnosticsEvent =
 /** One clangd session per C++ scope (#12 shared-session model): launch,
  * initialize, capability readout, and guarded applyEdit interception (#37). */
 export class CppCodeIntelligenceSession {
-  readonly registry = new LanguageServerClientRegistry(window.api.languageServers, (key) =>
-    this.dropClient(key.scopeId)
+  readonly registry = new LanguageServerClientRegistry(
+    window.api.languageServers,
+    (key) => this.dropClient(key.scopeId),
+    window.api.codeIntelligence,
+    // #165: a health-only push means the aggregate CDB was rewritten without
+    // a launch change — tell the live clangd to reload it.
+    (change) => notifyAggregateCdbRewritten(this.clients, change)
   )
   private readonly clients = new Map<string, CppActiveClient>()
   private readonly opening = new Map<string, Promise<CppActiveClient>>()
@@ -275,6 +281,8 @@ export class CppCodeIntelligenceSession {
         workspace: {
           configuration: false,
           workspaceFolders: true,
+          // #165: aggregate rewrites are announced as didChangeWatchedFiles.
+          didChangeWatchedFiles: { dynamicRegistration: false },
           ...workspaceEditClientCapabilities()
         },
         textDocument: {

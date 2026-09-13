@@ -48,16 +48,22 @@ export class LanguageServerClientRegistry {
       NonNullable<Window['api']>['codeIntelligence'],
       'authorizeSession' | 'onScopeChanged'
     > = window.api.codeIntelligence,
-    /** Health-only pushes (#136): surfaced, never a restart trigger. */
+    /** Health-only pushes (#136): surfaced, never a restart trigger. The
+     * aggregate path rides along when the Host provides it (#165). */
     private readonly onMappingHealth?: (change: {
       scopeId: string
       mappingHealth: readonly unknown[]
+      aggregateCdbPath?: string
     }) => void
   ) {
     this.unsubscribeScopeChanges = scopeAuthority.onScopeChanged((change) => {
       if (change.mappingHealth !== undefined && change.revision === null && !change.removed) {
         this.onMappingHealth?.(
-          change as { scopeId: string; mappingHealth: readonly unknown[] }
+          change as {
+            scopeId: string
+            mappingHealth: readonly unknown[]
+            aggregateCdbPath?: string
+          }
         )
         return
       }

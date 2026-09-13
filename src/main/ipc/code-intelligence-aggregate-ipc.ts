@@ -93,11 +93,13 @@ export function registerAggregateCodeIntelligenceHandlers(
     }
     // Health rides the existing scope-snapshot push as an ephemeral field
     // (#136): revision null + removed false marks it health-only; nothing is
-    // persisted into settings.
+    // persisted into settings. The aggregate path rides along (#165) so live
+    // clangd sessions reload the rewritten database without a restart.
     broadcastScopeChange({
       scopeId: scope.id,
       revision: null,
       removed: false,
+      aggregateCdbPath: `${scopeDirectory.replace(/\/+$/, '')}/compile_commands.json`,
       mappingHealth: built.mappings.map((mapping) => ({
         id: mapping.id,
         memberPath: mapping.memberPath,
