@@ -12372,7 +12372,10 @@
             "093263f7bf": "No matching symbols",
             "705b215356": "Reading symbols…",
             "70a1c94357": "No language server connected — symbols are approximate and jumps are line-level",
-            "9152d1a19e": "Approximate"
+            "9152d1a19e": "Approximate",
+            "0fd325c2eb": "clangd is indexing this workspace",
+            "bef2a00066": "{{value0}}%",
+            "3891f471e8": "Symbols appear as the index completes"
           },
           "use.outline.symbols": {
             "640345dd02": "{{value0}} {{value1}} — Outline default"

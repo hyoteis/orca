@@ -34,6 +34,7 @@ import {
   CPP_SEMANTIC_TOKEN_MODIFIERS,
   CPP_SEMANTIC_TOKEN_TYPES
 } from './cpp-semantic-token-mapping'
+import { CppIndexingProgress } from './cpp-indexing-progress'
 
 export type CppCodeIntelligenceRequest = CodeIntelligenceDocumentRequest
 
@@ -43,6 +44,13 @@ export type CppActiveClient = {
   client: OpenClient
   semanticLegend: SemanticTokensLegend | null
   semanticCapabilities: SemanticServerCapabilities
+}
+
+/** Minimal $/progress shape — the protocol package exports no type for the
+ * '$/' notification family, so declare just what the state machine reads. */
+type LspProgressParams = {
+  token: string | number
+  value: { kind?: unknown; title?: unknown; message?: unknown; percentage?: unknown }
 }
 
 const CLIENT_INSTANCE_ID = crypto.randomUUID()
@@ -63,6 +71,8 @@ export class CppCodeIntelligenceSession {
   private readonly opening = new Map<string, Promise<CppActiveClient>>()
   private readonly dropListeners = new Set<() => void>()
   private readonly diagnosticsListeners = new Set<(event: CppDiagnosticsEvent) => void>()
+  /** Server-pushed work-done progress per scope (#163); the UI subscribes. */
+  readonly indexing = new CppIndexingProgress()
   private workspaceApplyEditHandler:
     | ((scope: CodeIntelligenceScope, edit: WorkspaceEdit) => Promise<ApplyWorkspaceEditResult>)
     | null = null
@@ -104,6 +114,8 @@ export class CppCodeIntelligenceSession {
     for (const listener of this.diagnosticsListeners) {
       listener(cleared)
     }
+    // Progress from a dead session never ends on its own (#163).
+    this.indexing.clearScope(scopeId)
   }
 
   setWorkspaceApplyEditHandler(
@@ -231,6 +243,8 @@ export class CppCodeIntelligenceSession {
       clientInfo: { name: 'Orca', version: '1' },
       rootUri,
       capabilities: {
+        // Without this clangd never reports background-index progress (#163).
+        window: { workDoneProgress: true },
         workspace: {
           configuration: false,
           workspaceFolders: true,
@@ -293,6 +307,9 @@ export class CppCodeIntelligenceSession {
       for (const listener of this.diagnosticsListeners) {
         listener(event)
       }
+    })
+    connection.onNotification('$/progress', (params: LspProgressParams) => {
+      this.indexing.apply(scope.id, params.token, params.value)
     })
   }
 }

@@ -9,6 +9,10 @@ import type * as WorkspaceModule from '@/lib/language-server/code-intelligence-w
 import type * as SemanticDocumentsModule from '@/lib/language-server/semantic-monaco-documents'
 import type { CodeIntelligenceScope } from '../../../../shared/code-intelligence-scope'
 import { OutlinePanel } from './OutlinePanel'
+import {
+  getCppSession,
+  resetCppCodeIntelligenceSession
+} from '@/lib/language-server/cpp-code-intelligence-session'
 
 const mocks = vi.hoisted(() => ({
   getCppDocumentSymbols: vi.fn(),
@@ -22,6 +26,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/language-server/cpp-code-intelligence-requests', () => ({
   getCppDocumentSymbols: mocks.getCppDocumentSymbols
 }))
+
+// The hook reads index state off the session singleton (#163); the real
+// registry needs vscode-jsonrpc/browser, which has no node export.
+vi.mock('@/lib/language-server/language-server-client-registry', async () => {
+  const { ScriptedLanguageServerClient } = await import(
+    '@/lib/language-server/scripted-language-server-client'
+  )
+  return { LanguageServerClientRegistry: ScriptedLanguageServerClient }
+})
 
 vi.mock('@/lib/language-server/code-intelligence-workspace', async (importOriginal) => {
   // Keep the real pure path helpers — the hook resolves scopes with them.
@@ -236,6 +249,8 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   vi.useRealTimers()
+  // Index state lives on the session singleton (#163); leak across tests.
+  resetCppCodeIntelligenceSession()
 })
 
 function renderPanel(): ReturnType<typeof render> {
@@ -784,6 +799,22 @@ describe('OutlinePanel heuristic tier (#103)', () => {
     renderPanel()
     expect(await screen.findByText('No symbols in this file')).toBeInTheDocument()
     expect(screen.queryByText('Language server connection failed')).not.toBeInTheDocument()
+  })
+
+  it('explains an empty outline while clangd is indexing instead of showing no symbols (#163)', async () => {
+    getCppSession().indexing.apply('local:worktree:repo-1:cpp', 'index', {
+      kind: 'begin',
+      percentage: 0
+    })
+    getCppSession().indexing.apply('local:worktree:repo-1:cpp', 'index', {
+      kind: 'report',
+      percentage: 45
+    })
+    mocks.getCppDocumentSymbols.mockResolvedValueOnce([])
+    renderPanel()
+    expect(await screen.findByText('clangd is indexing this workspace')).toBeInTheDocument()
+    expect(screen.getByText('45%')).toBeInTheDocument()
+    expect(screen.queryByText('No symbols in this file')).not.toBeInTheDocument()
   })
 
   it('shows heuristic rows under the plain no-scope message', async () => {

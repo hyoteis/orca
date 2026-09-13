@@ -2,6 +2,11 @@ import type { LanguageServerClientKey } from './language-server-client-registry'
 
 type RequestHandler = (params: unknown, token?: unknown) => unknown
 
+/** Real connections accept both NotificationType objects and bare method strings. */
+function routeMethod(type: { method: string } | string): string {
+  return typeof type === 'string' ? type : type.method
+}
+
 /** Shared in-memory stand-in for LanguageServerClientRegistry (arch review C3):
  * node tests cannot load the real one because vscode-jsonrpc/browser has no
  * node export. State is module-level so vi.mock factories and test bodies see
@@ -65,12 +70,12 @@ export class ScriptedLanguageServerClient {
       generation: 1,
       connection: {
         onRequest: (type, handler) => {
-          scripted.serverRequestRoutes[type.method] = handler
-          return { dispose: () => delete scripted.serverRequestRoutes[type.method] }
+          scripted.serverRequestRoutes[routeMethod(type)] = handler
+          return { dispose: () => delete scripted.serverRequestRoutes[routeMethod(type)] }
         },
         onNotification: (type, handler) => {
-          scripted.notificationRoutes[type.method] = handler
-          return { dispose: () => delete scripted.notificationRoutes[type.method] }
+          scripted.notificationRoutes[routeMethod(type)] = handler
+          return { dispose: () => delete scripted.notificationRoutes[routeMethod(type)] }
         },
         sendNotification: () => {},
         sendRequest: async (type, params, token) => {
