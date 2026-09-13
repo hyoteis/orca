@@ -37,6 +37,11 @@ type SessionRoute = {
   close: () => void
 }
 
+/** Active managers for the will-quit teardown (#182): language servers must
+ * not outlive the app on the implicit stdin-EOF assumption alone. */
+let activeLocalManager: LocalLanguageServerSessionManager | null = null
+let activeSshManager: SshLanguageServerSessionManager | null = null
+
 export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceScopeStore): void {
   const owners = new Map<string, WebContents>()
   const routes = new Map<string, SessionRoute>()
@@ -58,6 +63,8 @@ export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceSc
     emit,
     resolveDefaultLocalLanguageServerCommand
   )
+  activeLocalManager = localManager
+  activeSshManager = sshManager
   const closeOwnedSession = (sessionId: string): void => {
     owners.delete(sessionId)
     const route = routes.get(sessionId)
@@ -138,4 +145,13 @@ export function registerLanguageServerSessionHandlers(scopes: CodeIntelligenceSc
       closeOwnedSession(payload.sessionId)
     }
   })
+}
+
+/** Will-quit teardown (#182): explicitly close every live session so local
+ * children and remote trees die even if a server ignores the EOF contract. */
+export function disposeLanguageServerSessions(): void {
+  activeLocalManager?.dispose()
+  activeSshManager?.dispose()
+  activeLocalManager = null
+  activeSshManager = null
 }
