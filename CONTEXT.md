@@ -41,3 +41,8 @@ _Avoid_: broken CDB, fallback mode
 **Syntax-only**:
 The C++ scope state where no semantic session is in effect — no compile database, capacity refusal, a superseded lease, or the server out of restarts — so cross-file features are withdrawn rather than blank. Presented as a non-dismissible banner naming the cause; never presented as semantic. Bare-server causes keep parse-level feedback; no-server causes show the banner only.
 _Avoid_: degraded (that is the last-valid state), dummy mode
+**Catalog entry (verified / unverified)**:
+The lifecycle state of a language-catalog record. Verified: the entry passed Orca's acceptance trio for that server and is user-enableable. Unverified: mined from upstream data, never exercised in Orca, and hidden from the enablement UI. _Avoid_: supported/unsupported (that is what the limits field declares).
+
+**Not-attached**:
+The editor state where root detection found no marker up the ancestor chain, so no LSP session is started at all. Distinct from Syntax-only: there is no server whose features need withdrawing; the status strip names the absence. _Avoid_: detached, no-root mode
