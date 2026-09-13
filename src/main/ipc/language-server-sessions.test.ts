@@ -20,7 +20,7 @@ vi.mock('electron', () => ({ ipcMain: { handle: handleMock, on: onMock } }))
 vi.mock('./ssh', () => ({ getSshConnectionManager: getSshConnectionManagerMock }))
 vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 
-import { registerLanguageServerSessionHandlers } from './language-server-sessions'
+import { registerLanguageServerSessionHandlers, disposeLanguageServerSessions } from './language-server-sessions'
 
 const sender = () =>
   ({ send: vi.fn(), once: vi.fn(), isDestroyed: () => false }) as never
@@ -30,7 +30,7 @@ const fakeChild = () =>
     pid: 4321,
     stdout: new EventEmitter(),
     stderr: new EventEmitter(),
-    stdin: { destroyed: false },
+    stdin: { destroyed: false, end: vi.fn() },
     kill: vi.fn()
   }) as never
 
@@ -137,6 +137,18 @@ describe('registerLanguageServerSessionHandlers clangd compile-commands wiring',
     expect(spawnMock).toHaveBeenCalledTimes(1)
     expect(spawnMock.mock.calls[0][0]).toBe('clangd')
     expect(spawnMock.mock.calls[0][1]).toEqual([clangdCompileCommandsDirArg(directory)])
+  })
+
+  it('will-quit teardown closes every live local session (#182)', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'orca-cdb-'))
+    const { open } = registerWith([scopeFixture('scope', 'local', directory)])
+    await open('scope')
+    const killed = vi.fn()
+    ;(spawnMock.mock.results[0]!.value as { kill: unknown }).kill = killed
+
+    disposeLanguageServerSessions()
+
+    expect(killed).toHaveBeenCalled()
   })
 
   it('refuses local spawn when the directory is missing, naming it', async () => {
