@@ -17,4 +17,8 @@ ADR 0001 left the language server's `live`/`unverifiable`/`exited` mapping and i
 - Load-bearing spec fact: `isRelayIdle()` counts only PTYs (`src/relay/relay-grace-lifecycle.ts:154-159`); LSP sessions must count into the non-idle predicate, or a PTY-less daemon idle-exits and kills the server it holds.
 - The client never infers server death from transport failure; `superseded` (lease lost to a newer attach) is not a verdict — the server stays `live` under the new writer.
 
+## Amendment: sourcing pre-state (decided in #189, recorded by #190)
+
+The client state machine gains a stage before any spawn: `[*] → sourcing → spawning (with a resolved source) | degraded (Syntax-only, cause = server-missing / version-below-floor)`. `spawning` is never entered without a resolved server source. Sourcing follows the priority order explicit user path > login-shell-PATH probe > install guidance, where the probe is a daemon-side `lsp.*` method sharing the spawn environment and yielding an absolute path used verbatim, so probing successfully implies spawning successfully. Sourcing speaks the tool-existence verdicts `ok / missing / unverifiable` — orthogonal to the process-lifecycle verdicts this ADR governs — and an `unverifiable` probe never claims `missing`: the editor withdraws cross-file features but never labels the state Syntax-only.
+
 Detail and evidence: #175 (vocabulary mapping table + client state machine); base architecture: ADR 0001.
