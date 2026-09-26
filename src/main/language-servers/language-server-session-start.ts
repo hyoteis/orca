@@ -17,6 +17,10 @@ import type { LanguageServerHostAdapter } from './language-server-host-adapter'
 
 export type StartSessionDeps = {
   key: string
+  /** Host-local worktree root (bare path on the execution host). `key` may
+   *  carry the `ssh:<target>|` scope prefix for map bookkeeping — adapters,
+   *  the db strategy, and the LSP rootUri need the real path (#209). */
+  rootPath: string
   adapter: LanguageServerHostAdapter
   events: LanguageServerHostEvents
   versionGate: ClangdVersionGate | null
@@ -38,8 +42,17 @@ export async function startClangdSession(
   openSession: typeof openClangdSession,
   onExit: (error: Error | null) => void
 ): Promise<ClangdSession> {
-  const { key, adapter, events, versionGate, dbStrategyFactory, sessionsByKey, dropSession, log } =
-    deps
+  const {
+    key,
+    rootPath,
+    adapter,
+    events,
+    versionGate,
+    dbStrategyFactory,
+    sessionsByKey,
+    dropSession,
+    log
+  } = deps
   const program = adapter.resolveClangdProgram()
   const gateProbe = versionGate ?? ((p: string) => adapter.resolveClangdVersionGate(p))
   const gate = await gateProbe(program)
@@ -69,8 +82,8 @@ export async function startClangdSession(
   // D9 compile-db strategy (spec §6): detect or CMake-generate the db before
   // spawn; on failure clangd still starts in single-file mode.
   const dbStrategy = dbStrategyFactory
-    ? dbStrategyFactory(key, buildDbStrategyHooks(events, log))
-    : adapter.createDbStrategy(key, buildDbStrategyHooks(events, log))
+    ? dbStrategyFactory(rootPath, buildDbStrategyHooks(events, log))
+    : adapter.createDbStrategy(rootPath, buildDbStrategyHooks(events, log))
   const dbResolution = await dbStrategy.resolve()
   const strategyEntry = sessionsByKey.get(key)
   if (strategyEntry) {
@@ -78,7 +91,7 @@ export async function startClangdSession(
   } else {
     dbStrategy.dispose()
   }
-  const launch = await adapter.buildLaunch(key, {
+  const launch = await adapter.buildLaunch(rootPath, {
     compileCommandsDir: dbResolution.compileCommandsDir
   })
   log(`[language-servers] starting clangd for ${key}: ${launch.program} ${launch.args.join(' ')}`)
@@ -87,7 +100,7 @@ export async function startClangdSession(
     args: launch.args,
     cwd: launch.cwd,
     env: launch.env,
-    rootPath: key,
+    rootPath,
     adapter,
     onStatus: (text) => events.onStatus?.(text),
     onLog: log,

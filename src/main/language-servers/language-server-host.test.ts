@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClangdSession, openClangdSession } from './clangd-session'
 import type { ClangdVersionGateResult } from './clangd-launch'
 import type { CompileDbStrategy, CompileDbStrategyFactory } from './language-server-host-types'
+import type { LanguageServerHostAdapter } from './language-server-host-adapter'
 import {
   createLanguageServerHost,
   LANGUAGE_SERVER_IDLE_TIMEOUT_MS,
@@ -512,5 +513,66 @@ describe('createLanguageServerHost — compile-db degraded state (spec §6, S3)'
     await host.openDocument({ worktreeRoot: 'D:/p', filePath: 'D:/p/a.cpp', text: 'x' })
     await host.shutdownAll()
     expect(disposed).toBe(true)
+  })
+})
+
+describe('createLanguageServerHost — SSH scope (ticket 17 / #209)', () => {
+  /** Records every host-path argument the adapter receives. */
+  function recordingSshAdapter() {
+    const seen = { launchRoots: [] as string[], dbRoots: [] as string[] }
+    const adapter: LanguageServerHostAdapter = {
+      kind: 'ssh',
+      normalizeKey: (p) => p,
+      pathToLspUri: (p) => `file://${p}`,
+      lspUriToPath: (uri) => uri.replace('file://', ''),
+      resolveClangdProgram: () => 'clangd',
+      resolveClangdVersionGate: async () => ({ kind: 'ok', major: 18, message: null }),
+      buildLaunch: async (root) => {
+        seen.launchRoots.push(root)
+        return { program: 'clangd', args: [], cwd: root }
+      },
+      openProcess: () => {
+        throw new Error('not reached — openSession is stubbed')
+      },
+      createDbStrategy: (root) => {
+        seen.dbRoots.push(root)
+        return {
+          resolve: async () => ({ compileCommandsDir: null, degraded: false }),
+          dispose: () => {}
+        }
+      }
+    }
+    return { adapter, seen }
+  }
+
+  it('passes the bare worktree root (never the ssh:<target>| composite key) to the adapter and session', async () => {
+    const stub = stubSession()
+    const { adapter, seen } = recordingSshAdapter()
+    const host = createLanguageServerHost(
+      {},
+      (async (options) => {
+        stub.startCalls.push({ program: options.program, rootPath: options.rootPath })
+        return stub.session
+        // SAFETY: test stub satisfying only the options shape openClangdSession reads.
+      }) as unknown as typeof openClangdSession,
+      okVersionGate(),
+      null,
+      () => adapter
+    )
+    await host.openDocument({
+      worktreeRoot: '/home/zwf/graphic_graphic_3d',
+      filePath: '/home/zwf/graphic_graphic_3d/src/render_context.cpp',
+      text: 'int main() {}',
+      connectionId: 'ssh-1790402102340-b82hfw'
+    })
+    // The relay spawns clangd with launch.cwd — a composite key there is an
+    // ENOENT on the remote host (#209): the session key must stay a map key.
+    expect(seen.launchRoots).toEqual(['/home/zwf/graphic_graphic_3d'])
+    expect(seen.dbRoots).toEqual(['/home/zwf/graphic_graphic_3d'])
+    // initialize rootPath (recorded by the stub) must be the remote POSIX root.
+    expect(stub.startCalls.map((c) => c.rootPath)).toEqual(['/home/zwf/graphic_graphic_3d'])
+    // The session-table key keeps the ssh: scope so two hosts with the same
+    // POSIX path do not collide.
+    expect(host.sessionCount).toBe(1)
   })
 })

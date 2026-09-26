@@ -60,6 +60,17 @@ export function isSshLspTransportLost(error: unknown): boolean {
   )
 }
 
+/** Cap on lsp.* frames buffered while the spawn response is in flight. Only
+ *  pre-handshake frames land here (at most clangd's stderr banner + an exit),
+ *  so this solely guards a flooding relay from growing the buffer unbounded. */
+const EARLY_LSP_FRAME_BUFFER_LIMIT = 1024
+
+/** An lsp.* notification held while the spawn response was still in flight. */
+type EarlyLspFrame = {
+  method: 'data' | 'stderr' | 'exit'
+  params: Record<string, unknown>
+}
+
 /**
  * Build the SSH host adapter bound to an SSH target. The adapter is stateless
  * beyond the targetId: it looks the relay mux up in the registry on each
@@ -130,6 +141,12 @@ function openSshLspProcess(
   let sessionId: string | null = null
   let exited = false
   let exitReported = false
+  /** lsp.* frames received before the lsp.spawn response settled. The relay's
+   *  producer lane can overtake the response (control lane) on the wire, so
+   *  they must be buffered and replayed — dropping them masks spawn failures
+   *  as a silent initialize timeout (#209). */
+  let spawnSettled = false
+  const earlyFrames: EarlyLspFrame[] = []
   /** Buffered writes awaiting the spawn response (the LSP client may send the
    *  initialize frame before `lsp.spawn` resolves). Flushed once the id lands. */
   const pendingWrites: Buffer[] = []
@@ -156,7 +173,7 @@ function openSshLspProcess(
 
   // Stdout → handlers.onStdoutChunk. Ack each frame to release the relay's
   // credit window (the relay pauses stdout while unacked >= window).
-  const unsubscribeData = mux.onNotificationByMethod(LSP_RELAY_METHODS.data, (params) => {
+  const dispatchData = (params: Record<string, unknown>): void => {
     if (typeof params.sessionId !== 'string' || params.sessionId !== sessionId) {
       return
     }
@@ -168,9 +185,9 @@ function openSshLspProcess(
     if (Number.isInteger(seq)) {
       mux.notify(LSP_RELAY_METHODS.ack, { sessionId, seq })
     }
-  })
+  }
 
-  const unsubscribeStderr = mux.onNotificationByMethod(LSP_RELAY_METHODS.stderr, (params) => {
+  const dispatchStderr = (params: Record<string, unknown>): void => {
     if (typeof params.sessionId !== 'string' || params.sessionId !== sessionId) {
       return
     }
@@ -178,9 +195,9 @@ function openSshLspProcess(
     if (line) {
       handlers.onStderrLine(line)
     }
-  })
+  }
 
-  const unsubscribeExit = mux.onNotificationByMethod(LSP_RELAY_METHODS.exit, (params) => {
+  const dispatchExit = (params: Record<string, unknown>): void => {
     if (typeof params.sessionId !== 'string' || params.sessionId !== sessionId) {
       return
     }
@@ -195,7 +212,50 @@ function openSshLspProcess(
           ? null
           : new Error(`clangd exited code=${code}`)
     )
-  })
+  }
+
+  const earlyDispatchers: Record<
+    EarlyLspFrame['method'],
+    (params: Record<string, unknown>) => void
+  > = {
+    data: dispatchData,
+    stderr: dispatchStderr,
+    exit: dispatchExit
+  }
+
+  const dispatchEarlyFrame = (frame: EarlyLspFrame): void => {
+    earlyDispatchers[frame.method](frame.params)
+  }
+
+  const bufferUntilSpawnSettles = (
+    method: EarlyLspFrame['method'],
+    params: Record<string, unknown>
+  ): void => {
+    if (!spawnSettled) {
+      // Overflow is announced, never silent — a flooded buffer stays diagnosable.
+      if (earlyFrames.length < EARLY_LSP_FRAME_BUFFER_LIMIT) {
+        earlyFrames.push({ method, params })
+      } else {
+        console.warn(
+          `[ssh-lsp] early ${method} frame dropped: buffer cap ${EARLY_LSP_FRAME_BUFFER_LIMIT} reached before lsp.spawn settled`
+        )
+      }
+      return
+    }
+    dispatchEarlyFrame({ method, params })
+  }
+
+  const unsubscribeData = mux.onNotificationByMethod(LSP_RELAY_METHODS.data, (params) =>
+    bufferUntilSpawnSettles('data', params)
+  )
+
+  const unsubscribeStderr = mux.onNotificationByMethod(LSP_RELAY_METHODS.stderr, (params) =>
+    bufferUntilSpawnSettles('stderr', params)
+  )
+
+  const unsubscribeExit = mux.onNotificationByMethod(LSP_RELAY_METHODS.exit, (params) =>
+    bufferUntilSpawnSettles('exit', params)
+  )
 
   // Transport loss: the mux disposes with `connection_lost`. Per execution
   // boundary, this is `unverifiable` — fire the transport-lost error, NOT a
@@ -229,17 +289,31 @@ function openSshLspProcess(
         throw new Error('lsp.spawn returned no sessionId')
       }
       sessionId = id
+      spawnSettled = true
+      // Replay frames that overtook the response, in arrival order — they
+      // predate anything the client wrote, so replay-before-flush preserves
+      // causal order. A replayed early exit leaves nothing to write to.
+      for (const frame of earlyFrames.splice(0)) {
+        dispatchEarlyFrame(frame)
+      }
       // Flush any writes buffered while the spawn was in flight (the LSP client's
       // initialize frame may have been written before the id resolved).
-      for (const buffered of pendingWrites.splice(0)) {
-        mux.notify(LSP_RELAY_METHODS.write, {
-          sessionId,
-          data: buffered.toString('base64')
-        })
+      if (!exited) {
+        for (const buffered of pendingWrites.splice(0)) {
+          mux.notify(LSP_RELAY_METHODS.write, {
+            sessionId,
+            data: buffered.toString('base64')
+          })
+        }
       }
+      pendingWrites.length = 0
       return id
     })
     .catch((error) => {
+      // The spawn failed — any buffered early frame is unreachable (no session
+      // ever existed client-side); drop it so it cannot replay late.
+      spawnSettled = true
+      earlyFrames.length = 0
       if (isLspMethodNotFoundError(error)) {
         // Old relay: the whole `lsp.*` family is absent. Degrade — do not
         // retry every navigation request. The error message is user-facing.

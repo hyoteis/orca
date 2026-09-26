@@ -14,6 +14,8 @@ import { SshConnection } from './ssh-connection'
 import { resolveSshConfigHomePath } from './ssh-config-path-expansion'
 import { deployAndLaunchRelay } from './ssh-relay-deploy'
 import { LSP_RELAY_METHODS, isLspMethodNotFoundError } from '../../shared/lsp-relay-channel'
+import { registerSshLspRelay, unregisterSshLspRelay } from './ssh-lsp-relay-registry'
+import { createLanguageServerHost } from '../language-servers/language-server-host'
 import type { SshTarget } from '../../shared/ssh-types'
 
 const LIVE_HOST = process.env.ORCA_LIVE_SSH_HOST
@@ -166,6 +168,62 @@ describe.skipIf(!LIVE_HOST)('live relay lsp.* channel', () => {
       }
       expect(exitSeen).toBe(true)
       log('lsp.kill + lsp.exit ok: full relay lsp.* round-trip verified')
+    }
+  )
+
+  // #209 regression: the full app layer — createLanguageServerHost →
+  // openClangdSession → SSH adapter → relay lsp.* → remote clangd — must
+  // complete the initialize handshake. The bug: the composite session key
+  // (`ssh:<target>|<path>`) leaked into launch.cwd, so the relay spawned
+  // clangd with a nonexistent cwd (ENOENT) and initialize timed out at 15s.
+  it(
+    'app host layer completes the LSP initialize handshake over the relay (#209)',
+    { timeout: 120_000 },
+    async () => {
+      const target: SshTarget = {
+        id: 'live-lsp-harness',
+        label: 'live-lsp-harness',
+        host: LIVE_HOST!,
+        port: LIVE_PORT!,
+        username: LIVE_USER!,
+        identityFile: LIVE_IDENTITY!,
+        source: 'manual'
+      }
+      log(`connecting to ${LIVE_USER}@${LIVE_HOST}:${LIVE_PORT}`)
+      const conn = new SshConnection(target, { onStateChange: () => {} })
+      cleanups.push(() => conn.disconnect())
+      await conn.connect()
+
+      const deployed = await deployAndLaunchRelay(conn, () => {}, 30, 'live-lsp-harness')
+      const mux = new SshChannelMultiplexer(deployed.transport)
+      cleanups.push(() => mux.dispose())
+
+      const targetId = 'live-app-209'
+      registerSshLspRelay(targetId, mux)
+      cleanups.push(() => unregisterSshLspRelay(targetId))
+
+      const logLines: string[] = []
+      const host = createLanguageServerHost({ onLog: (line) => logLines.push(line) })
+      cleanups.push(() => host.shutdownAll())
+
+      const opened = await host.openDocument({
+        worktreeRoot: '/home/zwf',
+        filePath: '/home/zwf/repro209_app_layer.cpp',
+        text: 'int main() { return 0; }\n',
+        connectionId: targetId
+      })
+      log(`openDocument -> ${JSON.stringify(opened)}`)
+      expect(opened.ok).toBe(true)
+      // The initialize handshake (15s timeout pre-fix) plus the version-gate
+      // probe must have completed — the "ready" log line is the proof.
+      expect(logLines.some((l) => l.includes('clangd') && l.includes('ready for ssh:'))).toBe(true)
+      // A navigation request round-trips through the remote clangd.
+      const definition = await host.definition({
+        filePath: '/home/zwf/repro209_app_layer.cpp',
+        position: { line: 0, character: 4 }
+      })
+      expect(Array.isArray(definition)).toBe(true)
+      log(`definition -> ${JSON.stringify(definition)}`)
     }
   )
 })

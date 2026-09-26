@@ -256,4 +256,99 @@ describe('SSH host adapter (relay lsp.* channel)', () => {
     expect(isSshLspTransportLost(error)).toBe(true)
     expect(error.message).toMatch(/unverifiable/)
   })
+
+  // #209: producer-lane lsp.* frames can overtake the spawn response — these
+  // tests pin the buffer-and-replay contract.
+  it('buffers lsp.* frames that arrive before the spawn response, then replays them in order', async () => {
+    const mux = createFakeMux()
+    const { registerSshLspRelay, unregisterSshLspRelay } =
+      await import('../ssh/ssh-lsp-relay-registry')
+    // SAFETY: FakeMux implements only the adapter's consumed mux surface.
+    registerSshLspRelay('target-overtake', mux as never)
+    let resolveSpawn: (v: { sessionId: string }) => void
+    mux.request.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSpawn = resolve
+      })
+    )
+    const adapter = createSshHostAdapter('target-overtake')
+    const handlers = createHandlers()
+    const handle = adapter.openProcess({ program: 'clangd', args: [], cwd: '/r' }, handlers)
+    // An initialize attempt arrives before the spawn settles — buffered like
+    // the frames, and must NOT be written once the early exit replays.
+    handle.write(Buffer.from('initialize'))
+
+    // Frames arrive while sessionId is still unresolved.
+    mux.emitNotification('lsp.stderr', { sessionId: 'lsp:epoch:9', line: 'clangd version 18' })
+    mux.emitNotification('lsp.data', {
+      sessionId: 'lsp:epoch:9',
+      seq: 1,
+      data: Buffer.from('early', 'utf8').toString('base64')
+    })
+    mux.emitNotification('lsp.exit', {
+      sessionId: 'lsp:epoch:9',
+      code: null,
+      signal: 'error:spawn clangd ENOENT'
+    })
+    // Nothing surfaced yet — but also nothing lost.
+    expect(handlers.calls.stderr).toEqual([])
+    expect(handlers.calls.stdout).toEqual([])
+    expect(handlers.calls.exit).toEqual([])
+
+    resolveSpawn!({ sessionId: 'lsp:epoch:9' })
+    await Promise.resolve()
+    await Promise.resolve()
+    // Replay preserved arrival order: stderr, stdout (+ack), exit.
+    expect(handlers.calls.stderr).toEqual(['clangd version 18'])
+    expect(handlers.calls.stdout.map((b) => b.toString('utf8'))).toEqual(['early'])
+    expect(mux.notify).toHaveBeenCalledWith('lsp.ack', { sessionId: 'lsp:epoch:9', seq: 1 })
+    expect(handlers.calls.exit).toHaveLength(1)
+    // SAFETY: the exit callback's Error | null union was just length-checked.
+    expect((handlers.calls.exit[0] as Error).message).toMatch(/ENOENT/)
+    // The replayed exit means the session is dead — the buffered initialize
+    // write must not be flushed to a session the relay already deleted.
+    expect(mux.notify).not.toHaveBeenCalledWith('lsp.write', expect.anything())
+    unregisterSshLspRelay('target-overtake')
+  })
+
+  it('discards buffered early frames when the spawn itself fails', async () => {
+    const mux = createFakeMux()
+    const { registerSshLspRelay, unregisterSshLspRelay } =
+      await import('../ssh/ssh-lsp-relay-registry')
+    registerSshLspRelay('target-overtake-fail', mux as never)
+    mux.request.mockRejectedValue(new Error('relay spawn refused'))
+    const adapter = createSshHostAdapter('target-overtake-fail')
+    const handlers = createHandlers()
+    adapter.openProcess({ program: 'clangd', args: [], cwd: '/r' }, handlers)
+    mux.emitNotification('lsp.stderr', { sessionId: 'lsp:epoch:10', line: 'stray' })
+    await Promise.resolve()
+    await Promise.resolve()
+    // The spawn failure is the exit; the stray frame is gone, not replayed late.
+    expect(handlers.calls.exit).toHaveLength(1)
+    // SAFETY: the exit callback's Error | null union was just length-checked.
+    expect((handlers.calls.exit[0] as Error).message).toMatch(/relay spawn refused/)
+    expect(handlers.calls.stderr).toEqual([])
+    unregisterSshLspRelay('target-overtake-fail')
+  })
+
+  it('still drops early frames belonging to a different session id', async () => {
+    const mux = createFakeMux()
+    const { registerSshLspRelay, unregisterSshLspRelay } =
+      await import('../ssh/ssh-lsp-relay-registry')
+    // SAFETY: FakeMux implements only the adapter's consumed mux surface.
+    registerSshLspRelay('target-overtake-foreign', mux as never)
+    mux.request.mockResolvedValue({ sessionId: 'lsp:epoch:11' })
+    const adapter = createSshHostAdapter('target-overtake-foreign')
+    const handlers = createHandlers()
+    adapter.openProcess({ program: 'clangd', args: [], cwd: '/r' }, handlers)
+    mux.emitNotification('lsp.data', {
+      sessionId: 'lsp:some-other-session',
+      seq: 1,
+      data: Buffer.from('not mine', 'utf8').toString('base64')
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(handlers.calls.stdout).toEqual([])
+    unregisterSshLspRelay('target-overtake-foreign')
+  })
 })

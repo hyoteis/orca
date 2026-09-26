@@ -20,6 +20,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { terminateRelaySubprocessTree } from './subprocess-tree-termination'
 import { LspCreditWindow } from './lsp-credit-window'
+import { relayLogLine } from './relay-diagnostic-log'
 import type { RelayDispatcher, RequestContext } from './dispatcher'
 
 /** Spawn seam — production uses node:child_process.spawn; tests inject a fake
@@ -74,6 +75,10 @@ type ManagedLspSession = {
   stderrBuffer: string
   /** Resolved once the child emits 'exit' (host-owned evidence of death). */
   exited: boolean
+  /** `lsp.data` frames published so far — the exit log's "before any stdout" probe (#209). */
+  stdoutFramesSent: number
+  /** First-chunk probe is one line per session — stdout itself must not flood relay.log. */
+  loggedFirstStdout: boolean
 }
 
 /**
@@ -168,9 +173,17 @@ export class LspHandler {
       stdoutPaused: false,
       credit,
       stderrBuffer: '',
-      exited: false
+      exited: false,
+      stdoutFramesSent: 0,
+      loggedFirstStdout: false
     }
     this.sessions.set(sessionId, session)
+    // #209 diagnosis aid: without this line, relay.log showed zero lsp.*
+    // activity even while sessions failed — spawn cwd/PATH problems were
+    // invisible. clientId covers the mux-rebind suspect (stale target).
+    relayLogLine(
+      `[relay] lsp.spawn clientId=${context.clientId} program=${program} args=${JSON.stringify(args)} cwd=${cwd ?? '(inherit)'} sessionId=${sessionId}`
+    )
 
     child.stdout?.on('data', (chunk: Buffer) => this.handleStdout(session, chunk))
     child.stderr
@@ -194,6 +207,14 @@ export class LspHandler {
   private handleStdout(session: ManagedLspSession, chunk: Buffer): void {
     if (session.exited || session.detached) {
       return
+    }
+    // One line per session — distinguishes "spawned but stdout stalled" from a
+    // spawn failure when reading relay.log after the fact (#209 suspect 2).
+    if (!session.loggedFirstStdout) {
+      session.loggedFirstStdout = true
+      relayLogLine(
+        `[relay] lsp.stdout-first-chunk sessionId=${session.sessionId} bytes=${chunk.length}`
+      )
     }
     // Credit backpressure: if the window is exhausted (a prior send filled it),
     // pause the stdout pipe so the relay does not flood the SSH channel; the
@@ -219,6 +240,7 @@ export class LspHandler {
         data: slice.toString('base64')
       })
       session.credit.recordSent()
+      session.stdoutFramesSent += 1
       // After this send the window may be full: pause and buffer the remainder.
       if (session.credit.shouldPause() && offset + LSP_DATA_CHUNK_BYTES < chunk.length) {
         const remainder = chunk.subarray(offset + LSP_DATA_CHUNK_BYTES)
@@ -257,6 +279,9 @@ export class LspHandler {
       return
     }
     session.exited = true
+    relayLogLine(
+      `[relay] lsp.exit sessionId=${session.sessionId} code=${code} signal=${signal ?? 'none'} dataFrames=${session.stdoutFramesSent}`
+    )
     // Flush any buffered stderr line so the client sees the final log output.
     if (session.stderrBuffer) {
       this.dispatcher.publishProducerNotification(session.clientId, 'lsp.stderr', {

@@ -85,7 +85,17 @@ export function createLanguageServerHost(
       }
     }
     const startPromise = startClangdSession(
-      { key, adapter, events, versionGate, dbStrategyFactory, sessionsByKey, dropSession, log },
+      {
+        key,
+        rootPath: normalizeHostFileKey(worktreeRoot),
+        adapter,
+        events,
+        versionGate,
+        dbStrategyFactory,
+        sessionsByKey,
+        dropSession,
+        log
+      },
       openSession,
       (error) => {
         if (error) {

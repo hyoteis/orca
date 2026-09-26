@@ -121,11 +121,17 @@ describe.runIf(await clangdAvailable())('LspHandler live (real clangd)', () => {
       }
     ).callRequest(LSP_RELAY_METHODS.kill, { sessionId })) as { killed: boolean }
     expect(killResult.killed).toBe(true)
-    // Give the exit notification time to flush.
-    await new Promise((resolve) => setTimeout(resolve, 300))
-    const exitFrames = (
-      dispatcher as unknown as { _notifications: { method: string }[] }
-    )._notifications.filter((n) => n.method === LSP_RELAY_METHODS.exit)
+    // Poll for the exit frame: Windows process-tree termination can exceed a
+    // fixed 300ms wait (pre-existing flake), so wait like the ssh live test does.
+    // SAFETY: the fake dispatcher exposes _notifications for capture only.
+    const notifications = (dispatcher as unknown as { _notifications: { method: string }[] })
+      ._notifications
+    const exitDeadline = Date.now() + 3_000
+    let exitFrames: { method: string }[] = []
+    do {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      exitFrames = notifications.filter((n) => n.method === LSP_RELAY_METHODS.exit)
+    } while (exitFrames.length < 1 && Date.now() < exitDeadline)
     expect(exitFrames.length).toBe(1)
   }, 15_000)
 })
