@@ -25,6 +25,10 @@ const LIVE_IDENTITY = resolveSshConfigHomePath(
 )
 const rawLivePort = process.env.ORCA_LIVE_SSH_PORT
 const LIVE_PORT = rawLivePort ? Number.parseInt(rawLivePort, 10) : 22
+// Overridable app-layer fixtures: the default exercises a bare home dir; setting
+// ORCA_LIVE_SSH_ROOT/FILE points the whole host flow at a real project.
+const LIVE_APP_ROOT = process.env.ORCA_LIVE_SSH_ROOT ?? '/home/zwf'
+const LIVE_APP_FILE = process.env.ORCA_LIVE_SSH_FILE ?? '/home/zwf/repro209_app_layer.cpp'
 
 const startedAt = Date.now()
 function log(step: string): void {
@@ -207,8 +211,8 @@ describe.skipIf(!LIVE_HOST)('live relay lsp.* channel', () => {
       cleanups.push(() => host.shutdownAll())
 
       const opened = await host.openDocument({
-        worktreeRoot: '/home/zwf',
-        filePath: '/home/zwf/repro209_app_layer.cpp',
+        worktreeRoot: LIVE_APP_ROOT,
+        filePath: LIVE_APP_FILE,
         text: 'int main() { return 0; }\n',
         connectionId: targetId
       })
@@ -219,7 +223,7 @@ describe.skipIf(!LIVE_HOST)('live relay lsp.* channel', () => {
       expect(logLines.some((l) => l.includes('clangd') && l.includes('ready for ssh:'))).toBe(true)
       // A navigation request round-trips through the remote clangd.
       const definition = await host.definition({
-        filePath: '/home/zwf/repro209_app_layer.cpp',
+        filePath: LIVE_APP_FILE,
         position: { line: 0, character: 4 }
       })
       expect(Array.isArray(definition)).toBe(true)
