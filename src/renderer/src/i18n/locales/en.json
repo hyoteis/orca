@@ -12602,6 +12602,10 @@
             "cce2cbd01d": "Choose agent",
             "9c14186dd2": "Agent"
           },
+          "WorktreeSection": {
+            "title": "Files",
+            "toggleSection": "Toggle files section"
+          },
           "activity": {
             "bar": {
               "buttons": {

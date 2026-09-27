@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useAppStore } from '@/store'
 import { useActiveWorktree, useRepoById } from '@/store/selectors'
 import { basename } from '@/lib/path'
@@ -25,6 +25,7 @@ import { useFileExplorerVisibleRowProjection } from './useFileExplorerVisibleRow
 import { useFileExplorerBackgroundMenu } from './use-file-explorer-background-menu'
 import { useFileExplorerNameFilter } from './use-file-explorer-name-filter'
 import { useFileExplorerTreePaneState } from './use-file-explorer-tree-pane-state'
+import { WorktreeSection } from './WorktreeSection'
 import { translate } from '@/i18n/i18n'
 import type { RightSidebarExplorerView } from '../../../../shared/ui-chrome-types'
 
@@ -33,6 +34,12 @@ function FileExplorerFiles(): React.JSX.Element {
   const showRightSidebarFiles = useAppStore((s) => s.showRightSidebarFiles)
   const showRightSidebarSearch = useAppStore((s) => s.showRightSidebarSearch)
   const searchPanel = useFileSearchPanel(explorerView)
+  // Owns the accordion: a collapsed Files section frees panel height for future sections above.
+  // Collapse state is session-local; thread through persisted per-worktree UI settings if it must survive restarts.
+  const [filesCollapsed, setFilesCollapsed] = useState(false)
+  const toggleFilesSection = useCallback(() => {
+    setFilesCollapsed((value) => !value)
+  }, [])
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const activeWorktree = useActiveWorktree()
   const activeRepo = useRepoById(activeWorktree?.repoId ?? null)
@@ -256,46 +263,54 @@ function FileExplorerFiles(): React.JSX.Element {
         </div>
         {/* Why: the Files and Contents views share one body slot; layering them
            avoids remounting heavy virtualized panes while preserving full height. */}
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          <FileExplorerFilesTreePane
-            activeRepo={activeRepo}
-            worktreePath={worktreePath}
-            visibleFilesWorktreePath={visibleFilesWorktreePath}
-            explorerView={explorerView}
-            isFilesViewActive={isFilesViewActive}
-            activeFileId={activeFileId}
-            hasNameFilter={hasNameFilter}
-            nameFilterSource={nameFilterSource}
-            nameFilterFiles={nameFilterFiles}
-            handleExpandNameFilterDir={handleExpandNameFilterDir}
-            tree={tree}
-            selection={selection}
-            paneState={paneState}
-            rowProjection={rowProjection}
-            ignoredByRelativePath={ignoredByRelativePath}
-            rowExpandedPaths={rowExpandedPaths}
-            visibleRowCount={visibleRowCount}
-            handleExplorerBackgroundContextMenuCapture={handleExplorerBackgroundContextMenuCapture}
-            handleExplorerBackgroundDoubleClick={handleExplorerBackgroundDoubleClick}
-          />
-          <div
-            className={cn(
-              'absolute inset-0 flex min-h-0 flex-col',
-              explorerView !== 'search' && 'pointer-events-none invisible'
-            )}
-          >
-            {searchPanel.activeWorktreeId ? (
-              <SearchResultsPane {...searchPanel.resultsProps} />
-            ) : (
-              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                {translate(
-                  'auto.components.right.sidebar.Search.98c8435e36',
-                  'Select a workspace to search'
-                )}
-              </div>
-            )}
+        <WorktreeSection
+          collapsed={explorerView === 'files' && filesCollapsed}
+          headerHidden={explorerView !== 'files'}
+          onToggleCollapsed={toggleFilesSection}
+        >
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <FileExplorerFilesTreePane
+              activeRepo={activeRepo}
+              worktreePath={worktreePath}
+              visibleFilesWorktreePath={visibleFilesWorktreePath}
+              explorerView={explorerView}
+              isFilesViewActive={isFilesViewActive}
+              activeFileId={activeFileId}
+              hasNameFilter={hasNameFilter}
+              nameFilterSource={nameFilterSource}
+              nameFilterFiles={nameFilterFiles}
+              handleExpandNameFilterDir={handleExpandNameFilterDir}
+              tree={tree}
+              selection={selection}
+              paneState={paneState}
+              rowProjection={rowProjection}
+              ignoredByRelativePath={ignoredByRelativePath}
+              rowExpandedPaths={rowExpandedPaths}
+              visibleRowCount={visibleRowCount}
+              handleExplorerBackgroundContextMenuCapture={
+                handleExplorerBackgroundContextMenuCapture
+              }
+              handleExplorerBackgroundDoubleClick={handleExplorerBackgroundDoubleClick}
+            />
+            <div
+              className={cn(
+                'absolute inset-0 flex min-h-0 flex-col',
+                explorerView !== 'search' && 'pointer-events-none invisible'
+              )}
+            >
+              {searchPanel.activeWorktreeId ? (
+                <SearchResultsPane {...searchPanel.resultsProps} />
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  {translate(
+                    'auto.components.right.sidebar.Search.98c8435e36',
+                    'Select a workspace to search'
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </WorktreeSection>
       </div>
 
       <FileExplorerBackgroundMenu
