@@ -6,7 +6,7 @@
 // adapter's job is spawn + path mapping + lifecycle + version gate); when no
 // db exists, clangd degrades to single-file navigation (spec §6) — which still
 // yields hover/definition/references within the active file.
-import { join } from 'node:path'
+import { posix } from 'node:path'
 import { getSshFilesystemProvider } from '../../providers/ssh-filesystem-dispatch'
 import {
   COMPILE_DB_DEGRADED_HINT,
@@ -54,14 +54,18 @@ export function createSshCompileDbStrategy(
  * Walk up from the worktree root, statting candidate `compile_commands.json`
  * locations (build/, then the root itself) via the SSH filesystem provider.
  * Returns the directory (POSIX) that contains the db, or null.
+ *
+ * Paths are joined with `posix` — the worktree root is a remote POSIX path and
+ * the relay stats it verbatim on the Linux host, so a win32 `path.join` would
+ * produce backslashes the remote fs can never match.
  */
 async function detectSshCompileCommandsDir(
   provider: NonNullable<ReturnType<typeof getSshFilesystemProvider>>,
   worktreeRoot: string
 ): Promise<string | null> {
-  const candidates = [join(worktreeRoot, 'build'), worktreeRoot]
+  const candidates = [posix.join(worktreeRoot, 'build'), worktreeRoot]
   for (const dir of candidates) {
-    const dbPath = join(dir, 'compile_commands.json')
+    const dbPath = posix.join(dir, 'compile_commands.json')
     try {
       const stat = await Promise.race([
         provider.stat(dbPath),
