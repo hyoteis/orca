@@ -10,6 +10,7 @@ import { FileExplorerFilesTreePane } from './FileExplorerFilesTreePane'
 import { FileExplorerNameFilter } from './FileExplorerNameFilter'
 import { FileExplorerQueryStrip } from './FileExplorerQueryStrip'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
+import { OpenEditorsSection } from './OpenEditorsSection'
 import { SearchFilters } from './SearchFilters'
 import { SearchQueryRow } from './SearchQueryRow'
 import { SearchResultsPane } from './SearchResultsPane'
@@ -40,6 +41,11 @@ function FileExplorerFiles(): React.JSX.Element {
   const toggleFilesSection = useCallback(() => {
     setFilesCollapsed((value) => !value)
   }, [])
+  // Session-local like filesCollapsed above.
+  const [openEditorsCollapsed, setOpenEditorsCollapsed] = useState(false)
+  const toggleOpenEditorsSection = useCallback(() => {
+    setOpenEditorsCollapsed((value) => !value)
+  }, [])
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const activeWorktree = useActiveWorktree()
   const activeRepo = useRepoById(activeWorktree?.repoId ?? null)
@@ -55,6 +61,9 @@ function FileExplorerFiles(): React.JSX.Element {
 
   const worktreePath = activeWorktree?.path ?? null
   const isFilesViewActive = explorerView === 'files'
+  // Freed height from a collapsed Files section flows to Open Editors only while
+  // it is expanded, so sections stack at content height instead of fixed positions.
+  const openEditorsFills = explorerView === 'files' && filesCollapsed && !openEditorsCollapsed
   const visibleFilesWorktreePath = getVisibleFileExplorerWorktreePath({
     explorerView,
     rightSidebarOpen,
@@ -225,6 +234,11 @@ function FileExplorerFiles(): React.JSX.Element {
           onToggleGitIgnoredFiles={toggleGitIgnoredFiles}
           showDotfiles={showDotfiles}
           onToggleDotfiles={handleToggleDotfiles}
+        />
+        <OpenEditorsSection
+          collapsed={openEditorsCollapsed}
+          onToggleCollapsed={toggleOpenEditorsSection}
+          fillRemaining={openEditorsFills}
         />
         <FileExplorerQueryStrip view={explorerView} onSelectView={handleSelectExplorerView}>
           {/* Why: keep both query rows mounted and cross-fade so the Names/Contents

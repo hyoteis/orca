@@ -12602,6 +12602,15 @@
             "cce2cbd01d": "Choose agent",
             "9c14186dd2": "Agent"
           },
+          "OpenEditorsSection": {
+            "title": "Open Editors",
+            "closeEditor": "Close editor",
+            "close": "Close",
+            "diff": " (diff)",
+            "pin": "Pin",
+            "unpin": "Unpin",
+            "toggleSection": "Toggle Open Editors section"
+          },
           "WorktreeSection": {
             "title": "Files",
             "toggleSection": "Toggle files section"
