@@ -40,6 +40,7 @@ export const WorktreeCardProperties = z
 export const STATIC_RIGHT_SIDEBAR_TABS = [
   'explorer',
   'search',
+  'outline',
   'vault',
   'workspaces',
   'pr-checks',

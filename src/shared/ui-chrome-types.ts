@@ -88,6 +88,7 @@ export type TaskResumeState = {
 export type RightSidebarTab =
   | 'explorer'
   | 'search'
+  | 'outline'
   | 'vault'
   | 'workspaces'
   | 'pr-checks'

@@ -2,12 +2,15 @@ import { toEditorModelUri } from './editor-model-uri'
 
 // Structural subsets of the Monaco surfaces the outline consumes. The real
 // standalone editor and its ITextModel satisfy them, and tests build fakes
-// without casts. Only EditorEditFileSurface editors register here (#23), which
-// is exactly the active-edit-tab semantics the outline wants.
+// without casts. Only file-editor surfaces mount MonacoEditor, whose
+// handleMount is the sole registration point (#23) — the outline resolves the
+// active edit tab by path, and same-path surfaces share the retained model.
 
 export type SemanticMonacoModel = {
   uri: { toString(): string }
   getValue(): string
+  /** Edit nonce for the outline result-cache key; absent on minimal fakes. */
+  getVersionId?(): number
   onDidChangeContent(listener: () => void): { dispose(): void }
 }
 

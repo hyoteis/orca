@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { normalizeRightSidebarRoute } from './right-sidebar-route'
 
 describe('normalizeRightSidebarRoute', () => {
+  it('preserves the outline tab (spec-b B3 regression: a missing allowlist entry silently resets it to Explorer after reload)', () => {
+    expect(normalizeRightSidebarRoute('outline')).toEqual({
+      rightSidebarTab: 'outline',
+      rightSidebarExplorerView: 'files'
+    })
+  })
   it('preserves the folder-only PR Checks route', () => {
     expect(normalizeRightSidebarRoute('pr-checks')).toEqual({
       rightSidebarTab: 'pr-checks',

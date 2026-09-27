@@ -12944,7 +12944,33 @@
             "fc3095d2ed": "explorer",
             "aiVaultSessionHistory": "Agents",
             "folderWorkspaces": "Attached worktrees",
-            "parentPrChecks": "PR Checks"
+            "parentPrChecks": "PR Checks",
+            "outlineTab": "Outline"
+          },
+          "OutlinePanel": {
+            "7e498c4509": "Outline",
+            "9152d1a19e": "Approximate",
+            "70a1c94357": "No language server connected — symbols are approximate and jumps are line-level",
+            "308cd32c19": "Filter symbols",
+            "9b6b841787": "Sort by position",
+            "20330722dc": "Sort by name",
+            "d8fa5b0f7d": "Sort by kind",
+            "e8bcf14f01": "Open a file to see its symbols",
+            "dee11bd70f": "No symbols for this file type",
+            "2b8019ac88": "Supports C++ family files",
+            "705b215356": "Reading symbols…",
+            "1495dd1774": "The first start can take a few seconds",
+            "0fd325c2eb": "clangd is indexing this workspace",
+            "3891f471e8": "Symbols appear as the index completes",
+            "bef2a00066": "{{value0}}%",
+            "093263f7bf": "No matching symbols",
+            "5c0a0b5e02": "No symbols in this file",
+            "a54eff7728": "No symbols available",
+            "6987d54751": "Retry"
+          },
+          "OutlineTree": {
+            "313394b2bc": "Collapse",
+            "6bd66ac455": "Expand"
           },
           "right": {
             "panel": {

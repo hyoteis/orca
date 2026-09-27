@@ -1,6 +1,7 @@
 /* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- Why: selection annotations are synchronized from Monaco editor selection and layout APIs, not derived React props. */
-import React, { useRef, useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import React, { useCallback, useRef, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
+import type { OnMount } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 import type { MarkdownDocument } from '../../../../shared/filesystem-entry-types'
 import { useAppStore } from '@/store'
@@ -21,6 +22,7 @@ import { useMonacoContentSyncBridge } from './use-monaco-content-sync-bridge'
 import { useMonacoMarkdownAnnotations } from './use-monaco-markdown-annotations'
 import { useMonacoEditorDecorations } from './use-monaco-editor-decorations'
 import { useMonacoEditorMount } from './use-monaco-editor-mount'
+import { registerSemanticMonacoDocument } from './semantic-monaco-documents'
 import { snapshotMonacoViewState } from './monaco-view-state-persistence'
 import { MonacoMarkdownAnnotationOverlay } from './MonacoMarkdownAnnotationOverlay'
 
@@ -181,7 +183,7 @@ export default function MonacoEditor({
     conflictDecorationsEnabled
   })
 
-  const handleMount = useMonacoEditorMount({
+  const mountedHandleMount = useMonacoEditorMount({
     fileId,
     filePath,
     viewStateKey,
@@ -206,6 +208,17 @@ export default function MonacoEditor({
     annotations,
     gutterMenu: { setGutterMenuOpen, setGutterMenuPoint, setGutterMenuLine }
   })
+  // Why wrap: the semantic document registry feeds the Outline tab (live text,
+  // cursor follow); the disposer is idempotent per its token semantics, so the
+  // double-fire on dispose+unmount is safe.
+  const handleMount = useCallback<OnMount>(
+    (editorInstance, monaco) => {
+      const unregisterSemanticDocument = registerSemanticMonacoDocument(editorInstance)
+      editorInstance.onDidDispose(unregisterSemanticDocument)
+      mountedHandleMount(editorInstance, monaco)
+    },
+    [mountedHandleMount]
+  )
 
   // Navigate to line and highlight match when requested (for already-mounted editor)
   useEffect(() => {
