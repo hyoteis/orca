@@ -21,6 +21,22 @@ export type MonacoE2EProbe = {
   restoreLegacySetValueControl: () => void
   restoreScrollTop: (scrollTop: number) => void
   runLegacySetValueAppend: (suffix: string) => void
+  /** Trigger F12 / go-to-definition at the current cursor. */
+  revealDefinition: () => void
+  /** Trigger Shift+F12 / find references at the current cursor (peek widget). */
+  triggerReferences: () => void
+  /** Show the hover widget at the current cursor (mirrors Ctrl+K hover). */
+  showHover: () => void
+  /** Move the cursor to a 1-based line/column so hover/definition target a symbol. */
+  setCursorPosition: (line: number, column: number) => void
+  /** Insert text at a 1-based line/column as a single edit operation (real model change). */
+  insertText: (line: number, column: number, text: string) => void
+  /** Trigger the editor undo stack (mirrors Cmd/Ctrl+Z without key event flakiness). */
+  undo: () => void
+  /** Apply several edits as ONE model change event (multi-change single gesture). */
+  applyEdits: (edits: readonly { range: IRange; text: string }[]) => void
+  /** DOM color histogram of rendered line spans (semantic-token coloring signal). */
+  colorHistogram: () => { distinctColors: number; byColor: Record<string, number> }
   snapshot: () => MonacoE2ESnapshot
 }
 
@@ -61,6 +77,70 @@ export function installMonacoE2EProbe(
       // Why: the legacy setValue control can perturb Monaco's pixel rounding;
       // paired fixed-path measurements must start from the recorded geometry.
       editorInstance.setScrollTop(scrollTop)
+    },
+    revealDefinition: (): void => {
+      // Why: F12 in a hidden window is unreliable as a keypress; drive the same
+      // editor action the keybinding would, which routes through our
+      // registerEditorOpener (spike findings §1, blocker B).
+      editorInstance.trigger('e2e', 'editor.action.revealDefinition', null)
+    },
+    triggerReferences: (): void => {
+      // Why: Shift+F12 in a hidden window is unreliable as a keypress; drive the
+      // same action the keybinding would (editor.action.referenceSearch.trigger)
+      // which mounts Monaco's peek references widget — already customized by
+      // installMonacoPeekReferencesPreviewOptions in monaco-setup.ts.
+      editorInstance.trigger('e2e', 'editor.action.referenceSearch.trigger', null)
+    },
+    showHover: (): void => {
+      // Why: hover is mouse-driven in real use; the showHover action renders
+      // the same hover widget at the current cursor for DOM assertion.
+      editorInstance.trigger('e2e', 'editor.action.showHover', null)
+    },
+    setCursorPosition: (line: number, column: number): void => {
+      editorInstance.setPosition({ lineNumber: line, column })
+      editorInstance.revealLineInCenter(line)
+    },
+    insertText: (line: number, column: number, text: string): void => {
+      // executeEdits records into the editor's undo stack so the undo() probe
+      // can revert it; model.applyEdits would not, and the edit churn test
+      // gates on undo restoring the original content.
+      editorInstance.executeEdits('e2e', [
+        {
+          range: {
+            startLineNumber: line,
+            startColumn: column,
+            endLineNumber: line,
+            endColumn: column
+          },
+          text,
+          forceMoveMarkers: true
+        }
+      ])
+    },
+    undo: (): void => {
+      // Why: a keypress in a hidden window doesn't reliably reach Monaco's
+      // undo stack; the editor action is the same path the keybinding runs.
+      editorInstance.trigger('e2e', 'undo', null)
+    },
+    applyEdits: (edits: readonly { range: IRange; text: string }[]): void => {
+      editorInstance.executeEdits(
+        'e2e',
+        edits.map((edit) => ({ ...edit, forceMoveMarkers: true }))
+      )
+    },
+    colorHistogram: (): { distinctColors: number; byColor: Record<string, number> } => {
+      // spike findings §1: getComputedStyle/DOM histograms are the authoritative
+      // semantic-color signal (CDP screenshots freeze a stale frame in a hidden
+      // window — pixel sampling false-negatives). Counts the distinct computed
+      // `color` values across rendered line spans.
+      const container = editorInstance.getContainerDomNode()
+      const spans = container.querySelectorAll<HTMLElement>('.view-lines .view-line span')
+      const byColor: Record<string, number> = {}
+      for (const s of spans) {
+        const color = getComputedStyle(s).color
+        byColor[color] = (byColor[color] ?? 0) + 1
+      }
+      return { distinctColors: Object.keys(byColor).length, byColor }
     },
     snapshot: (): MonacoE2ESnapshot => {
       const container = editorInstance.getContainerDomNode()
