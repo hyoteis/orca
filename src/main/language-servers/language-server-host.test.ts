@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClangdSession, openClangdSession } from './clangd-session'
+import type { ClangdIndexingState } from './clangd-protocol'
 import type { ClangdVersionGateResult } from './clangd-launch'
 import type { CompileDbStrategy, CompileDbStrategyFactory } from './language-server-host-types'
 import type { LanguageServerHostAdapter } from './language-server-host-adapter'
@@ -9,7 +10,10 @@ import {
   type ClangdVersionGate,
   type LanguageServerHost
 } from './language-server-host'
-import type { LanguageServerDocumentChange } from '../../shared/language-server-navigation-types'
+import type {
+  LanguageServerDocumentChange,
+  LanguageServerDocumentSymbolPayload
+} from '../../shared/language-server-navigation-types'
 
 type SessionStub = {
   session: ClangdSession
@@ -36,6 +40,12 @@ function stubSession(overrides: Partial<ClangdSession> = {}): SessionStub {
     references: vi.fn(async () => []),
     declaration: vi.fn(async () => []),
     hover: vi.fn(async () => null),
+    documentSymbols: vi.fn(async () => ({ kind: 'hierarchical', roots: [] })),
+    semanticTokensFull: vi.fn(async () => ({
+      tokenTypes: [],
+      tokenModifiers: [],
+      tokens: []
+    })),
     stop: vi.fn(async () => {}),
     ...overrides
   } as unknown as ClangdSession
@@ -215,6 +225,92 @@ describe('createLanguageServerHost', () => {
     statusEmitter.emit?.('clangd: indexing 10%')
     statusEmitter.emit?.(null)
     expect(statuses).toEqual(['clangd: indexing 10%', null])
+  })
+
+  it('documentSymbol routes to the owning session and echoes its sessionKey', async () => {
+    const payload: LanguageServerDocumentSymbolPayload = {
+      kind: 'hierarchical',
+      roots: [
+        {
+          name: 'main',
+          kind: 12,
+          range: { startLine: 0, startCharacter: 4, endLine: 0, endCharacter: 8 },
+          selectionRange: { startLine: 0, startCharacter: 4, endLine: 0, endCharacter: 8 },
+          children: []
+        }
+      ]
+    }
+    const stub = stubSession({ documentSymbols: vi.fn(async () => payload) })
+    const host = hostFrom(stub)
+    await host.openDocument({
+      worktreeRoot: 'D:\\proj-a',
+      filePath: 'D:\\proj-a\\src\\main.cpp',
+      text: 'int main() {}'
+    })
+    // Separator/case spelling variants route to the same session.
+    const result = await host.documentSymbol({ filePath: 'd:/proj-a/src/main.cpp' })
+    expect(result).toEqual({ symbols: payload, sessionKey: 'D:\\proj-a' })
+    expect(stub.session.documentSymbols).toHaveBeenCalledWith('D:\\proj-a\\src\\main.cpp')
+  })
+
+  it('rejects documentSymbol for documents with no session (IPC catches -> ok:false)', async () => {
+    const stub = stubSession()
+    const host = hostFrom(stub)
+    await expect(host.documentSymbol({ filePath: 'D:\\nowhere\\x.cpp' })).rejects.toThrow(
+      /no language-server session/
+    )
+  })
+
+  it('forwards structured indexing state keyed by session and clears it on dropSession', async () => {
+    const indexing: [string, ClangdIndexingState | null][] = []
+    const emitter: {
+      emitIndexing: ((state: ClangdIndexingState | null) => void) | null
+      exit: ((error: Error | null) => void) | null
+    } = { emitIndexing: null, exit: null }
+    const stub = stubSession()
+    const openSession: typeof openClangdSession = async (options) => {
+      emitter.emitIndexing = options.onIndexing ?? null
+      emitter.exit = options.onExit ?? null
+      return stub.session
+    }
+    const host = createLanguageServerHost(
+      { onIndexing: (key, state) => indexing.push([key, state]) },
+      openSession,
+      okVersionGate(),
+      noopDbStrategyFactory()
+    )
+    await host.openDocument({ worktreeRoot: 'D:\\p', filePath: 'D:\\p\\a.cpp', text: 'x' })
+    emitter.emitIndexing?.({ active: true, percentage: 10 })
+    expect(indexing).toEqual([['D:\\p', { active: true, percentage: 10 }]])
+    // Session death: a dead session's progress never self-terminates —
+    // dropSession must clear the state proactively.
+    emitter.exit?.(new Error('session died'))
+    expect(indexing).toEqual([
+      ['D:\\p', { active: true, percentage: 10 }],
+      ['D:\\p', null]
+    ])
+  })
+
+  it('shutdownAll clears the indexing state of every session', async () => {
+    const indexing: [string, ClangdIndexingState | null][] = []
+    const emitter: { emitIndexing: ((state: ClangdIndexingState | null) => void) | null } = {
+      emitIndexing: null
+    }
+    const stub = stubSession()
+    const openSession: typeof openClangdSession = async (options) => {
+      emitter.emitIndexing = options.onIndexing ?? null
+      return stub.session
+    }
+    const host = createLanguageServerHost(
+      { onIndexing: (key, state) => indexing.push([key, state]) },
+      openSession,
+      okVersionGate(),
+      noopDbStrategyFactory()
+    )
+    await host.openDocument({ worktreeRoot: 'D:\\q', filePath: 'D:\\q\\a.cpp', text: 'x' })
+    emitter.emitIndexing?.({ active: true })
+    await host.shutdownAll()
+    expect(indexing.at(-1)).toEqual(['D:\\q', null])
   })
 
   it('shutdownAll stops every session once', async () => {

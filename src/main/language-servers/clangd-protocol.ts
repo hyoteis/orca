@@ -4,7 +4,12 @@
 // and the session module stays under its line budget.
 import type {
   LanguageServerDefinitionLocation,
-  LanguageServerHoverContent
+  LanguageServerDocumentSymbolNode,
+  LanguageServerDocumentSymbolPayload,
+  LanguageServerHoverContent,
+  LanguageServerSymbolInformationItem,
+  LanguageServerSymbolKind,
+  LanguageServerSymbolRange
 } from '../../shared/language-server-navigation-types'
 import {
   SEMANTIC_TOKEN_CLIENT_MODIFIERS,
@@ -42,6 +47,10 @@ export function buildClangdInitializeParams(
         definition: { dynamicRegistration: false, linkSupport: false },
         declaration: { dynamicRegistration: false, linkSupport: false },
         references: { dynamicRegistration: false },
+        // Hierarchical symbols (spec-b B1): flat SymbolInformation names carry
+        // ::-qualified containers that flatten the tree; hierarchical results
+        // keep class/namespace nodes (mirrors main's declaration).
+        documentSymbol: { dynamicRegistration: false, hierarchicalDocumentSymbolSupport: true },
         // Semantic coloring (S5 / spike findings §1): the client declares the
         // normalized FULL token set; the server returns its OWN legend which
         // is decoded BY NAME (not hardcoded standard-enum indices — clangd's
@@ -119,6 +128,63 @@ export function createClangdProgressTracker(): ClangdProgressTracker {
   }
 }
 
+/** Projected per-session indexing state: active while any work-done token runs. */
+export type ClangdIndexingState = { active: true; percentage?: number } | { active: false }
+
+export type ClangdIndexingTracker = {
+  /** Structured indexing projection; undefined when the event carries none. */
+  reduce(params: unknown): ClangdIndexingState | undefined
+}
+
+/**
+ * Tracks clangd work-done tokens (`$/progress`) as one structured indexing
+ * state — token-set semantics mirroring `createClangdProgressTracker`'s titles
+ * map: begin adds, end removes, report updates the latest percentage. Unknown
+ * kinds and stray tokens are dropped (clangd reports non-indexing work here).
+ */
+export function createClangdIndexingTracker(): ClangdIndexingTracker {
+  // token -> last reported percentage, so `end` can fall back to a sibling's.
+  const tokens = new Map<string | number, number | undefined>()
+  let latest: string | number | null = null
+  return {
+    reduce(params: unknown): ClangdIndexingState | undefined {
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: $/progress params are the wire-deserialized LSP payload; every field is read through optional chaining, so an unknown shape yields undefined.
+      const p = params as {
+        token?: string | number
+        value?: { kind?: string; percentage?: number }
+      } | null
+      const token = p?.token
+      const value = p?.value
+      if (token === undefined) {
+        return undefined
+      }
+      if (value?.kind === 'begin') {
+        tokens.set(token, typeof value.percentage === 'number' ? value.percentage : undefined)
+        latest = token
+      } else if (value?.kind === 'report') {
+        if (!tokens.has(token)) {
+          return undefined
+        }
+        const prior = tokens.get(token)
+        tokens.set(token, typeof value.percentage === 'number' ? value.percentage : prior)
+        latest = token
+      } else if (value?.kind === 'end') {
+        tokens.delete(token)
+        if (latest === token) {
+          latest = [...tokens.keys()].at(-1) ?? null
+        }
+      } else {
+        return undefined
+      }
+      if (tokens.size === 0) {
+        return { active: false }
+      }
+      const percentage = latest !== null ? tokens.get(latest) : undefined
+      return { active: true, ...(percentage !== undefined ? { percentage } : {}) }
+    }
+  }
+}
+
 type RawLocation = {
   uri?: string
   range?: {
@@ -191,4 +257,107 @@ export function mapClangdHoverResult(result: unknown): LanguageServerHoverConten
     return null
   }
   return { kind: markup.kind === 'plaintext' ? 'plaintext' : 'markdown', value: markup.value }
+}
+
+type RawSymbolRange = {
+  start?: { line: number; character: number }
+  end?: { line: number; character: number }
+} | null
+
+/** One wire item covering both legal shapes: DocumentSymbol | SymbolInformation. */
+type RawDocumentSymbolItem = {
+  name?: unknown
+  kind?: unknown
+  range?: RawSymbolRange
+  selectionRange?: RawSymbolRange
+  children?: unknown
+  location?: { range?: RawSymbolRange } | null
+  containerName?: unknown
+} | null
+
+function isSymbolKindValue(kind: unknown): kind is LanguageServerSymbolKind {
+  return typeof kind === 'number' && Number.isInteger(kind) && kind >= 1 && kind <= 26
+}
+
+function mapSymbolRange(range: RawSymbolRange | undefined): LanguageServerSymbolRange | null {
+  if (!range?.start || !range.end) {
+    return null
+  }
+  return {
+    startLine: range.start.line,
+    startCharacter: range.start.character,
+    endLine: range.end.line,
+    endCharacter: range.end.character
+  }
+}
+
+function copySymbolNode(item: RawDocumentSymbolItem): LanguageServerDocumentSymbolNode | null {
+  if (typeof item?.name !== 'string' || !item.name || !isSymbolKindValue(item.kind)) {
+    return null
+  }
+  const range = mapSymbolRange(item.range)
+  const selectionRange = mapSymbolRange(item.selectionRange)
+  if (!range || !selectionRange) {
+    return null
+  }
+  const children = Array.isArray(item.children) ? item.children : []
+  return {
+    name: item.name,
+    kind: item.kind,
+    range,
+    selectionRange,
+    children: children
+      .map((child) => copySymbolNode(child))
+      .filter((node): node is LanguageServerDocumentSymbolNode => node !== null)
+  }
+}
+
+function copySymbolInformationItem(
+  item: RawDocumentSymbolItem
+): LanguageServerSymbolInformationItem | null {
+  if (typeof item?.name !== 'string' || !item.name || !isSymbolKindValue(item.kind)) {
+    return null
+  }
+  const range = mapSymbolRange(item.location?.range)
+  if (!range) {
+    return null
+  }
+  return {
+    name: item.name,
+    kind: item.kind,
+    range,
+    ...(typeof item.containerName === 'string' ? { containerName: item.containerName } : {})
+  }
+}
+
+/**
+ * LSP `DocumentSymbol[] | SymbolInformation[] | null` -> the mirror payload.
+ * The variant is decided by the first element (children/selectionRange =>
+ * hierarchical, else flat via `location`), mirroring main's normalization;
+ * malformed items are skipped, never thrown. Null/empty => empty hierarchical
+ * (a truly empty file, distinct from the ok:false/null failure result).
+ */
+export function mapClangdDocumentSymbolResult(
+  result: unknown
+): LanguageServerDocumentSymbolPayload {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: documentSymbol result is the wire-deserialized LSP payload; every item is narrowed field-by-field below and malformed items are skipped.
+  const raw = Array.isArray(result) ? (result as RawDocumentSymbolItem[]) : []
+  if (raw.length === 0) {
+    return { kind: 'hierarchical', roots: [] }
+  }
+  const first = raw[0]
+  if (first && ('children' in first || 'selectionRange' in first)) {
+    return {
+      kind: 'hierarchical',
+      roots: raw
+        .map((item) => copySymbolNode(item))
+        .filter((node): node is LanguageServerDocumentSymbolNode => node !== null)
+    }
+  }
+  return {
+    kind: 'flat',
+    items: raw
+      .map((item) => copySymbolInformationItem(item))
+      .filter((entry): entry is LanguageServerSymbolInformationItem => entry !== null)
+  }
 }

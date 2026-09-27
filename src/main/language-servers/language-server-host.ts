@@ -62,6 +62,8 @@ export function createLanguageServerHost(
     entry.dbStrategy?.dispose()
     entry.dbStrategy = null
     sessionsByKey.delete(key)
+    // Dead sessions' progress never self-terminates — clear proactively.
+    events.onIndexing?.(key, null)
     for (const [docPath, ownerKey] of routing.sessionKeyByDocument) {
       if (ownerKey === key) {
         routing.sessionKeyByDocument.delete(docPath)
@@ -269,10 +271,25 @@ export function createLanguageServerHost(
       }
       return session.semanticTokensFull(normalizeHostFileKey(filePath))
     },
+    async documentSymbol({ filePath }) {
+      const session = await routing.sessionForDocumentOrPending(filePath)
+      if (!session) {
+        throw new Error(`no language-server session owns ${filePath}`)
+      }
+      const symbols = await session.documentSymbols(normalizeHostFileKey(filePath))
+      return {
+        symbols,
+        sessionKey: routing.sessionKeyByDocument.get(normalizeHostFileKey(filePath)) ?? ''
+      }
+    },
     async shutdownAll() {
       const entries = [...sessionsByKey.values()]
       sessionsByKey.clear()
       routing.clear()
+      for (const entry of entries) {
+        // Same proactive clear as dropSession: stopped sessions never report end.
+        events.onIndexing?.(entry.key, null)
+      }
       await Promise.all(
         entries.map(async (entry) => {
           clearIdleTimer(entry)

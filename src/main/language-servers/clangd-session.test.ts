@@ -6,7 +6,9 @@ import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { spawnProcess } from '../../shared/child-process/run-process'
 import { createLspFrameParser, encodeLspMessage } from '../../shared/lsp-content-length-framer'
+import type { ClangdIndexingState } from './clangd-protocol'
 import {
+  ClangdDocumentNotOpenError,
   ClangdPositionEncodingError,
   openClangdSession,
   type ClangdSession
@@ -25,6 +27,8 @@ type FakeClangdOptions = {
   semanticTokensLegend?: { tokenTypes: string[]; tokenModifiers: string[] }
   /** The relative 5-tuple data returned for textDocument/semanticTokens/full (S5). */
   semanticTokensData?: readonly number[]
+  /** The result returned for textDocument/documentSymbol (hierarchical or flat wire shape). */
+  documentSymbolResponse?: unknown
   onClientMessage?: (message: Record<string, unknown>) => void
   /** Methods the fake never answers, for in-flight-at-death assertions. */
   hangOn?: readonly string[]
@@ -168,6 +172,10 @@ function fakeClangd(options: FakeClangdOptions = {}): FakeClangd {
         })
         return
       }
+      if (method === 'textDocument/documentSymbol') {
+        pushToClient({ jsonrpc: '2.0', id, result: options.documentSymbolResponse ?? [] })
+        return
+      }
       if (method === 'shutdown') {
         pushToClient({ jsonrpc: '2.0', id, result: null })
       }
@@ -193,13 +201,18 @@ function fakeClangd(options: FakeClangdOptions = {}): FakeClangd {
 
 async function openSessionWith(
   fake: FakeClangd,
-  events: { onStatus?: (text: string | null) => void; onLog?: (line: string) => void } = {}
+  events: {
+    onStatus?: (text: string | null) => void
+    onIndexing?: (state: ClangdIndexingState | null) => void
+    onLog?: (line: string) => void
+  } = {}
 ): Promise<ClangdSession> {
   return openClangdSession({
     program: 'clangd',
     args: ['--log=info'],
     rootPath: 'D:\\zwf\\Project A',
     onStatus: events.onStatus,
+    onIndexing: events.onIndexing,
     onLog: events.onLog,
     spawnImpl: fake.spawnImpl
   })
@@ -523,6 +536,160 @@ describe('openClangdSession — navigation', () => {
     const tokens = await session.semanticTokensFull('D:\\a.cpp')
     expect(tokens).toEqual({ tokenTypes: [], tokenModifiers: [], tokens: [] })
     await session.stop()
+  })
+})
+
+describe('openClangdSession — documentSymbols', () => {
+  it('sends textDocument/documentSymbol with the document uri and maps a hierarchical result', async () => {
+    const fake = fakeClangd({
+      documentSymbolResponse: [
+        {
+          name: 'ns',
+          kind: 3,
+          range: { start: { line: 0, character: 0 }, end: { line: 4, character: 0 } },
+          selectionRange: { start: { line: 0, character: 10 }, end: { line: 0, character: 12 } },
+          children: [
+            {
+              name: 'Cls',
+              kind: 5,
+              range: { start: { line: 1, character: 0 }, end: { line: 3, character: 1 } },
+              selectionRange: { start: { line: 1, character: 6 }, end: { line: 1, character: 9 } },
+              children: []
+            }
+          ]
+        }
+      ]
+    })
+    const session = await openSessionWith(fake)
+    session.didOpen('D:\\zwf\\Project A\\src\\main.cpp', 'namespace ns { class Cls {}; }')
+    const payload = await session.documentSymbols('D:\\zwf\\Project A\\src\\main.cpp')
+    const req = fake.clientMessages.find((m) => m.method === 'textDocument/documentSymbol')
+    // Request shape mirrors semanticTokensFull: only the textDocument uri.
+    expect(req?.params).toEqual({
+      textDocument: { uri: 'file:///D:/zwf/Project%20A/src/main.cpp' }
+    })
+    expect(payload).toEqual({
+      kind: 'hierarchical',
+      roots: [
+        {
+          name: 'ns',
+          kind: 3,
+          range: { startLine: 0, startCharacter: 0, endLine: 4, endCharacter: 0 },
+          selectionRange: { startLine: 0, startCharacter: 10, endLine: 0, endCharacter: 12 },
+          children: [
+            {
+              name: 'Cls',
+              kind: 5,
+              range: { startLine: 1, startCharacter: 0, endLine: 3, endCharacter: 1 },
+              selectionRange: { startLine: 1, startCharacter: 6, endLine: 1, endCharacter: 9 },
+              children: []
+            }
+          ]
+        }
+      ]
+    })
+    await session.stop()
+  })
+
+  it('maps the flat SymbolInformation[] variant with containerName passthrough', async () => {
+    const fake = fakeClangd({
+      documentSymbolResponse: [
+        {
+          name: 'x',
+          kind: 13,
+          containerName: 'ns',
+          location: {
+            uri: 'file:///D:/a.cpp',
+            range: { start: { line: 2, character: 0 }, end: { line: 2, character: 1 } }
+          }
+        },
+        {
+          name: 'ns',
+          kind: 3,
+          location: {
+            uri: 'file:///D:/a.cpp',
+            range: { start: { line: 0, character: 10 }, end: { line: 0, character: 12 } }
+          }
+        }
+      ]
+    })
+    const session = await openSessionWith(fake)
+    session.didOpen('D:\\a.cpp', 'int x;')
+    const payload = await session.documentSymbols('D:\\a.cpp')
+    expect(payload).toEqual({
+      kind: 'flat',
+      items: [
+        {
+          name: 'x',
+          kind: 13,
+          range: { startLine: 2, startCharacter: 0, endLine: 2, endCharacter: 1 },
+          containerName: 'ns'
+        },
+        {
+          name: 'ns',
+          kind: 3,
+          range: { startLine: 0, startCharacter: 10, endLine: 0, endCharacter: 12 }
+        }
+      ]
+    })
+    await session.stop()
+  })
+
+  it('throws ClangdDocumentNotOpenError for a document the session never opened', async () => {
+    const fake = fakeClangd()
+    const session = await openSessionWith(fake)
+    await expect(session.documentSymbols('D:\\not\\open.cpp')).rejects.toBeInstanceOf(
+      ClangdDocumentNotOpenError
+    )
+    await session.stop()
+  })
+})
+
+describe('openClangdSession — indexing state', () => {
+  it('$/progress feeds both the string status projection and the structured tracker', async () => {
+    const statuses: (string | null)[] = []
+    const indexing: (ClangdIndexingState | null)[] = []
+    const fake = fakeClangd()
+    const session = await openSessionWith(fake, {
+      onStatus: (text) => statuses.push(text),
+      onIndexing: (state) => indexing.push(state)
+    })
+    fake.pushToClient({
+      jsonrpc: '2.0',
+      method: '$/progress',
+      params: { token: 'index', value: { kind: 'begin', title: 'background index' } }
+    })
+    fake.pushToClient({
+      jsonrpc: '2.0',
+      method: '$/progress',
+      params: { token: 'index', value: { kind: 'report', percentage: 42.7 } }
+    })
+    fake.pushToClient({
+      jsonrpc: '2.0',
+      method: '$/progress',
+      params: { token: 'index', value: { kind: 'end' } }
+    })
+    expect(statuses).toEqual(['clangd: background index', 'clangd: background index 42%', null])
+    expect(indexing).toEqual([
+      { active: true },
+      { active: true, percentage: 42.7 },
+      { active: false }
+    ])
+    await session.stop()
+  })
+
+  it('a died session reports onIndexing(null) alongside onStatus(null)', async () => {
+    const statuses: (string | null)[] = []
+    const indexing: (ClangdIndexingState | null)[] = []
+    const fake = fakeClangd()
+    const session = await openSessionWith(fake, {
+      onStatus: (text) => statuses.push(text),
+      onIndexing: (state) => indexing.push(state)
+    })
+    fake.crash()
+    expect(statuses).toEqual([null])
+    expect(indexing).toEqual([null])
+    expect(session.died?.message).toMatch(/session died/)
   })
 })
 

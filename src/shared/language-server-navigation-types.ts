@@ -59,6 +59,106 @@ export type LanguageServerHoverResult =
   | { ok: true; hover: LanguageServerHoverContent | null }
   | { ok: false; error: string; hover: null }
 
+// ---------------------------------------------------------------------------
+// Outline symbols (spec-b B1): mirror types for textDocument/documentSymbol.
+// The main process structurally thin-copies the clangd result into these; the
+// renderer normalizes to tree/flat rows (B2). LSP SymbolKind is a local
+// constant union — the vscode-languageserver-protocol package stays out.
+// ---------------------------------------------------------------------------
+
+/** LSP SymbolKind (1..26, value-compatible). */
+export type LanguageServerSymbolKind =
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9
+  | 10
+  | 11
+  | 12
+  | 13
+  | 14
+  | 15
+  | 16
+  | 17
+  | 18
+  | 19
+  | 20
+  | 21
+  | 22
+  | 23
+  | 24
+  | 25
+  | 26
+
+export const LANGUAGE_SERVER_SYMBOL_KIND = {
+  File: 1,
+  Module: 2,
+  Namespace: 3,
+  Package: 4,
+  Class: 5,
+  Method: 6,
+  Property: 7,
+  Field: 8,
+  Constructor: 9,
+  Enum: 10,
+  Interface: 11,
+  Function: 12,
+  Variable: 13,
+  Constant: 14,
+  String: 15,
+  Number: 16,
+  Boolean: 17,
+  Array: 18,
+  Object: 19,
+  Key: 20,
+  Null: 21,
+  EnumMember: 22,
+  Struct: 23,
+  Event: 24,
+  Operator: 25,
+  TypeParameter: 26
+} as const
+
+/** 0-based line/character span of a symbol (same basis as LanguageServerRange). */
+export type LanguageServerSymbolRange = {
+  startLine: number
+  startCharacter: number
+  endLine: number
+  endCharacter: number
+}
+
+/** Hierarchical DocumentSymbol node (hierarchicalDocumentSymbolSupport: true). */
+export type LanguageServerDocumentSymbolNode = {
+  name: string
+  kind: LanguageServerSymbolKind
+  range: LanguageServerSymbolRange
+  selectionRange: LanguageServerSymbolRange
+  children: LanguageServerDocumentSymbolNode[]
+}
+
+/** Flat SymbolInformation item (location.range collapsed to `range`). */
+export type LanguageServerSymbolInformationItem = {
+  name: string
+  kind: LanguageServerSymbolKind
+  range: LanguageServerSymbolRange
+  containerName?: string
+}
+
+/** Mirror of the two legal documentSymbol result shapes; empty-vs-null lives in the result type. */
+export type LanguageServerDocumentSymbolPayload =
+  | { kind: 'hierarchical'; roots: LanguageServerDocumentSymbolNode[] }
+  | { kind: 'flat'; items: LanguageServerSymbolInformationItem[] }
+
+/** IPC result: ok+empty = truly empty file; !ok+null = session dead / request failed. */
+export type LanguageServerDocumentSymbolResult =
+  | { ok: true; symbols: LanguageServerDocumentSymbolPayload; sessionKey: string }
+  | { ok: false; error: string; symbols: null; sessionKey: null }
+
 /**
  * Pushed from main to renderer. The status surface is a small discriminated
  * union: `progress` is the transient `$/progress` projection (null clears),
@@ -69,6 +169,7 @@ export type LanguageServerStatusEvent =
   | { kind: 'progress'; text: string | null }
   | { kind: 'degraded'; message: string | null }
   | { kind: 'toast'; message: string }
+  | { kind: 'indexing'; sessionKey: string; active: boolean; percentage?: number }
 
 export const LANGUAGE_SERVERS_STATUS_CHANNEL = 'languageServers:status'
 

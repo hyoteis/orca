@@ -31,6 +31,8 @@ export const languageServersApi = {
     ipcRenderer.invoke('languageServers:hover', args),
   semanticTokens: (args: { filePath: string }) =>
     ipcRenderer.invoke('languageServers:semanticTokens', args),
+  documentSymbol: (args: { filePath: string }) =>
+    ipcRenderer.invoke('languageServers:documentSymbol', args),
   onStatus: (callback: (event: LanguageServerStatusEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: LanguageServerStatusEvent): void =>
       callback(data)

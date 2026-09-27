@@ -103,6 +103,7 @@ export async function startClangdSession(
     rootPath,
     adapter,
     onStatus: (text) => events.onStatus?.(text),
+    onIndexing: (state) => events.onIndexing?.(key, state),
     onLog: log,
     onExit
   })

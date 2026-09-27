@@ -4,6 +4,7 @@ import type {
   LanguageServerDefinitionResult,
   LanguageServerDocumentChange,
   LanguageServerDocumentResult,
+  LanguageServerDocumentSymbolResult,
   LanguageServerHoverResult,
   LanguageServerPosition,
   LanguageServerReferencesResult,
@@ -42,6 +43,7 @@ export type LanguageServersApi = {
     position: LanguageServerPosition
   }) => Promise<LanguageServerHoverResult>
   semanticTokens: (args: { filePath: string }) => Promise<LanguageServerSemanticTokensResult>
+  documentSymbol: (args: { filePath: string }) => Promise<LanguageServerDocumentSymbolResult>
   /** `$/progress` projection; null clears. Returns an unsubscribe function. */
   onStatus: (callback: (event: LanguageServerStatusEvent) => void) => () => void
 }
@@ -52,6 +54,7 @@ export type {
   LanguageServerDefinitionResult,
   LanguageServerDocumentChange,
   LanguageServerDocumentResult,
+  LanguageServerDocumentSymbolResult,
   LanguageServerHoverResult,
   LanguageServerPosition,
   LanguageServerReferencesResult,

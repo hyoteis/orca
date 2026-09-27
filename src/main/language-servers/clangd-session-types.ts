@@ -1,10 +1,12 @@
 // Pure type declarations for the clangd session, split out so the session
 // module stays under its line budget (mirrors language-server-host-types.ts).
 import type { spawnProcess } from '../../shared/child-process/run-process'
+import type { ClangdIndexingState } from './clangd-protocol'
 import type { LanguageServerHostAdapter } from './language-server-host-adapter'
 import type {
   LanguageServerDefinitionLocation,
   LanguageServerDocumentChange,
+  LanguageServerDocumentSymbolPayload,
   LanguageServerHoverContent,
   LanguageServerPosition,
   LanguageServerSemanticTokens
@@ -23,6 +25,8 @@ export type ClangdSessionOptions = {
   adapter?: LanguageServerHostAdapter
   /** `$/progress` projection for the status line; null clears it. */
   onStatus?: (text: string | null) => void
+  /** Structured indexing state from `$/progress`; null = session died, clear. */
+  onIndexing?: (state: ClangdIndexingState | null) => void
   onLog?: (line: string) => void
   /** Fired once when the session ends for any reason (crash or stop). */
   onExit?: (error: Error | null) => void
@@ -60,6 +64,8 @@ export type ClangdSession = {
   ): Promise<LanguageServerHoverContent | null>
   /** textDocument/semanticTokens/full, decoded BY NAME against the server legend. */
   semanticTokensFull(filePath: string): Promise<LanguageServerSemanticTokens>
+  /** textDocument/documentSymbol, mapped to the mirror payload (hierarchical or flat). */
+  documentSymbols(filePath: string): Promise<LanguageServerDocumentSymbolPayload>
   /** shutdown -> exit -> 5s grace -> tree kill (spec D8). */
   stop(): Promise<void>
 }

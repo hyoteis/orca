@@ -12,6 +12,7 @@ import {
   LANGUAGE_SERVERS_STATUS_CHANNEL,
   type LanguageServerDocumentChange,
   type LanguageServerDocumentResult,
+  type LanguageServerDocumentSymbolResult,
   type LanguageServerDeclarationResult,
   type LanguageServerDefinitionResult,
   type LanguageServerHoverResult,
@@ -38,7 +39,13 @@ export function registerLanguageServersHandlers(
   host: LanguageServerHost = getLanguageServerHost({
     onStatus: (text) => broadcastStatus({ kind: 'progress', text }),
     onToast: (message) => broadcastStatus({ kind: 'toast', message }),
-    onDegraded: (message) => broadcastStatus({ kind: 'degraded', message })
+    onDegraded: (message) => broadcastStatus({ kind: 'degraded', message }),
+    onIndexing: (sessionKey, state) =>
+      broadcastStatus(
+        state
+          ? { kind: 'indexing', sessionKey, ...state }
+          : { kind: 'indexing', sessionKey, active: false }
+      )
   })
 ): void {
   for (const channel of [
@@ -49,7 +56,8 @@ export function registerLanguageServersHandlers(
     'languageServers:hover',
     'languageServers:references',
     'languageServers:declaration',
-    'languageServers:semanticTokens'
+    'languageServers:semanticTokens',
+    'languageServers:documentSymbol'
   ] as const) {
     ipcMain.removeHandler(channel)
   }
@@ -167,6 +175,23 @@ export function registerLanguageServersHandlers(
           ok: false,
           error: error instanceof Error ? error.message : String(error),
           tokens: null
+        }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'languageServers:documentSymbol',
+    async (_event, args: { filePath: string }): Promise<LanguageServerDocumentSymbolResult> => {
+      try {
+        const { symbols, sessionKey } = await host.documentSymbol(args)
+        return { ok: true, symbols, sessionKey }
+      } catch (error) {
+        return {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          symbols: null,
+          sessionKey: null
         }
       }
     }

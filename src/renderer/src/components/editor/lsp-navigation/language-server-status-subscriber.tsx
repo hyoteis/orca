@@ -23,6 +23,10 @@ export function applyLanguageServerStatusEvent(event: LanguageServerStatusEvent)
     setLanguageServerDegraded(event.message)
     return
   }
+  // Indexing events target the per-session store (spec-b B2); the status chip ignores them.
+  if (event.kind === 'indexing') {
+    return
+  }
   // One-shot eviction toast; leaves the store untouched.
   toast(event.message)
 }

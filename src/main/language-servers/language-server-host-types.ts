@@ -2,12 +2,14 @@
 // stays under its line budget. The host implementation (session management,
 // idle timer, LRU cap) lives in language-server-host.ts.
 import type { ClangdSession } from './clangd-session'
+import type { ClangdIndexingState } from './clangd-protocol'
 import type { ClangdVersionGateResult } from './clangd-launch'
 import type { CompileDbStrategy } from './compile-db/compile-db-strategy-types'
 export type { CompileDbStrategy } from './compile-db/compile-db-strategy-types'
 import type {
   LanguageServerDefinitionLocation,
   LanguageServerDocumentChange,
+  LanguageServerDocumentSymbolPayload,
   LanguageServerHoverContent,
   LanguageServerPosition,
   LanguageServerSemanticTokens
@@ -25,6 +27,8 @@ export type LanguageServerHostEvents = {
   onToast?: (message: string) => void
   /** Persistent degraded-state hint (version too low / no clangd); null clears. */
   onDegraded?: (message: string | null) => void
+  /** Structured indexing state per session; null = session gone, clear. */
+  onIndexing?: (sessionKey: string, state: ClangdIndexingState | null) => void
   onLog?: (line: string) => void
 }
 
@@ -85,6 +89,9 @@ export type LanguageServerHost = {
     position: LanguageServerPosition
   }): Promise<LanguageServerHoverContent | null>
   semanticTokens(args: { filePath: string }): Promise<LanguageServerSemanticTokens>
+  documentSymbol(args: {
+    filePath: string
+  }): Promise<{ symbols: LanguageServerDocumentSymbolPayload; sessionKey: string }>
   /** shutdown -> exit for every live session (app quit path). */
   shutdownAll(): Promise<void>
   /** Test seam: live session count. */

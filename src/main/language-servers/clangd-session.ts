@@ -1,18 +1,21 @@
 // clangd protocol session on top of the JSON-RPC client + host-adapter process
-// opener. Initialize shape + result mapping live in clangd-protocol.ts; this
-// module owns lifecycle + the document table. Host-agnostic: the adapter
-// supplies path mappers (Orca identity <-> LSP `file:` URI) + the process
-// opener (native spawnProcess or WSL wsl.exe). Shutdown: shutdown -> exit -> tree kill.
+// opener. Initialize shape + result mapping live in clangd-protocol.ts, the
+// initialize handshake in clangd-session-handshake.ts; this module owns
+// lifecycle + the document table. Host-agnostic: the adapter supplies path
+// mappers (Orca identity <-> LSP `file:` URI) + the process opener (native
+// spawnProcess or WSL wsl.exe). Shutdown: shutdown -> exit -> tree kill.
 import { createLspJsonRpcClient, type LspJsonRpcClient } from './lsp-jsonrpc-client'
 import { NATIVE_LANGUAGE_SERVER_GRACEFUL_EXIT_MS } from './native-language-server-process'
 import {
   answerClangdServerRequest,
-  buildClangdInitializeParams,
+  createClangdIndexingTracker,
   createClangdProgressTracker,
   mapClangdDefinitionResult,
+  mapClangdDocumentSymbolResult,
   mapClangdHoverResult,
   mapClangdLocationResult
 } from './clangd-protocol'
+import { performClangdHandshake } from './clangd-session-handshake'
 import {
   decodeSemanticTokensFullResult,
   type SemanticTokenLegend
@@ -25,22 +28,16 @@ import type {
 import { lspLanguageForFile } from './clangd-session-language-id'
 import type { ClangdSession, ClangdSessionOptions } from './clangd-session-types'
 export type { ClangdSession, ClangdSessionOptions } from './clangd-session-types'
+export { ClangdPositionEncodingError } from './clangd-session-handshake'
+
 import type {
   LanguageServerDefinitionLocation,
   LanguageServerDocumentChange,
+  LanguageServerDocumentSymbolPayload,
   LanguageServerHoverContent,
   LanguageServerPosition,
   LanguageServerSemanticTokens
 } from '../../shared/language-server-navigation-types'
-
-export class ClangdPositionEncodingError extends Error {
-  constructor(actual: string | undefined) {
-    super(
-      `clangd advertised positionEncoding '${actual ?? 'none'}' (not utf-16); refusing the session — column math would corrupt on non-ASCII lines`
-    )
-    this.name = 'ClangdPositionEncodingError'
-  }
-}
 
 export class ClangdDocumentNotOpenError extends Error {
   constructor(filePath: string) {
@@ -49,7 +46,6 @@ export class ClangdDocumentNotOpenError extends Error {
   }
 }
 
-const INITIALIZE_TIMEOUT_MS = 15_000
 const SHUTDOWN_TIMEOUT_MS = 5_000
 
 type OpenDocument = {
@@ -69,6 +65,7 @@ function sleep(ms: number): Promise<void> {
 export async function openClangdSession(options: ClangdSessionOptions): Promise<ClangdSession> {
   const log = (line: string): void => options.onLog?.(line)
   const progress = createClangdProgressTracker()
+  const indexing = createClangdIndexingTracker()
   // Host adapter: defaults to native (S1 callers); WSL binds UNC<->guest mappers + wsl.exe spawn.
   const adapter: LanguageServerHostAdapter = options.adapter ?? createNativeHostAdapter()
 
@@ -88,6 +85,7 @@ export async function openClangdSession(options: ClangdSessionOptions): Promise<
     died = new Error(`clangd session died: ${reason}`)
     client?.die(reason)
     options.onStatus?.(null)
+    options.onIndexing?.(null)
     options.onExit?.(died)
   }
 
@@ -128,6 +126,10 @@ export async function openClangdSession(options: ClangdSessionOptions): Promise<
       if (status !== undefined) {
         options.onStatus?.(status)
       }
+      const indexState = indexing.reduce(params)
+      if (indexState !== undefined) {
+        options.onIndexing?.(indexState)
+      }
       return
     }
     if (method === 'textDocument/publishDiagnostics') {
@@ -154,45 +156,15 @@ export async function openClangdSession(options: ClangdSessionOptions): Promise<
   }
 
   async function handshake(): Promise<void> {
-    const result = (await client!.request(
-      'initialize',
-      buildClangdInitializeParams(options.rootPath, process.pid, adapter.pathToLspUri),
-      { timeoutMs: INITIALIZE_TIMEOUT_MS }
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the initialize result is the wire-deserialized LSP InitializeResult; `positionEncoding` is verified against utf-16 (throws otherwise), `referencesProvider`/`declarationProvider`/`semanticTokensProvider.legend` are read through typeof/optional-chaining guards before use, and `serverInfo.version` is read through optional chaining.
-    )) as {
-      capabilities?: {
-        positionEncoding?: string
-        referencesProvider?: unknown
-        declarationProvider?: unknown
-        semanticTokensProvider?: { legend?: SemanticTokenLegend } | boolean
-      }
-      serverInfo?: { version?: string }
-    } | null
-
-    const encoding = result?.capabilities?.positionEncoding
-    // LSP 3.17 default is utf-16 when the server omits positionEncoding; clangd 18
-    // (pre-negotiation) omits it yet answers in UTF-16 units (verified 18.1.3).
-    // Only an EXPLICIT non-utf-16 encoding would corrupt columns — refuse that.
-    if (encoding !== undefined && encoding !== 'utf-16') {
-      throw new ClangdPositionEncodingError(encoding)
-    }
-    // Capture the server's semantic-token legend for by-name decoding (S5 / spike
-    // findings §1). The provider may be a boolean (no legend) — clangd always
-    // returns the legend object.
-    const semProvider = result?.capabilities?.semanticTokensProvider
-    if (semProvider && typeof semProvider === 'object' && semProvider.legend) {
-      semanticLegend = semProvider.legend
-    }
-    // Verify the server echoes the S4 capabilities (S4 criterion). clangd
-    // always advertises both; absence means a non-conformant build — warn so
-    // the request's failure is explainable, but don't refuse (the request
-    // itself is the authoritative check; spec §9 residual risk).
-    const caps = result?.capabilities
-    if (caps && (!caps.referencesProvider || !caps.declarationProvider)) {
-      log('[clangd] server did not advertise references/declaration capability')
-    }
-    serverVersion = result?.serverInfo?.version ?? null
-    client!.notify('initialized', {})
+    const captured = await performClangdHandshake({
+      client: client!,
+      rootPath: options.rootPath,
+      processId: process.pid,
+      pathToLspUri: adapter.pathToLspUri,
+      log
+    })
+    serverVersion = captured.serverVersion
+    semanticLegend = captured.semanticLegend
   }
 
   function documentFor(filePath: string): OpenDocument {
@@ -309,6 +281,13 @@ export async function openClangdSession(options: ClangdSessionOptions): Promise<
         textDocument: { uri: doc.uri }
       })
       return decodeSemanticTokensFullResult(result, semanticLegend)
+    },
+    async documentSymbols(filePath: string): Promise<LanguageServerDocumentSymbolPayload> {
+      const doc = documentFor(filePath)
+      const result = await client!.request('textDocument/documentSymbol', {
+        textDocument: { uri: doc.uri }
+      })
+      return mapClangdDocumentSymbolResult(result)
     },
     async stop(): Promise<void> {
       if (died !== null || stopping) {
