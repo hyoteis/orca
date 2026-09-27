@@ -1,7 +1,8 @@
 // Language-server status subscriber (spec §6): decodes the discriminated-union
 // `languageServers:status` push into (a) a transient `$/progress` projection,
-// (b) a persistent degraded hint (version gate / install hint), and (c) a
-// one-shot toast for LRU eviction. The pure store lives in
+// (b) a persistent degraded hint (version gate / install hint), (c) a one-shot
+// toast for LRU eviction, and (d) per-session indexing state (spec-b B2). The
+// pure store lives in
 // `language-server-status-store` (no sonner, no React) so the status bar
 // component can import it without a cycle; this module owns the sonner + chip.
 import { createRoot, type Root } from 'react-dom/client'
@@ -10,6 +11,7 @@ import type { LanguageServerStatusEvent } from '../../../../../shared/language-s
 import { LanguageServerStatusBar } from './LanguageServerStatusBar'
 import {
   setLanguageServerDegraded,
+  setLanguageServerIndexing,
   setLanguageServerProgress
 } from './language-server-status-store'
 
@@ -23,8 +25,12 @@ export function applyLanguageServerStatusEvent(event: LanguageServerStatusEvent)
     setLanguageServerDegraded(event.message)
     return
   }
-  // Indexing events target the per-session store (spec-b B2); the status chip ignores them.
+  // Indexing events feed the per-session store (spec-b B2); the status chip ignores them.
   if (event.kind === 'indexing') {
+    setLanguageServerIndexing(
+      event.sessionKey,
+      event.active ? { active: true, percentage: event.percentage } : null
+    )
     return
   }
   // One-shot eviction toast; leaves the store untouched.
